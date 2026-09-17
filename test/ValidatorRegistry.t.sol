@@ -181,6 +181,16 @@ contract ValidatorRegistryTest is Test {
         assertEq(proposal.commission, commission);
         assertEq(proposal.executor, executor);
         assertEq(uint256(proposal.status), uint256(IValidatorRegistry.Status.Executed));
+
+        (address gotAuth, uint256 poolStake) = _validatorAuthAndStake(validatorId);
+        assertEq(gotAuth, auth);
+        assertEq(poolStake, amount);
+
+        IMonadStaking staking = IMonadStaking(registry.STAKING_PRECOMPILE());
+        (uint256 authStake,,, uint256 authDelta, uint256 authNext,,) = staking.getDelegator(validatorId, auth);
+        (uint256 execStake,,, uint256 execDelta, uint256 execNext,,) = staking.getDelegator(validatorId, executor);
+        assertEq(authStake + authDelta + authNext, amount);
+        assertEq(execStake + execDelta + execNext, 0);
     }
 
     function test_executeRevertsIfValueDoesNotMatchAmount() public {
@@ -261,5 +271,16 @@ contract ValidatorRegistryTest is Test {
         bytes32 digest = keccak256(registry.stakingPayload(secpPubkey, blsPubkey));
         (, bytes32 r, bytes32 s) = vm.sign(secpSk, digest);
         return abi.encodePacked(r, s);
+    }
+
+    /// @dev ABI-decode only auth + pool stake from `getValidator` (12-tuple is stack-too-deep).
+    function _validatorAuthAndStake(uint64 validatorId) internal returns (address gotAuth, uint256 poolStake) {
+        (bool ok, bytes memory ret) =
+            registry.STAKING_PRECOMPILE().call(abi.encodeCall(IMonadStaking.getValidator, (validatorId)));
+        require(ok && ret.length >= 96, "getValidator");
+        assembly {
+            gotAuth := mload(add(ret, 32))
+            poolStake := mload(add(ret, 96))
+        }
     }
 }
