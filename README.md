@@ -1,68 +1,15 @@
-## Foundry
+# @quevra/contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Foundry package for Quevra protocol contracts on Monad.
 
-Foundry consists of:
-
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
+`ValidatorRegistry` accepts operator **proposals** of consensus keys plus signatures proving those keys. The operator does not set `authAddress`, stake, or commission. Anyone can later **execute** a proposal by supplying those values; the contract forwards the stored signatures to `addValidator` at `0x1000`.
 
 ## Usage
 
-### Build
-
 ```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil --network monad
-```
-
-### Deploy
-
-Default RPC is Monad Testnet (`https://testnet-rpc.monad.xyz`, chain ID `10143`). Prefer a keystore over a raw private key:
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --account monad-deployer --broadcast
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+forge build
+forge test
+forge fmt
+anvil --network monad
+forge script script/DeployValidatorRegistry.s.sol:DeployValidatorRegistry --account monad-deployer --broadcast
 ```
