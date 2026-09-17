@@ -18,4 +18,8 @@ network = "monad"
 eth-rpc-url = "https://testnet-rpc.monad.xyz"
 chain_id = 10143
 
+[profile.e2e]
+eth-rpc-url = "http://localhost:8080"
+chain_id = 20143
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

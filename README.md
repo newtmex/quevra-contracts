@@ -21,3 +21,13 @@ forge fmt
 anvil --network monad
 forge script script/DeployValidatorRegistry.s.sol:DeployValidatorRegistry --account monad-deployer --broadcast
 ```
+
+## Solonet e2e
+
+`script/e2e` deploys `ValidatorRegistry` on a running [Solonet](../../services/solonet), proposes freshly generated consensus keys, executes `addValidator` through the registry, and checks the staking precompile at `0x1000`.
+
+Solonet must already be up (RPC at `http://localhost:8080`, docker container named `solonet`). On Apple Silicon, Colima needs QEMU with `--cpu-type max` so the VM exposes `pdpe1gb` (1GB hugepages):
+
+```shell
+pnpm --filter @quevra/contracts test:e2e
+```

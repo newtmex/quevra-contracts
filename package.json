@@ -12,6 +12,7 @@
     "dev": "anvil --network monad",
     "build": "forge build",
     "test": "forge test",
+    "test:e2e": "bash script/e2e/run.sh",
     "typecheck": "forge build",
     "check": "forge fmt --check && forge build --sizes && forge test -vvv"
   }
