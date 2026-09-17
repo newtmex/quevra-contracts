@@ -1,0 +1,18 @@
+{
+  "name": "@quevra/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Quevra protocol contracts",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "dev": "anvil --network monad",
+    "build": "forge build",
+    "test": "forge test",
+    "typecheck": "forge build",
+    "check": "forge fmt --check && forge build --sizes && forge test -vvv"
+  }
+}
