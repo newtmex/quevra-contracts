@@ -89,7 +89,7 @@ contract ValidatorRegistryTest is Test {
         _mockAddValidator(payload, stored.signedSecpMessage, stored.signedBlsMessage, 7);
 
         vm.prank(executor);
-        uint64 validatorId = registry.execute{value: amount}(id, auth, amount, commission);
+        uint64 validatorId = registry.execute{value: amount}(id, auth, commission);
 
         ValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
         assertEq(validatorId, 7);
@@ -105,13 +105,10 @@ contract ValidatorRegistryTest is Test {
 
         vm.startPrank(executor);
         vm.expectRevert(ValidatorRegistry.InvalidAuthAddress.selector);
-        registry.execute{value: amount}(id, address(0), amount, commission);
+        registry.execute{value: amount}(id, address(0), commission);
 
         vm.expectRevert(ValidatorRegistry.StakeTooLow.selector);
-        registry.execute{value: amount - 1}(id, auth, amount - 1, commission);
-
-        vm.expectRevert(ValidatorRegistry.IncorrectStake.selector);
-        registry.execute{value: amount + 1}(id, auth, amount, commission);
+        registry.execute{value: amount - 1}(id, auth, commission);
         vm.stopPrank();
     }
 

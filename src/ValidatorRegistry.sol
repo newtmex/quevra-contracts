@@ -6,7 +6,7 @@ import {ConsensusKeyProof} from "./lib/ConsensusKeyProof.sol";
 
 /// @title ValidatorRegistry
 /// @notice Operators propose consensus keys with ownership proofs. Executors later
-///         supply auth address, self-stake, and commission.
+///         supply auth address, commission, and self-stake as `msg.value`.
 contract ValidatorRegistry {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant MAX_COMMISSION = 1e18;
@@ -67,7 +67,6 @@ contract ValidatorRegistry {
     error UnknownProposal();
     error NotProposed();
     error NotProposer();
-    error IncorrectStake();
     error InvalidValidatorId();
 
     /// @notice Propose consensus keys. Signatures must match those keys over `proposalDigest`.
@@ -106,26 +105,25 @@ contract ValidatorRegistry {
         emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey);
     }
 
-    /// @notice Execute a proposal. Caller supplies auth address and economic values.
+    /// @notice Execute a proposal. Caller supplies auth address, commission, and self-stake as `msg.value`.
     /// @dev Forwards the signatures stored at propose time to `addValidator`.
-    function execute(uint256 id, address authAddress, uint256 amount, uint256 commission)
+    function execute(uint256 id, address authAddress, uint256 commission)
         external
         payable
         returns (uint64 validatorId)
     {
         Proposal storage proposal = _proposed(id);
         if (authAddress == address(0)) revert InvalidAuthAddress();
-        if (amount < MIN_AUTH_ADDRESS_STAKE) revert StakeTooLow();
+        if (msg.value < MIN_AUTH_ADDRESS_STAKE) revert StakeTooLow();
         if (commission > MAX_COMMISSION) revert CommissionTooHigh();
-        if (msg.value != amount) revert IncorrectStake();
 
-        bytes memory payload = _payload(proposal, authAddress, amount, commission);
+        bytes memory payload = _payload(proposal, authAddress, msg.value, commission);
         bytes memory signedSecpMessage = proposal.signedSecpMessage;
         bytes memory signedBlsMessage = proposal.signedBlsMessage;
 
         proposal.status = Status.Executed;
         proposal.authAddress = authAddress;
-        proposal.amount = amount;
+        proposal.amount = msg.value;
         proposal.commission = commission;
         proposal.executor = msg.sender;
 
@@ -136,7 +134,7 @@ contract ValidatorRegistry {
 
         proposal.validatorId = validatorId;
         // forge-lint: disable-next-line(reentrancy-events)
-        emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, amount, commission);
+        emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, msg.value, commission);
     }
 
     function cancel(uint256 id) external {
