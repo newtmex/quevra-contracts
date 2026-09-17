@@ -2,25 +2,21 @@
 pragma solidity ^0.8.24;
 
 import {IMonadStaking} from "./interfaces/IMonadStaking.sol";
-import {ConsensusKeyProof} from "./lib/ConsensusKeyProof.sol";
 
 /// @title ValidatorRegistry
-/// @notice Operators propose consensus keys with ownership proofs. Executors later
-///         supply auth address, commission, and self-stake as `msg.value`.
+/// @notice Operators propose consensus keys signed over the registry's current
+///         `authAddress`, `amount`, and `commission`. Anyone can later execute a
+///         proposal by paying `amount`; the stored signatures are forwarded to
+///         `addValidator` at `0x1000`.
 contract ValidatorRegistry {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant MAX_COMMISSION = 1e18;
     uint256 public constant SECP_PUBKEY_LENGTH = 33;
     uint256 public constant BLS_PUBKEY_LENGTH = 48;
+    uint256 public constant SECP_SIG_LENGTH = 64;
+    uint256 public constant BLS_SIG_LENGTH = 96;
 
     address public constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
-
-    bytes32 public constant PROPOSAL_TYPEHASH =
-        keccak256("ValidatorProposal(bytes32 secpPubkeyHash,bytes32 blsPubkeyHash)");
-    bytes32 private constant DOMAIN_TYPEHASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 private constant NAME_HASH = keccak256("Quevra ValidatorRegistry");
-    bytes32 private constant VERSION_HASH = keccak256("1");
 
     enum Status {
         Proposed,
@@ -42,12 +38,27 @@ contract ValidatorRegistry {
         uint64 validatorId;
     }
 
+    address public owner;
+    address public authAddress;
+    uint256 public amount;
+    uint256 public commission;
+
     uint256 public nextId = 1;
     mapping(uint256 id => Proposal) private _proposals;
     mapping(bytes32 secpKeyHash => uint256 id) public idBySecpPubkey;
     mapping(bytes32 blsKeyHash => uint256 id) public idByBlsPubkey;
 
-    event ValidatorProposed(uint256 indexed id, address indexed proposer, bytes secpPubkey, bytes blsPubkey);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event ConfigUpdated(address authAddress, uint256 amount, uint256 commission);
+    event ValidatorProposed(
+        uint256 indexed id,
+        address indexed proposer,
+        bytes secpPubkey,
+        bytes blsPubkey,
+        address authAddress,
+        uint256 amount,
+        uint256 commission
+    );
     event ValidatorExecuted(
         uint256 indexed id,
         address indexed executor,
@@ -58,18 +69,52 @@ contract ValidatorRegistry {
     );
     event ValidatorProposalCancelled(uint256 indexed id);
 
+    error InvalidOwner();
+    error NotOwner();
     error InvalidSecpPubkeyLength();
     error InvalidBlsPubkeyLength();
+    error InvalidSecpSignatureLength();
+    error InvalidBlsSignatureLength();
     error InvalidAuthAddress();
     error StakeTooLow();
+    error StakeMismatch();
     error CommissionTooHigh();
+    error ConfigChanged();
     error KeyAlreadyRegistered();
     error UnknownProposal();
     error NotProposed();
     error NotProposer();
     error InvalidValidatorId();
 
-    /// @notice Propose consensus keys. Signatures must match those keys over `proposalDigest`.
+    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_) {
+        if (owner_ == address(0)) revert InvalidOwner();
+        owner = owner_;
+        _setConfig(authAddress_, amount_, commission_);
+        emit OwnershipTransferred(address(0), owner_);
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /// @notice Replace the account allowed to update auth address, amount, and commission.
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert InvalidOwner();
+        address previousOwner = owner;
+        owner = newOwner;
+        emit OwnershipTransferred(previousOwner, newOwner);
+    }
+
+    /// @notice Atomically update values proposers must sign into the `addValidator` payload.
+    function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external onlyOwner {
+        _setConfig(authAddress_, amount_, commission_);
+    }
+
+    /// @notice Propose consensus keys. Signatures must be Monad `addValidator` signatures
+    ///         over `stakingPayload(secpPubkey, blsPubkey)` at the current config.
+    /// @dev The registry checks sizes and economics. The staking precompile checks
+    ///      payload binding (blake3 secp + BLS PoP) at execute.
     function propose(
         bytes calldata secpPubkey,
         bytes calldata blsPubkey,
@@ -78,10 +123,8 @@ contract ValidatorRegistry {
     ) external returns (uint256 id) {
         if (secpPubkey.length != SECP_PUBKEY_LENGTH) revert InvalidSecpPubkeyLength();
         if (blsPubkey.length != BLS_PUBKEY_LENGTH) revert InvalidBlsPubkeyLength();
-
-        bytes32 digest = proposalDigest(secpPubkey, blsPubkey);
-        ConsensusKeyProof.verifySecp(secpPubkey, digest, signedSecpMessage);
-        ConsensusKeyProof.verifyBls(blsPubkey, signedBlsMessage);
+        if (signedSecpMessage.length != SECP_SIG_LENGTH) revert InvalidSecpSignatureLength();
+        if (signedBlsMessage.length != BLS_SIG_LENGTH) revert InvalidBlsSignatureLength();
 
         bytes32 secpKeyHash = keccak256(secpPubkey);
         bytes32 blsKeyHash = keccak256(blsPubkey);
@@ -100,31 +143,28 @@ contract ValidatorRegistry {
         proposal.signedBlsMessage = signedBlsMessage;
         proposal.proposer = msg.sender;
         proposal.status = Status.Proposed;
+        proposal.authAddress = authAddress;
+        proposal.amount = amount;
+        proposal.commission = commission;
 
         // forge-lint: disable-next-line(reentrancy-events)
-        emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey);
+        emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey, authAddress, amount, commission);
     }
 
-    /// @notice Execute a proposal. Caller supplies auth address, commission, and self-stake as `msg.value`.
+    /// @notice Execute a proposal. Caller pays the configured `amount` as `msg.value`.
     /// @dev Forwards the signatures stored at propose time to `addValidator`.
-    function execute(uint256 id, address authAddress, uint256 commission)
-        external
-        payable
-        returns (uint64 validatorId)
-    {
+    function execute(uint256 id) external payable returns (uint64 validatorId) {
         Proposal storage proposal = _proposed(id);
-        if (authAddress == address(0)) revert InvalidAuthAddress();
-        if (msg.value < MIN_AUTH_ADDRESS_STAKE) revert StakeTooLow();
-        if (commission > MAX_COMMISSION) revert CommissionTooHigh();
+        if (proposal.authAddress != authAddress || proposal.amount != amount || proposal.commission != commission) {
+            revert ConfigChanged();
+        }
+        if (msg.value != amount) revert StakeMismatch();
 
-        bytes memory payload = _payload(proposal, authAddress, msg.value, commission);
+        bytes memory payload = _payload(proposal.secpPubkey, proposal.blsPubkey, authAddress, amount, commission);
         bytes memory signedSecpMessage = proposal.signedSecpMessage;
         bytes memory signedBlsMessage = proposal.signedBlsMessage;
 
         proposal.status = Status.Executed;
-        proposal.authAddress = authAddress;
-        proposal.amount = msg.value;
-        proposal.commission = commission;
         proposal.executor = msg.sender;
 
         validatorId = IMonadStaking(STAKING_PRECOMPILE).addValidator{value: msg.value}(
@@ -134,7 +174,7 @@ contract ValidatorRegistry {
 
         proposal.validatorId = validatorId;
         // forge-lint: disable-next-line(reentrancy-events)
-        emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, msg.value, commission);
+        emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, amount, commission);
     }
 
     function cancel(uint256 id) external {
@@ -153,19 +193,30 @@ contract ValidatorRegistry {
         return _proposals[id];
     }
 
-    function stakingPayload(uint256 id, address authAddress, uint256 amount, uint256 commission)
-        external
-        view
-        returns (bytes memory)
-    {
-        if (_proposals[id].proposer == address(0)) revert UnknownProposal();
-        return _payload(_proposals[id], authAddress, amount, commission);
+    /// @notice Packed `addValidator` payload for `secpPubkey`/`blsPubkey` and the current config.
+    function stakingPayload(bytes calldata secpPubkey, bytes calldata blsPubkey) external view returns (bytes memory) {
+        return _payload(secpPubkey, blsPubkey, authAddress, amount, commission);
     }
 
-    function proposalDigest(bytes memory secpPubkey, bytes memory blsPubkey) public view returns (bytes32) {
-        bytes32 domain = keccak256(abi.encode(DOMAIN_TYPEHASH, NAME_HASH, VERSION_HASH, block.chainid, address(this)));
-        bytes32 structHash = keccak256(abi.encode(PROPOSAL_TYPEHASH, keccak256(secpPubkey), keccak256(blsPubkey)));
-        return keccak256(abi.encodePacked("\x19\x01", domain, structHash));
+    /// @notice Packed `addValidator` payload snapshotted on the proposal at propose time.
+    function stakingPayload(uint256 id) external view returns (bytes memory) {
+        if (_proposals[id].proposer == address(0)) revert UnknownProposal();
+        Proposal storage proposal = _proposals[id];
+        return
+            _payload(
+                proposal.secpPubkey, proposal.blsPubkey, proposal.authAddress, proposal.amount, proposal.commission
+            );
+    }
+
+    function _setConfig(address authAddress_, uint256 amount_, uint256 commission_) private {
+        if (authAddress_ == address(0)) revert InvalidAuthAddress();
+        if (amount_ < MIN_AUTH_ADDRESS_STAKE) revert StakeTooLow();
+        if (commission_ > MAX_COMMISSION) revert CommissionTooHigh();
+
+        authAddress = authAddress_;
+        amount = amount_;
+        commission = commission_;
+        emit ConfigUpdated(authAddress_, amount_, commission_);
     }
 
     function _proposed(uint256 id) private view returns (Proposal storage proposal) {
@@ -174,11 +225,13 @@ contract ValidatorRegistry {
         if (proposal.status != Status.Proposed) revert NotProposed();
     }
 
-    function _payload(Proposal storage proposal, address authAddress, uint256 amount, uint256 commission)
-        private
-        view
-        returns (bytes memory)
-    {
-        return bytes.concat(proposal.secpPubkey, proposal.blsPubkey, abi.encodePacked(authAddress, amount, commission));
+    function _payload(
+        bytes memory secpPubkey,
+        bytes memory blsPubkey,
+        address authAddress_,
+        uint256 amount_,
+        uint256 commission_
+    ) private pure returns (bytes memory) {
+        return bytes.concat(secpPubkey, blsPubkey, abi.encodePacked(authAddress_, amount_, commission_));
     }
 }
