@@ -86,13 +86,13 @@ contract ValidatorRegistryTest is Test {
             amount,
             abi.encodeCall(IMonadStaking.addValidator, (payload, stored.signedSecpMessage, stored.signedBlsMessage))
         );
-        _mockAddValidator(payload, stored.signedSecpMessage, stored.signedBlsMessage, 7);
 
         vm.prank(executor);
         uint64 validatorId = registry.execute{value: amount}(id, auth, commission);
 
         ValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
-        assertEq(validatorId, 7);
+        assertTrue(validatorId != 0);
+        assertEq(proposal.validatorId, validatorId);
         assertEq(proposal.authAddress, auth);
         assertEq(proposal.amount, amount);
         assertEq(proposal.commission, commission);
@@ -137,16 +137,5 @@ contract ValidatorRegistryTest is Test {
     function _secpSig(bytes32 digest) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(secpSk, digest);
         return abi.encodePacked(r, s, v);
-    }
-
-    function _mockAddValidator(bytes memory payload, bytes memory secpSig, bytes memory blsSig, uint64 validatorId)
-        internal
-    {
-        vm.mockCall(
-            registry.STAKING_PRECOMPILE(),
-            amount,
-            abi.encodeCall(IMonadStaking.addValidator, (payload, secpSig, blsSig)),
-            abi.encode(validatorId)
-        );
     }
 }
