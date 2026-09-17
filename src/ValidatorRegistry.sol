@@ -8,12 +8,13 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 
 import {IMonadStaking} from "./interfaces/IMonadStaking.sol";
 import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
+import {IValidatorsVoter} from "./interfaces/IValidatorsVoter.sol";
 
 /// @title ValidatorRegistry
 /// @notice Operators propose consensus keys signed over the registry's current
-///         `authAddress`, `amount`, and `commission`. Anyone can later execute a
-///         proposal by paying `amount`; the stored signatures are forwarded to
-///         `addValidator` at `0x1000`.
+///         `authAddress`, `amount`, and `commission`. If `voter == 0`, anyone can
+///         execute by paying `amount`. If a voter is wired, only `authAddress`
+///         (MonVault) may execute. Signatures are forwarded to `addValidator` at `0x1000`.
 contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, IValidatorRegistry {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant MAX_COMMISSION = 1e18;
@@ -27,6 +28,7 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
     address public override authAddress;
     uint256 public override amount;
     uint256 public override commission;
+    address public override voter;
 
     uint256 public override nextId = 1;
     mapping(uint256 id => Proposal) private _proposals;
@@ -57,6 +59,14 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
         _setConfig(authAddress_, amount_, commission_);
     }
 
+    /// @notice Wire (or clear) the veMON voter. `address(0)` keeps anyone-pays `execute`.
+    function setVoter(address voter_) external override onlyOwner {
+        // Zero is the solo-mode flag, not an unset mistake.
+        // forge-lint: disable-next-line(missing-zero-check)
+        voter = voter_;
+        emit VoterSet(voter_);
+    }
+
     /// @notice Propose consensus keys. Signatures must be Monad `addValidator` signatures
     ///         over `stakingPayload(secpPubkey, blsPubkey)` at the current config.
     /// @dev The registry checks sizes and economics. The staking precompile checks
@@ -66,7 +76,7 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
         bytes calldata blsPubkey,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) external override whenNotPaused returns (uint256 id) {
+    ) external override nonReentrant whenNotPaused returns (uint256 id) {
         if (secpPubkey.length != SECP_PUBKEY_LENGTH) revert InvalidSecpPubkeyLength();
         if (blsPubkey.length != BLS_PUBKEY_LENGTH) revert InvalidBlsPubkeyLength();
         if (signedSecpMessage.length != SECP_SIG_LENGTH) revert InvalidSecpSignatureLength();
@@ -94,11 +104,17 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
         proposal.commission = commission;
 
         emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey, authAddress, amount, commission);
+
+        if (voter != address(0)) {
+            IValidatorsVoter(voter).onProposalCreated(id, msg.sender);
+        }
     }
 
     /// @notice Execute a proposal. Caller pays the configured `amount` as `msg.value`.
-    /// @dev Forwards the signatures stored at propose time to `addValidator`.
+    /// @dev If a voter is set, only `authAddress` may execute; otherwise anyone-pays as today.
     function execute(uint256 id) external payable override nonReentrant whenNotPaused returns (uint64 validatorId) {
+        if (voter != address(0) && msg.sender != authAddress) revert NotAuth();
+
         Proposal storage proposal = _proposed(id);
         if (proposal.authAddress != authAddress || proposal.amount != amount || proposal.commission != commission) {
             revert ConfigChanged();
@@ -118,19 +134,44 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
         if (validatorId == 0) revert InvalidValidatorId();
 
         proposal.validatorId = validatorId;
+        if (voter != address(0)) {
+            IValidatorsVoter(voter).onProposalExecuted(id, validatorId);
+        }
         // forge-lint: disable-next-line(reentrancy-events)
         emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, amount, commission);
     }
 
     /// @notice Cancel a still-pending proposal and free its consensus keys.
-    function cancel(uint256 id) external override {
+    /// @dev Voter hook runs first so `GaugeHasVotes` reverts the whole tx.
+    function cancel(uint256 id) external override nonReentrant {
         Proposal storage proposal = _proposed(id);
         if (msg.sender != proposal.proposer) revert NotProposer();
+
+        if (voter != address(0)) {
+            IValidatorsVoter(voter).onProposalCancelled(id);
+        }
 
         proposal.status = Status.Cancelled;
         delete idBySecpPubkey[keccak256(proposal.secpPubkey)];
         delete idByBlsPubkey[keccak256(proposal.blsPubkey)];
 
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit ValidatorProposalCancelled(id);
+    }
+
+    /// @notice Owner bypass: cancel a still-pending proposal and kill its gauge without a vote check.
+    function ownerCancel(uint256 id) external override nonReentrant onlyOwner {
+        Proposal storage proposal = _proposed(id);
+
+        proposal.status = Status.Cancelled;
+        delete idBySecpPubkey[keccak256(proposal.secpPubkey)];
+        delete idByBlsPubkey[keccak256(proposal.blsPubkey)];
+
+        if (voter != address(0)) {
+            IValidatorsVoter(voter).onOwnerCancelled(id);
+        }
+
+        // forge-lint: disable-next-line(reentrancy-events)
         emit ValidatorProposalCancelled(id);
     }
 

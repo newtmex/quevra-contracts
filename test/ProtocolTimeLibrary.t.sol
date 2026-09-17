@@ -11,6 +11,7 @@ contract ProtocolTimeLibraryTest is Test {
 
     function test_cycleIsFiveMonadEpochs() public pure {
         assertEq(ProtocolTimeLibrary.EPOCHS_PER_CYCLE, 5);
+        assertEq(ProtocolTimeLibrary.cycleDuration(), 5);
         assertEq(ProtocolTimeLibrary.cycleOf(0), 0);
         assertEq(ProtocolTimeLibrary.cycleStart(0), 0);
         assertEq(ProtocolTimeLibrary.cycleNext(0), 5);
@@ -30,6 +31,10 @@ contract ProtocolTimeLibraryTest is Test {
         assertEq(ProtocolTimeLibrary.cycleVoteEnd(12), 14);
         assertEq(ProtocolTimeLibrary.cycleVoteStart(10), 11);
         assertEq(ProtocolTimeLibrary.cycleVoteEnd(14), 14);
+        assertTrue(ProtocolTimeLibrary.inDistributeWindow(10));
+        assertFalse(ProtocolTimeLibrary.inDistributeWindow(11));
+        assertTrue(ProtocolTimeLibrary.inWhitelistWindow(14));
+        assertFalse(ProtocolTimeLibrary.inWhitelistWindow(13));
     }
 
     function testFuzz_cycleBounds(uint64 epoch) public pure {

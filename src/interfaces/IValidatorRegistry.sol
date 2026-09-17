@@ -43,6 +43,7 @@ interface IValidatorRegistry {
         uint256 commission
     );
     event ValidatorProposalCancelled(uint256 indexed id);
+    event VoterSet(address voter);
 
     error InvalidSecpPubkeyLength();
     error InvalidBlsPubkeyLength();
@@ -58,6 +59,7 @@ interface IValidatorRegistry {
     error NotProposed();
     error NotProposer();
     error InvalidValidatorId();
+    error NotAuth();
 
     function authAddress() external view returns (address);
     function amount() external view returns (uint256);
@@ -65,8 +67,10 @@ interface IValidatorRegistry {
     function nextId() external view returns (uint256);
     function idBySecpPubkey(bytes32 secpKeyHash) external view returns (uint256 id);
     function idByBlsPubkey(bytes32 blsKeyHash) external view returns (uint256 id);
+    function voter() external view returns (address);
 
     function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external;
+    function setVoter(address voter_) external;
     function pause() external;
     function unpause() external;
 
@@ -79,6 +83,7 @@ interface IValidatorRegistry {
 
     function execute(uint256 id) external payable returns (uint64 validatorId);
     function cancel(uint256 id) external;
+    function ownerCancel(uint256 id) external;
     function getProposal(uint256 id) external view returns (Proposal memory);
     function stakingPayload(bytes calldata secpPubkey, bytes calldata blsPubkey) external view returns (bytes memory);
     function stakingPayload(uint256 id) external view returns (bytes memory);

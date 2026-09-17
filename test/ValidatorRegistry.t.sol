@@ -9,6 +9,39 @@ import {IMonadStaking} from "../src/interfaces/IMonadStaking.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {ValidatorRegistry} from "../src/ValidatorRegistry.sol";
 
+contract MockVoter {
+    uint256 public created;
+    uint256 public cancelled;
+    uint256 public ownerCancelled;
+    uint256 public executed;
+    uint256 public lastProposalId;
+    address public lastProposer;
+    bool public revertCancel;
+
+    function setRevertCancel(bool v) external {
+        revertCancel = v;
+    }
+
+    function onProposalCreated(uint256 proposalId, address proposer) external {
+        created++;
+        lastProposalId = proposalId;
+        lastProposer = proposer;
+    }
+
+    function onProposalCancelled(uint256) external {
+        if (revertCancel) revert("cancel-blocked");
+        cancelled++;
+    }
+
+    function onOwnerCancelled(uint256) external {
+        ownerCancelled++;
+    }
+
+    function onProposalExecuted(uint256, uint64) external {
+        executed++;
+    }
+}
+
 contract ValidatorRegistryTest is Test {
     ValidatorRegistry internal registry;
 
@@ -259,6 +292,100 @@ contract ValidatorRegistryTest is Test {
         vm.prank(proposer);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
         registry.pause();
+    }
+
+    function test_setVoterOnlyOwner() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
+        registry.setVoter(address(mock));
+
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+        assertEq(registry.voter(), address(mock));
+    }
+
+    function test_proposeCallsVoterHook() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+
+        uint256 id = _propose();
+        assertEq(id, 1);
+        assertEq(mock.created(), 1);
+        assertEq(mock.lastProposalId(), 1);
+        assertEq(mock.lastProposer(), proposer);
+    }
+
+    function test_whenVoterSetNonAuthExecuteReverts() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+
+        uint256 id = _propose();
+        vm.prank(executor);
+        vm.expectRevert(IValidatorRegistry.NotAuth.selector);
+        registry.execute{value: amount}(id);
+    }
+
+    function test_whenVoterSetAuthCanExecute() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+
+        uint256 id = _propose();
+        vm.deal(auth, amount);
+
+        vm.prank(auth);
+        uint64 validatorId = registry.execute{value: amount}(id);
+
+        assertTrue(validatorId != 0);
+        assertEq(mock.executed(), 1);
+        assertEq(registry.getProposal(id).executor, auth);
+
+        (address gotAuth,) = _validatorAuthAndStake(validatorId);
+        assertEq(gotAuth, auth);
+    }
+
+    function test_cancelCallsVoterHookFirst() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+
+        uint256 id = _propose();
+        mock.setRevertCancel(true);
+        vm.prank(proposer);
+        vm.expectRevert("cancel-blocked");
+        registry.cancel(id);
+        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Proposed));
+
+        mock.setRevertCancel(false);
+        vm.prank(proposer);
+        registry.cancel(id);
+        assertEq(mock.cancelled(), 1);
+        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
+    }
+
+    function test_ownerCancelFreesKeysAndNotifiesVoter() public {
+        MockVoter mock = new MockVoter();
+        vm.prank(owner);
+        registry.setVoter(address(mock));
+
+        uint256 id = _propose();
+        vm.prank(owner);
+        registry.ownerCancel(id);
+
+        assertEq(mock.ownerCancelled(), 1);
+        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
+        uint256 newId = _propose();
+        assertEq(newId, 2);
+    }
+
+    function test_nonOwnerCannotOwnerCancel() public {
+        uint256 id = _propose();
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
+        registry.ownerCancel(id);
     }
 
     function _propose() internal returns (uint256) {

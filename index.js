@@ -8,4 +8,20 @@ export const contracts = {
     name: "ValidatorRegistry",
     solPath: "src/ValidatorRegistry.sol",
   },
+  VeMON: {
+    name: "VeMON",
+    solPath: "src/ve/VeMON.sol",
+  },
+  MonVault: {
+    name: "MonVault",
+    solPath: "src/vault/MonVault.sol",
+  },
+  ValidatorsVoter: {
+    name: "ValidatorsVoter",
+    solPath: "src/voter/ValidatorsVoter.sol",
+  },
+  ProposalGauge: {
+    name: "ProposalGauge",
+    solPath: "src/voter/ProposalGauge.sol",
+  },
 };
