@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+
 import {IMonadStaking} from "./interfaces/IMonadStaking.sol";
+import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
 
 /// @title ValidatorRegistry
 /// @notice Operators propose consensus keys signed over the registry's current
 ///         `authAddress`, `amount`, and `commission`. Anyone can later execute a
 ///         proposal by paying `amount`; the stored signatures are forwarded to
 ///         `addValidator` at `0x1000`.
-contract ValidatorRegistry {
+contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, IValidatorRegistry {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant MAX_COMMISSION = 1e18;
     uint256 public constant SECP_PUBKEY_LENGTH = 33;
@@ -18,96 +24,36 @@ contract ValidatorRegistry {
 
     address public constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
 
-    enum Status {
-        Proposed,
-        Executed,
-        Cancelled
-    }
+    address public override authAddress;
+    uint256 public override amount;
+    uint256 public override commission;
 
-    struct Proposal {
-        bytes secpPubkey;
-        bytes blsPubkey;
-        bytes signedSecpMessage;
-        bytes signedBlsMessage;
-        address proposer;
-        Status status;
-        address authAddress;
-        uint256 amount;
-        uint256 commission;
-        address executor;
-        uint64 validatorId;
-    }
-
-    address public owner;
-    address public authAddress;
-    uint256 public amount;
-    uint256 public commission;
-
-    uint256 public nextId = 1;
+    uint256 public override nextId = 1;
     mapping(uint256 id => Proposal) private _proposals;
-    mapping(bytes32 secpKeyHash => uint256 id) public idBySecpPubkey;
-    mapping(bytes32 blsKeyHash => uint256 id) public idByBlsPubkey;
+    mapping(bytes32 secpKeyHash => uint256 id) public override idBySecpPubkey;
+    mapping(bytes32 blsKeyHash => uint256 id) public override idByBlsPubkey;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    event ConfigUpdated(address authAddress, uint256 amount, uint256 commission);
-    event ValidatorProposed(
-        uint256 indexed id,
-        address indexed proposer,
-        bytes secpPubkey,
-        bytes blsPubkey,
-        address authAddress,
-        uint256 amount,
-        uint256 commission
-    );
-    event ValidatorExecuted(
-        uint256 indexed id,
-        address indexed executor,
-        uint64 indexed validatorId,
-        address authAddress,
-        uint256 amount,
-        uint256 commission
-    );
-    event ValidatorProposalCancelled(uint256 indexed id);
-
-    error InvalidOwner();
-    error NotOwner();
-    error InvalidSecpPubkeyLength();
-    error InvalidBlsPubkeyLength();
-    error InvalidSecpSignatureLength();
-    error InvalidBlsSignatureLength();
-    error InvalidAuthAddress();
-    error StakeTooLow();
-    error StakeMismatch();
-    error CommissionTooHigh();
-    error ConfigChanged();
-    error KeyAlreadyRegistered();
-    error UnknownProposal();
-    error NotProposed();
-    error NotProposer();
-    error InvalidValidatorId();
-
-    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_) {
-        if (owner_ == address(0)) revert InvalidOwner();
-        owner = owner_;
+    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_) Ownable(owner_) {
         _setConfig(authAddress_, amount_, commission_);
-        emit OwnershipTransferred(address(0), owner_);
     }
 
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
+    /// @dev Config updates must remain available for the lifetime of the registry.
+    function renounceOwnership() public pure override {
+        revert OwnableInvalidOwner(address(0));
     }
 
-    /// @notice Replace the account allowed to update auth address, amount, and commission.
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert InvalidOwner();
-        address previousOwner = owner;
-        owner = newOwner;
-        emit OwnershipTransferred(previousOwner, newOwner);
+    /// @notice Halt proposals and executions. Cancellation stays available so keys can be freed.
+    function pause() external override onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume proposals and executions.
+    function unpause() external override onlyOwner {
+        _unpause();
     }
 
     /// @notice Atomically update values proposers must sign into the `addValidator` payload.
-    function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external onlyOwner {
+    function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external override onlyOwner {
         _setConfig(authAddress_, amount_, commission_);
     }
 
@@ -120,7 +66,7 @@ contract ValidatorRegistry {
         bytes calldata blsPubkey,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) external returns (uint256 id) {
+    ) external override whenNotPaused returns (uint256 id) {
         if (secpPubkey.length != SECP_PUBKEY_LENGTH) revert InvalidSecpPubkeyLength();
         if (blsPubkey.length != BLS_PUBKEY_LENGTH) revert InvalidBlsPubkeyLength();
         if (signedSecpMessage.length != SECP_SIG_LENGTH) revert InvalidSecpSignatureLength();
@@ -147,13 +93,12 @@ contract ValidatorRegistry {
         proposal.amount = amount;
         proposal.commission = commission;
 
-        // forge-lint: disable-next-line(reentrancy-events)
         emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey, authAddress, amount, commission);
     }
 
     /// @notice Execute a proposal. Caller pays the configured `amount` as `msg.value`.
     /// @dev Forwards the signatures stored at propose time to `addValidator`.
-    function execute(uint256 id) external payable returns (uint64 validatorId) {
+    function execute(uint256 id) external payable override nonReentrant whenNotPaused returns (uint64 validatorId) {
         Proposal storage proposal = _proposed(id);
         if (proposal.authAddress != authAddress || proposal.amount != amount || proposal.commission != commission) {
             revert ConfigChanged();
@@ -177,7 +122,8 @@ contract ValidatorRegistry {
         emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, amount, commission);
     }
 
-    function cancel(uint256 id) external {
+    /// @notice Cancel a still-pending proposal and free its consensus keys.
+    function cancel(uint256 id) external override {
         Proposal storage proposal = _proposed(id);
         if (msg.sender != proposal.proposer) revert NotProposer();
 
@@ -188,18 +134,23 @@ contract ValidatorRegistry {
         emit ValidatorProposalCancelled(id);
     }
 
-    function getProposal(uint256 id) external view returns (Proposal memory) {
+    function getProposal(uint256 id) external view override returns (Proposal memory) {
         if (_proposals[id].proposer == address(0)) revert UnknownProposal();
         return _proposals[id];
     }
 
     /// @notice Packed `addValidator` payload for `secpPubkey`/`blsPubkey` and the current config.
-    function stakingPayload(bytes calldata secpPubkey, bytes calldata blsPubkey) external view returns (bytes memory) {
+    function stakingPayload(bytes calldata secpPubkey, bytes calldata blsPubkey)
+        external
+        view
+        override
+        returns (bytes memory)
+    {
         return _payload(secpPubkey, blsPubkey, authAddress, amount, commission);
     }
 
     /// @notice Packed `addValidator` payload snapshotted on the proposal at propose time.
-    function stakingPayload(uint256 id) external view returns (bytes memory) {
+    function stakingPayload(uint256 id) external view override returns (bytes memory) {
         if (_proposals[id].proposer == address(0)) revert UnknownProposal();
         Proposal storage proposal = _proposals[id];
         return

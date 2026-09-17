@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Test} from "forge-std/Test.sol";
+
 import {IMonadStaking} from "../src/interfaces/IMonadStaking.sol";
+import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {ValidatorRegistry} from "../src/ValidatorRegistry.sol";
 
 contract ValidatorRegistryTest is Test {
@@ -33,19 +37,20 @@ contract ValidatorRegistryTest is Test {
         assertEq(registry.amount(), amount);
         assertEq(registry.commission(), commission);
         assertEq(registry.stakingPayload(secpPubkey, blsPubkey).length, 165);
+        assertFalse(registry.paused());
     }
 
     function test_constructorRevertsOnInvalidConfig() public {
-        vm.expectRevert(ValidatorRegistry.InvalidOwner.selector);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
         new ValidatorRegistry(address(0), auth, amount, commission);
 
-        vm.expectRevert(ValidatorRegistry.InvalidAuthAddress.selector);
+        vm.expectRevert(IValidatorRegistry.InvalidAuthAddress.selector);
         new ValidatorRegistry(owner, address(0), amount, commission);
 
-        vm.expectRevert(ValidatorRegistry.StakeTooLow.selector);
+        vm.expectRevert(IValidatorRegistry.StakeTooLow.selector);
         new ValidatorRegistry(owner, auth, amount - 1, commission);
 
-        vm.expectRevert(ValidatorRegistry.CommissionTooHigh.selector);
+        vm.expectRevert(IValidatorRegistry.CommissionTooHigh.selector);
         new ValidatorRegistry(owner, auth, amount, 1e18 + 1);
     }
 
@@ -55,7 +60,7 @@ contract ValidatorRegistryTest is Test {
         uint256 newCommission = 2e17;
 
         vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistry.ConfigUpdated(newAuth, newAmount, newCommission);
+        emit IValidatorRegistry.ConfigUpdated(newAuth, newAmount, newCommission);
         vm.prank(owner);
         registry.setConfig(newAuth, newAmount, newCommission);
 
@@ -70,25 +75,38 @@ contract ValidatorRegistryTest is Test {
 
     function test_nonOwnerCannotSetConfig() public {
         vm.prank(proposer);
-        vm.expectRevert(ValidatorRegistry.NotOwner.selector);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
         registry.setConfig(auth, amount, commission);
     }
 
-    function test_ownerCanTransferOwnership() public {
+    function test_ownerCanTransferOwnershipInTwoSteps() public {
         address newOwner = makeAddr("newOwner");
+
         vm.prank(owner);
         registry.transferOwnership(newOwner);
+        assertEq(registry.owner(), owner);
+        assertEq(registry.pendingOwner(), newOwner);
+
+        vm.prank(newOwner);
+        registry.acceptOwnership();
         assertEq(registry.owner(), newOwner);
 
         vm.prank(owner);
-        vm.expectRevert(ValidatorRegistry.NotOwner.selector);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, owner));
         registry.setConfig(auth, amount, commission);
+    }
+
+    function test_renounceOwnershipIsDisabled() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        registry.renounceOwnership();
+        assertEq(registry.owner(), owner);
     }
 
     function test_proposeSnapshotsCurrentConfig() public {
         uint256 id = _propose();
 
-        ValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
+        IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
         assertEq(proposal.secpPubkey, secpPubkey);
         assertEq(proposal.blsPubkey, blsPubkey);
         assertEq(proposal.signedBlsMessage, blsProof);
@@ -97,7 +115,7 @@ contract ValidatorRegistryTest is Test {
         assertEq(proposal.amount, amount);
         assertEq(proposal.commission, commission);
         assertEq(proposal.executor, address(0));
-        assertEq(uint256(proposal.status), uint256(ValidatorRegistry.Status.Proposed));
+        assertEq(uint256(proposal.status), uint256(IValidatorRegistry.Status.Proposed));
         assertEq(registry.idBySecpPubkey(keccak256(secpPubkey)), id);
         assertEq(registry.stakingPayload(id), registry.stakingPayload(secpPubkey, blsPubkey));
     }
@@ -106,7 +124,7 @@ contract ValidatorRegistryTest is Test {
         bytes memory secpSig = abi.encodePacked(_secpSig64(), bytes1(0x1b));
 
         vm.prank(proposer);
-        vm.expectRevert(ValidatorRegistry.InvalidSecpSignatureLength.selector);
+        vm.expectRevert(IValidatorRegistry.InvalidSecpSignatureLength.selector);
         registry.propose(secpPubkey, blsPubkey, secpSig, blsProof);
     }
 
@@ -114,20 +132,28 @@ contract ValidatorRegistryTest is Test {
         bytes memory secpSig = _secpSig64();
 
         vm.startPrank(proposer);
-        vm.expectRevert(ValidatorRegistry.InvalidBlsSignatureLength.selector);
+        vm.expectRevert(IValidatorRegistry.InvalidBlsSignatureLength.selector);
         registry.propose(secpPubkey, blsPubkey, secpSig, hex"80");
 
         bytes memory shortBlsKey = bytes.concat(bytes1(0x80), new bytes(46));
-        vm.expectRevert(ValidatorRegistry.InvalidBlsPubkeyLength.selector);
+        vm.expectRevert(IValidatorRegistry.InvalidBlsPubkeyLength.selector);
         registry.propose(secpPubkey, shortBlsKey, secpSig, blsProof);
         vm.stopPrank();
+    }
+
+    function testFuzz_proposeRevertsOnInvalidSecpPubkeyLength(bytes calldata secp) public {
+        vm.assume(secp.length != registry.SECP_PUBKEY_LENGTH());
+        bytes memory secpSig = _secpSig64();
+        vm.prank(proposer);
+        vm.expectRevert(IValidatorRegistry.InvalidSecpPubkeyLength.selector);
+        registry.propose(secp, blsPubkey, secpSig, blsProof);
     }
 
     function test_proposeRevertsOnDuplicateKeys() public {
         _propose();
         bytes memory secpSig = _secpSig64();
         vm.prank(proposer);
-        vm.expectRevert(ValidatorRegistry.KeyAlreadyRegistered.selector);
+        vm.expectRevert(IValidatorRegistry.KeyAlreadyRegistered.selector);
         registry.propose(secpPubkey, blsPubkey, secpSig, blsProof);
     }
 
@@ -137,7 +163,7 @@ contract ValidatorRegistryTest is Test {
         assertEq(payload.length, 165);
         assertEq(payload, bytes.concat(secpPubkey, blsPubkey, abi.encodePacked(auth, amount, commission)));
 
-        ValidatorRegistry.Proposal memory stored = registry.getProposal(id);
+        IValidatorRegistry.Proposal memory stored = registry.getProposal(id);
         vm.expectCall(
             registry.STAKING_PRECOMPILE(),
             amount,
@@ -147,21 +173,21 @@ contract ValidatorRegistryTest is Test {
         vm.prank(executor);
         uint64 validatorId = registry.execute{value: amount}(id);
 
-        ValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
+        IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
         assertTrue(validatorId != 0);
         assertEq(proposal.validatorId, validatorId);
         assertEq(proposal.authAddress, auth);
         assertEq(proposal.amount, amount);
         assertEq(proposal.commission, commission);
         assertEq(proposal.executor, executor);
-        assertEq(uint256(proposal.status), uint256(ValidatorRegistry.Status.Executed));
+        assertEq(uint256(proposal.status), uint256(IValidatorRegistry.Status.Executed));
     }
 
     function test_executeRevertsIfValueDoesNotMatchAmount() public {
         uint256 id = _propose();
 
         vm.prank(executor);
-        vm.expectRevert(ValidatorRegistry.StakeMismatch.selector);
+        vm.expectRevert(IValidatorRegistry.StakeMismatch.selector);
         registry.execute{value: amount - 1}(id);
     }
 
@@ -172,7 +198,7 @@ contract ValidatorRegistryTest is Test {
         registry.setConfig(auth, 200_000 ether, commission);
 
         vm.prank(executor);
-        vm.expectRevert(ValidatorRegistry.ConfigChanged.selector);
+        vm.expectRevert(IValidatorRegistry.ConfigChanged.selector);
         registry.execute{value: amount}(id);
     }
 
@@ -182,14 +208,47 @@ contract ValidatorRegistryTest is Test {
         registry.cancel(id);
         uint256 newId = _propose();
         assertEq(newId, 2);
-        assertEq(uint256(registry.getProposal(id).status), uint256(ValidatorRegistry.Status.Cancelled));
+        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
     }
 
     function test_cancelRevertsIfNotProposer() public {
         uint256 id = _propose();
         vm.prank(executor);
-        vm.expectRevert(ValidatorRegistry.NotProposer.selector);
+        vm.expectRevert(IValidatorRegistry.NotProposer.selector);
         registry.cancel(id);
+    }
+
+    function test_pauseBlocksProposeAndExecuteButNotCancel() public {
+        uint256 id = _propose();
+
+        vm.prank(owner);
+        registry.pause();
+        assertTrue(registry.paused());
+
+        bytes memory secpSig = _secpSig64();
+        vm.prank(proposer);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        registry.propose(secpPubkey, blsPubkey, secpSig, blsProof);
+
+        vm.prank(executor);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        registry.execute{value: amount}(id);
+
+        vm.prank(proposer);
+        registry.cancel(id);
+        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
+
+        vm.prank(owner);
+        registry.unpause();
+
+        uint256 newId = _propose();
+        assertEq(newId, 2);
+    }
+
+    function test_nonOwnerCannotPause() public {
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
+        registry.pause();
     }
 
     function _propose() internal returns (uint256) {
