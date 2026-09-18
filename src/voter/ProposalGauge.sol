@@ -4,23 +4,17 @@ pragma solidity ^0.8.24;
 import {IProposalGauge} from "../interfaces/IProposalGauge.sol";
 
 /// @title ProposalGauge
-/// @notice Cloneable identity for a registry proposal. Implementation constructor locks `initialized`.
+/// @notice Identity for a registry proposal.
 contract ProposalGauge is IProposalGauge {
-    address public override voter;
-    uint256 public override proposalId;
+    address public immutable override voter;
+    uint256 public immutable override proposalId;
+    address public immutable override proposer;
+
     uint64 public override validatorId;
-    address public override proposer;
-    bool public override initialized;
 
-    constructor() {
-        initialized = true;
-    }
-
-    function initialize(address voter_, uint256 proposalId_, address proposer_) external override {
-        if (initialized) revert AlreadyInitialized();
+    constructor(address voter_, uint256 proposalId_, address proposer_) {
         if (voter_ == address(0) || proposer_ == address(0) || proposalId_ == 0) revert ZeroAddress();
 
-        initialized = true;
         voter = voter_;
         proposalId = proposalId_;
         proposer = proposer_;

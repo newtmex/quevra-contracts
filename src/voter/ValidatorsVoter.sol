@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {IValidatorsVoter} from "../interfaces/IValidatorsVoter.sol";
 import {IProposalGauge} from "../interfaces/IProposalGauge.sol";
@@ -24,7 +23,6 @@ contract ValidatorsVoter is Ownable2Step, ReentrancyGuardTransient, IValidatorsV
     address public immutable override ve;
     address public immutable override vault;
     address public immutable override registry;
-    address public immutable override gaugeImplementation;
 
     uint256 public override totalWeight;
     uint256 public override maxVotingNum = 30;
@@ -54,7 +52,6 @@ contract ValidatorsVoter is Ownable2Step, ReentrancyGuardTransient, IValidatorsV
         ve = ve_;
         vault = vault_;
         registry = registry_;
-        gaugeImplementation = address(new ProposalGauge());
     }
 
     function renounceOwnership() public pure override {
@@ -226,8 +223,7 @@ contract ValidatorsVoter is Ownable2Step, ReentrancyGuardTransient, IValidatorsV
         if (proposalToGauge[proposalId] != address(0)) revert GaugeExists();
         if (_gauges.length >= MAX_GAUGES) revert TooManyGauges();
 
-        address gauge = Clones.clone(gaugeImplementation);
-        IProposalGauge(gauge).initialize(address(this), proposalId, proposer);
+        address gauge = address(new ProposalGauge(address(this), proposalId, proposer));
 
         proposalToGauge[proposalId] = gauge;
         gaugeToProposal[gauge] = proposalId;

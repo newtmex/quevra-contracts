@@ -5,7 +5,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {IMonadStaking} from "../src/interfaces/IMonadStaking.sol";
-import {IMonVault} from "../src/interfaces/IMonVault.sol";
 import {IProposalGauge} from "../src/interfaces/IProposalGauge.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IValidatorsVoter} from "../src/interfaces/IValidatorsVoter.sol";
@@ -41,18 +40,22 @@ contract QuevraTest is Test {
 
     function setUp() public {
         wmon = new WMON();
-        vault = new MonVault(owner, address(wmon));
-        registry = new ValidatorRegistry(owner, address(vault), STAKE, COMMISSION);
-        ve = new VeMON(owner, address(wmon), address(vault), MAX_LOCK);
-        voter = new ValidatorsVoter(owner, address(ve), address(vault), address(registry));
 
-        vm.startPrank(owner);
-        vault.setRegistry(address(registry));
-        vault.setVe(address(ve));
-        vault.setVoter(address(voter));
-        ve.setVoter(address(voter));
-        registry.setVoter(address(voter));
-        vm.stopPrank();
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedVault = vm.computeCreateAddress(address(this), nonce);
+        address predictedRegistry = vm.computeCreateAddress(address(this), nonce + 1);
+        address predictedVe = vm.computeCreateAddress(address(this), nonce + 2);
+        address predictedVoter = vm.computeCreateAddress(address(this), nonce + 3);
+
+        vault = new MonVault(owner, address(wmon), predictedVe, predictedVoter, predictedRegistry);
+        registry = new ValidatorRegistry(owner, predictedVault, STAKE, COMMISSION, predictedVoter);
+        ve = new VeMON(owner, address(wmon), predictedVault, predictedVoter, MAX_LOCK);
+        voter = new ValidatorsVoter(owner, predictedVe, predictedVault, predictedRegistry);
+
+        assertEq(address(vault), predictedVault);
+        assertEq(address(registry), predictedRegistry);
+        assertEq(address(ve), predictedVe);
+        assertEq(address(voter), predictedVoter);
 
         _setEpoch(2, false);
         vm.deal(locker, 1_000_000 ether);
@@ -70,7 +73,7 @@ contract QuevraTest is Test {
 
         _vote(tokenId, gauge);
 
-        _setEpoch(5, false);
+        _setEpoch(40, false);
         voter.finalizeCycle(0);
         assertTrue(voter.cycleFinalized(0));
         assertGt(voter.cycleWeights(0, gauge), 0);
@@ -108,7 +111,7 @@ contract QuevraTest is Test {
 
     function test_allocateWithoutVotesSkips() public {
         uint256 id = _propose();
-        _setEpoch(5, false);
+        _setEpoch(40, false);
         voter.finalizeCycle(0);
         voter.allocate(8);
         assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Proposed));
@@ -119,14 +122,14 @@ contract QuevraTest is Test {
         uint256 id = _propose();
         _vote(tokenId, voter.proposalToGauge(id));
 
-        _setEpoch(5, false);
+        _setEpoch(40, false);
         voter.finalizeCycle(0);
         voter.allocate(8);
         assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Proposed));
     }
 
     function test_finalizeTwiceReverts() public {
-        _setEpoch(5, false);
+        _setEpoch(40, false);
         voter.finalizeCycle(0);
         vm.expectRevert(IValidatorsVoter.AlreadyFinalized.selector);
         voter.finalizeCycle(0);
@@ -189,17 +192,15 @@ contract QuevraTest is Test {
         assertFalse(voter.isAlive(gauge));
     }
 
-    function test_syncProposalAfterLateVoter() public {
-        vm.prank(owner);
-        registry.setVoter(address(0));
-        uint256 id = _propose();
-        assertEq(voter.proposalToGauge(id), address(0));
-
-        vm.prank(owner);
-        registry.setVoter(address(voter));
-        vm.prank(owner);
-        voter.syncProposal(id);
-        assertTrue(voter.proposalToGauge(id) != address(0));
+    function test_immutableWiring() public view {
+        assertEq(vault.ve(), address(ve));
+        assertEq(vault.voter(), address(voter));
+        assertEq(vault.registry(), address(registry));
+        assertEq(ve.voter(), address(voter));
+        assertEq(registry.voter(), address(voter));
+        assertEq(voter.ve(), address(ve));
+        assertEq(voter.vault(), address(vault));
+        assertEq(voter.registry(), address(registry));
     }
 
     function test_pokeRefreshesWeight() public {
@@ -225,7 +226,7 @@ contract QuevraTest is Test {
         vm.expectRevert(IVeMON.AlreadyVoted.selector);
         ve.transferFrom(locker, stranger, tokenId);
 
-        _setEpoch(5, false);
+        _setEpoch(40, false);
         vm.prank(locker);
         voter.reset(tokenId);
         assertEq(voter.usedWeights(tokenId), 0);
@@ -233,12 +234,6 @@ contract QuevraTest is Test {
         vm.prank(locker);
         ve.transferFrom(locker, stranger, tokenId);
         assertEq(ve.ownerOf(tokenId), stranger);
-    }
-
-    function test_vaultSettersAreOnce() public {
-        vm.prank(owner);
-        vm.expectRevert(IMonVault.AlreadySet.selector);
-        vault.setVe(address(ve));
     }
 
     function test_nonOwnerCannotSyncProposal() public {

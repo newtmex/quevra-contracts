@@ -6,10 +6,10 @@ import {IMonadStaking} from "../interfaces/IMonadStaking.sol";
 /// @title ProtocolTimeLibrary
 /// @notice Vote cycles mapped from Monad staking epochs at `0x1000`.
 /// @dev One cycle is `EPOCHS_PER_CYCLE` consecutive Monad epochs. Cycle `k` covers
-///      `[5k, 5k+5)`. A 1-epoch buffer at each end is the vote window analogue of
+///      `[40k, 40k+40)`. A 1-epoch buffer at each end is the vote window analogue of
 ///      Velodrome's ±1 hour. "Epoch" in this library always means a Monad staking epoch.
 library ProtocolTimeLibrary {
-    uint64 internal constant EPOCHS_PER_CYCLE = 5;
+    uint64 internal constant EPOCHS_PER_CYCLE = 40;
     uint64 internal constant VOTE_BUFFER_EPOCHS = 1;
     address internal constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
 
@@ -18,7 +18,7 @@ library ProtocolTimeLibrary {
         return EPOCHS_PER_CYCLE;
     }
 
-    /// @dev Cycle index containing `epoch` (`epoch / 5`).
+    /// @dev Cycle index containing `epoch` (`epoch / EPOCHS_PER_CYCLE`).
     function cycleOf(uint64 epoch) internal pure returns (uint64) {
         return epoch / EPOCHS_PER_CYCLE;
     }

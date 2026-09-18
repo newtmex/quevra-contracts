@@ -15,40 +15,24 @@ import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 contract MonVault is Ownable2Step, ReentrancyGuardTransient, IMonVault {
     address public immutable override wmon;
 
-    address public override ve;
-    address public override voter;
-    address public override registry;
+    address public immutable override ve;
+    address public immutable override voter;
+    address public immutable override registry;
 
-    constructor(address owner_, address wmon_) Ownable(owner_) {
-        if (wmon_ == address(0)) revert ZeroAddress();
+    constructor(address owner_, address wmon_, address ve_, address voter_, address registry_) Ownable(owner_) {
+        if (wmon_ == address(0) || ve_ == address(0) || voter_ == address(0) || registry_ == address(0)) {
+            revert ZeroAddress();
+        }
         wmon = wmon_;
+        ve = ve_;
+        voter = voter_;
+        registry = registry_;
     }
 
     receive() external payable {}
 
     function renounceOwnership() public pure override {
         revert OwnableInvalidOwner(address(0));
-    }
-
-    function setVe(address ve_) external override onlyOwner {
-        if (ve_ == address(0)) revert ZeroAddress();
-        if (ve != address(0)) revert AlreadySet();
-        ve = ve_;
-        emit VeSet(ve_);
-    }
-
-    function setVoter(address voter_) external override onlyOwner {
-        if (voter_ == address(0)) revert ZeroAddress();
-        if (voter != address(0)) revert AlreadySet();
-        voter = voter_;
-        emit VoterSet(voter_);
-    }
-
-    function setRegistry(address registry_) external override onlyOwner {
-        if (registry_ == address(0)) revert ZeroAddress();
-        if (registry != address(0)) revert AlreadySet();
-        registry = registry_;
-        emit RegistrySet(registry_);
     }
 
     function onLock(uint256 amount) external override nonReentrant {

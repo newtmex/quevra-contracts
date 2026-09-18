@@ -59,7 +59,7 @@ contract ValidatorRegistryTest is Test {
     uint256 internal commission = 1e17;
 
     function setUp() public {
-        registry = new ValidatorRegistry(owner, auth, amount, commission);
+        registry = _newRegistry(address(0));
         vm.deal(proposer, 1_000_000 ether);
         vm.deal(executor, 1_000_000 ether);
     }
@@ -69,22 +69,23 @@ contract ValidatorRegistryTest is Test {
         assertEq(registry.authAddress(), auth);
         assertEq(registry.amount(), amount);
         assertEq(registry.commission(), commission);
+        assertEq(registry.voter(), address(0));
         assertEq(registry.stakingPayload(secpPubkey, blsPubkey).length, 165);
         assertFalse(registry.paused());
     }
 
     function test_constructorRevertsOnInvalidConfig() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
-        new ValidatorRegistry(address(0), auth, amount, commission);
+        new ValidatorRegistry(address(0), auth, amount, commission, address(0));
 
         vm.expectRevert(IValidatorRegistry.InvalidAuthAddress.selector);
-        new ValidatorRegistry(owner, address(0), amount, commission);
+        new ValidatorRegistry(owner, address(0), amount, commission, address(0));
 
         vm.expectRevert(IValidatorRegistry.StakeTooLow.selector);
-        new ValidatorRegistry(owner, auth, amount - 1, commission);
+        new ValidatorRegistry(owner, auth, amount - 1, commission, address(0));
 
         vm.expectRevert(IValidatorRegistry.CommissionTooHigh.selector);
-        new ValidatorRegistry(owner, auth, amount, 1e18 + 1);
+        new ValidatorRegistry(owner, auth, amount, 1e18 + 1, address(0));
     }
 
     function test_ownerCanSetConfig() public {
@@ -294,21 +295,15 @@ contract ValidatorRegistryTest is Test {
         registry.pause();
     }
 
-    function test_setVoterOnlyOwner() public {
+    function test_constructorSetsImmutableVoter() public {
         MockVoter mock = new MockVoter();
-        vm.prank(proposer);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
-        registry.setVoter(address(mock));
-
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
         assertEq(registry.voter(), address(mock));
     }
 
     function test_proposeCallsVoterHook() public {
         MockVoter mock = new MockVoter();
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
 
         uint256 id = _propose();
         assertEq(id, 1);
@@ -319,8 +314,7 @@ contract ValidatorRegistryTest is Test {
 
     function test_whenVoterSetNonAuthExecuteReverts() public {
         MockVoter mock = new MockVoter();
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
 
         uint256 id = _propose();
         vm.prank(executor);
@@ -330,8 +324,7 @@ contract ValidatorRegistryTest is Test {
 
     function test_whenVoterSetAuthCanExecute() public {
         MockVoter mock = new MockVoter();
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
 
         uint256 id = _propose();
         vm.deal(auth, amount);
@@ -349,8 +342,7 @@ contract ValidatorRegistryTest is Test {
 
     function test_cancelCallsVoterHookFirst() public {
         MockVoter mock = new MockVoter();
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
 
         uint256 id = _propose();
         mock.setRevertCancel(true);
@@ -368,8 +360,7 @@ contract ValidatorRegistryTest is Test {
 
     function test_ownerCancelFreesKeysAndNotifiesVoter() public {
         MockVoter mock = new MockVoter();
-        vm.prank(owner);
-        registry.setVoter(address(mock));
+        registry = _newRegistry(address(mock));
 
         uint256 id = _propose();
         vm.prank(owner);
@@ -386,6 +377,10 @@ contract ValidatorRegistryTest is Test {
         vm.prank(proposer);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, proposer));
         registry.ownerCancel(id);
+    }
+
+    function _newRegistry(address voter) internal returns (ValidatorRegistry) {
+        return new ValidatorRegistry(owner, auth, amount, commission, voter);
     }
 
     function _propose() internal returns (uint256) {

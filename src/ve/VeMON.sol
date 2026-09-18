@@ -21,23 +21,24 @@ contract VeMON is Ownable2Step, ReentrancyGuardTransient, ERC721, IVeMON {
     IWMON public immutable wmon;
     address public immutable override vault;
     uint256 public immutable override maxLockTime;
+    address public immutable override voter;
 
-    address public override voter;
     uint256 public override supply;
     uint256 public lastId;
 
     mapping(uint256 tokenId => LockedBalance) internal _locked;
     mapping(uint256 tokenId => bool) public override voted;
 
-    constructor(address owner_, address wmon_, address vault_, uint256 maxLockTime_)
+    constructor(address owner_, address wmon_, address vault_, address voter_, uint256 maxLockTime_)
         Ownable(owner_)
         ERC721("veMON", "veMON")
     {
-        if (wmon_ == address(0) || vault_ == address(0)) revert ZeroAddress();
+        if (wmon_ == address(0) || vault_ == address(0) || voter_ == address(0)) revert ZeroAddress();
         if (maxLockTime_ == 0) revert MaxLockTooShort();
 
         wmon = IWMON(wmon_);
         vault = vault_;
+        voter = voter_;
         maxLockTime = maxLockTime_;
     }
 
@@ -76,12 +77,6 @@ contract VeMON is Ownable2Step, ReentrancyGuardTransient, ERC721, IVeMON {
         for (uint256 i = 1; i <= n; ++i) {
             total += votingPowerOfNFTAt(i, timestamp);
         }
-    }
-
-    function setVoter(address voter_) external override onlyOwner {
-        if (voter_ == address(0)) revert ZeroAddress();
-        voter = voter_;
-        emit VoterSet(voter_);
     }
 
     function voting(uint256 tokenId, bool voted_) external override {

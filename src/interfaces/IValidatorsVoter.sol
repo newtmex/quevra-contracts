@@ -41,7 +41,6 @@ interface IValidatorsVoter {
     function ve() external view returns (address);
     function vault() external view returns (address);
     function registry() external view returns (address);
-    function gaugeImplementation() external view returns (address);
     function proposalToGauge(uint256 proposalId) external view returns (address);
     function gaugeToProposal(address gauge) external view returns (uint256);
     function weights(address gauge) external view returns (uint256);

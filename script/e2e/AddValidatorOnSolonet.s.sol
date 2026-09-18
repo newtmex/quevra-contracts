@@ -27,7 +27,7 @@ contract AddValidatorOnSolonet is Script {
         require(amount >= 100_000 ether, "stake too low");
 
         vm.startBroadcast(pk);
-        ValidatorRegistry reg = new ValidatorRegistry(owner, auth, amount, commission);
+        ValidatorRegistry reg = new ValidatorRegistry(owner, auth, amount, commission, address(0));
         proposalId = reg.propose(secpPubkey, blsPubkey, secpSig, blsSig);
         validatorId = reg.execute{value: amount}(proposalId);
         vm.stopBroadcast();

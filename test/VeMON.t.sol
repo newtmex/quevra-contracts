@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {IVeMON} from "../src/interfaces/IVeMON.sol";
@@ -22,12 +21,16 @@ contract VeMONTest is Test {
 
     function setUp() public {
         wmon = new WMON();
-        vault = new MonVault(owner, address(wmon));
-        ve = new VeMON(owner, address(wmon), address(vault), MAX_LOCK);
-        vm.prank(owner);
-        vault.setVe(address(ve));
-        vm.prank(owner);
-        ve.setVoter(address(this));
+
+        uint256 nonce = vm.getNonce(address(this));
+        address predictedVault = vm.computeCreateAddress(address(this), nonce);
+        address predictedVe = vm.computeCreateAddress(address(this), nonce + 1);
+
+        vault = new MonVault(owner, address(wmon), predictedVe, address(this), address(this));
+        ve = new VeMON(owner, address(wmon), predictedVault, address(this), MAX_LOCK);
+
+        assertEq(address(vault), predictedVault);
+        assertEq(address(ve), predictedVe);
         vm.deal(locker, 1_000_000 ether);
     }
 
@@ -146,14 +149,12 @@ contract VeMONTest is Test {
         assertEq(ve.supply(), 13 ether);
     }
 
-    function test_setVoterOnlyOwner() public {
-        vm.prank(locker);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, locker));
-        ve.setVoter(locker);
+    function test_constructorSetsImmutableVoter() public view {
+        assertEq(ve.voter(), address(this));
     }
 
     function test_constructorRevertsOnZeroMaxLock() public {
         vm.expectRevert(IVeMON.MaxLockTooShort.selector);
-        new VeMON(owner, address(wmon), address(vault), 0);
+        new VeMON(owner, address(wmon), address(vault), address(this), 0);
     }
 }

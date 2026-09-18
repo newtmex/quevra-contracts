@@ -10,9 +10,10 @@ contract DeployValidatorRegistry is Script {
         address auth_ = vm.envAddress("AUTH_ADDRESS");
         uint256 amount_ = vm.envOr("AMOUNT", uint256(100_000 ether));
         uint256 commission_ = vm.envOr("COMMISSION", uint256(1e17));
+        address voter_ = vm.envOr("VOTER", address(0));
 
         vm.startBroadcast();
-        registry = new ValidatorRegistry(owner_, auth_, amount_, commission_);
+        registry = new ValidatorRegistry(owner_, auth_, amount_, commission_, voter_);
         vm.stopBroadcast();
     }
 }

@@ -12,7 +12,6 @@ interface IVeMON {
     event Deposit(address indexed from, uint256 indexed tokenId, uint256 value, uint256 end, uint256 timestamp);
     event Withdraw(address indexed from, uint256 indexed tokenId, uint256 value, uint256 timestamp);
     event Supply(uint256 prev, uint256 next);
-    event VoterSet(address voter);
 
     error ZeroAddress();
     error ZeroAmount();
@@ -48,6 +47,4 @@ interface IVeMON {
     function totalVotingPower() external view returns (uint256);
     function totalVotingPowerAt(uint256 timestamp) external view returns (uint256);
     function isApprovedOrOwner(address spender, uint256 tokenId) external view returns (bool);
-
-    function setVoter(address voter_) external;
 }

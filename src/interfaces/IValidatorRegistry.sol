@@ -43,7 +43,6 @@ interface IValidatorRegistry {
         uint256 commission
     );
     event ValidatorProposalCancelled(uint256 indexed id);
-    event VoterSet(address voter);
 
     error InvalidSecpPubkeyLength();
     error InvalidBlsPubkeyLength();
@@ -70,7 +69,6 @@ interface IValidatorRegistry {
     function voter() external view returns (address);
 
     function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external;
-    function setVoter(address voter_) external;
     function pause() external;
     function unpause() external;
 

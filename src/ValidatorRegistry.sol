@@ -28,14 +28,19 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
     address public override authAddress;
     uint256 public override amount;
     uint256 public override commission;
-    address public override voter;
+    address public immutable override voter;
 
     uint256 public override nextId = 1;
     mapping(uint256 id => Proposal) private _proposals;
     mapping(bytes32 secpKeyHash => uint256 id) public override idBySecpPubkey;
     mapping(bytes32 blsKeyHash => uint256 id) public override idByBlsPubkey;
 
-    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_) Ownable(owner_) {
+    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_, address voter_)
+        Ownable(owner_)
+    {
+        // Zero remains the solo-mode flag, not an unset mistake.
+        // forge-lint: disable-next-line(missing-zero-check)
+        voter = voter_;
         _setConfig(authAddress_, amount_, commission_);
     }
 
@@ -57,14 +62,6 @@ contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, 
     /// @notice Atomically update values proposers must sign into the `addValidator` payload.
     function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external override onlyOwner {
         _setConfig(authAddress_, amount_, commission_);
-    }
-
-    /// @notice Wire (or clear) the veMON voter. `address(0)` keeps anyone-pays `execute`.
-    function setVoter(address voter_) external override onlyOwner {
-        // Zero is the solo-mode flag, not an unset mistake.
-        // forge-lint: disable-next-line(missing-zero-check)
-        voter = voter_;
-        emit VoterSet(voter_);
     }
 
     /// @notice Propose consensus keys. Signatures must be Monad `addValidator` signatures
