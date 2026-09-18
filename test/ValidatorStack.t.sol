@@ -12,12 +12,14 @@ import {ValidatorGauge} from "../src/ValidatorGauge.sol";
 import {ValidatorRegistry} from "../src/ValidatorRegistry.sol";
 import {ValidatorVoter} from "../src/ValidatorVoter.sol";
 import {StakingController} from "../src/StakingController.sol";
+import {VeMON} from "../src/VeMON.sol";
 
 contract ValidatorStackTest is Test {
     MonadVm internal constant monadVm = MonadVm(0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA);
     ValidatorRegistry internal registry;
     ValidatorVoter internal voter;
     StakingController internal controller;
+    VeMON internal veMON;
 
     address internal initialVault;
     address internal operator = makeAddr("operator");
@@ -29,10 +31,12 @@ contract ValidatorStackTest is Test {
     bytes internal blsSig = bytes.concat(bytes1(0x80), new bytes(95));
     uint256 internal stake = 100_000 ether;
     uint256 internal commission = 1e17;
+    uint256 internal lockDuration = 52 weeks;
 
     function setUp() public {
         registry = new ValidatorRegistry();
         controller = new StakingController(address(registry), address(this));
+        veMON = controller.veMON();
         voter = new ValidatorVoter(address(registry), address(controller));
         controller.setVoter(address(voter));
         initialVault = controller.predictVaultAddress(operator, secpPubkey, blsPubkey);
@@ -115,9 +119,9 @@ contract ValidatorStackTest is Test {
         assertEq(voter.stackByRequest(requestId).vault, address(0));
     }
 
-    function test_controllerRoutesConfiguredWeightThenPermissionlessDelegation() public {
+    function test_createLockMintsVeMONAndCustodiesMONInController() public {
         controller.setValidatorConfig(stake, commission);
-        (address predicted,,) = controller.validatorSigningConfig(operator, secpPubkey, blsPubkey);
+        (address predicted,,) = controller.signingConfigFor(operator, secpPubkey, blsPubkey);
         assertEq(predicted.code.length, 0);
         vm.prank(operator);
         (uint256 requestId,,) = voter.createValidator(predicted, secpPubkey, blsPubkey, secpSig, blsSig);
@@ -125,7 +129,7 @@ contract ValidatorStackTest is Test {
 
         controller.setValidatorConfig(stake, commission);
         (address authAddress, uint256 configuredCommission, uint256 configuredAmount) =
-            controller.validatorSigningConfig(requestId);
+            controller.signingConfig(requestId);
         assertEq(authAddress, voter.stackByRequest(requestId).vault);
         assertEq(configuredCommission, commission);
         assertEq(configuredAmount, stake);
@@ -135,29 +139,25 @@ contract ValidatorStackTest is Test {
         );
 
         vm.prank(operator);
-        controller.addWeight{value: stake}(requestId);
+        veMON.createLock{value: stake}(stake, lockDuration);
 
         vm.prank(stranger);
-        assertTrue(controller.delegate{value: 10 ether}(requestId));
+        veMON.createLock{value: 10 ether}(10 ether, lockDuration);
 
-        assertGt(ValidatorGauge(voter.stackByRequest(requestId).gauge).validatorId(), 0);
-        assertEq(registry.getProposal(requestId).executor, predicted);
-        assertEq(controller.weightOf(requestId, operator), stake);
-        assertEq(controller.weightOf(requestId, stranger), 10 ether);
-    }
-
-    function test_addWeightDelegatesWhenValidatorAlreadyExists() public {
-        vm.prank(operator);
-        (uint256 requestId,,) = voter.createValidator(initialVault, secpPubkey, blsPubkey, secpSig, blsSig);
-        controller.setValidatorConfig(stake, commission);
-
-        vm.prank(operator);
-        controller.addWeight{value: stake}(requestId);
-        uint64 validatorId = IValidatorRegistry(registry).getProposal(requestId).validatorId;
-
-        vm.prank(stranger);
-        uint64 returnedId = controller.addWeight{value: 10 ether}(requestId);
-        assertEq(returnedId, validatorId);
+        assertEq(ValidatorGauge(voter.stackByRequest(requestId).gauge).validatorId(), 0);
+        assertEq(uint256(registry.getProposal(requestId).status), uint256(IValidatorRegistry.Status.Proposed));
+        assertEq(registry.getProposal(requestId).executor, address(0));
+        assertEq(address(controller).balance, stake + 10 ether);
+        assertEq(veMON.ownerOf(1), operator);
+        assertEq(veMON.ownerOf(2), stranger);
+        assertEq(veMON.balanceOf(operator), 1);
+        assertEq(veMON.balanceOf(stranger), 1);
+        (uint256 operatorAmount, uint256 operatorDuration) = veMON.locks(1);
+        (uint256 strangerAmount, uint256 strangerDuration) = veMON.locks(2);
+        assertEq(operatorAmount, stake);
+        assertEq(strangerAmount, 10 ether);
+        assertEq(operatorDuration, lockDuration);
+        assertEq(strangerDuration, lockDuration);
     }
 
     function test_controllerVoterIsOwnerSetOnce() public {
@@ -176,30 +176,25 @@ contract ValidatorStackTest is Test {
         controller.setValidatorConfig(stake, commission);
     }
 
-    function test_addWeightRequiresConfiguredExactValidatorAmount() public {
-        vm.prank(operator);
-        (uint256 requestId,,) = voter.createValidator(initialVault, secpPubkey, blsPubkey, secpSig, blsSig);
-        controller.setValidatorConfig(stake, commission);
+    function test_createLockRejectsZeroOrMismatchedValue() public {
+        vm.expectRevert(VeMON.InvalidAmount.selector);
+        veMON.createLock(0, lockDuration);
 
-        vm.prank(operator);
-        vm.expectRevert(StakingController.InvalidWeightAmount.selector);
-        controller.addWeight{value: 1 ether}(requestId);
+        vm.expectRevert(VeMON.InvalidValue.selector);
+        veMON.createLock{value: 1 ether}(2 ether, lockDuration);
     }
 
-    function test_delegateCannotRunBeforeValidatorCreation() public {
+    function test_controllerReceiveOnlyAcceptsMONFromVeMON() public {
         vm.prank(operator);
-        (uint256 requestId,,) = voter.createValidator(initialVault, secpPubkey, blsPubkey, secpSig, blsSig);
-
-        vm.prank(stranger);
-        vm.expectRevert(StakingController.InvalidValidatorState.selector);
-        controller.delegate{value: 1 ether}(requestId);
+        (bool success,) = address(controller).call{value: stake}("");
+        assertFalse(success);
     }
 
     function test_unrelatedRequestsDoNotChangePrediction() public {
         controller.setValidatorConfig(stake, commission);
-        (address predicted,,) = controller.validatorSigningConfig(operator, secpPubkey, blsPubkey);
+        (address predicted,,) = controller.signingConfigFor(operator, secpPubkey, blsPubkey);
         registry.requestValidator(new bytes(33), new bytes(48), secpSig, blsSig);
-        (address unchangedVault,,) = controller.validatorSigningConfig(operator, secpPubkey, blsPubkey);
+        (address unchangedVault,,) = controller.signingConfigFor(operator, secpPubkey, blsPubkey);
         assertEq(unchangedVault, predicted);
         vm.prank(operator);
         (uint256 id, address deployed,) = voter.createValidator(predicted, secpPubkey, blsPubkey, secpSig, blsSig);
@@ -245,7 +240,7 @@ contract ValidatorStackTest is Test {
         assertEq(unboundVoter.stackByRequest(1).vault, address(0));
     }
 
-    function test_cancelClearsControllerPoolButPreservesGlobalConfiguration() public {
+    function test_cancelClearsControllerVaultButPreservesGlobalConfiguration() public {
         vm.prank(operator);
         (uint256 requestId,,) = voter.createValidator(initialVault, secpPubkey, blsPubkey, secpSig, blsSig);
         controller.setValidatorConfig(stake, commission);
@@ -253,8 +248,7 @@ contract ValidatorStackTest is Test {
         vm.prank(operator);
         voter.cancel(requestId);
 
-        (address vault,,,) = controller.pools(requestId);
-        assertEq(vault, address(0));
+        assertEq(controller.vaultByRequest(requestId), address(0));
         assertEq(controller.commission(), commission);
         assertEq(controller.validatorAmount(), stake);
         address freshPrediction = controller.predictVaultAddress(operator, secpPubkey, blsPubkey);
@@ -281,8 +275,7 @@ contract ValidatorStackTest is Test {
         assertEq(predicted.code.length, 0);
         assertEq(predictedGauge.code.length, 0);
         assertEq(registry.nextId(), 1);
-        (address vault,,,) = controller.pools(1);
-        assertEq(vault, address(0));
+        assertEq(controller.vaultByRequest(1), address(0));
         assertEq(voter.stackByRequest(1).vault, address(0));
         vm.clearMockedCalls();
         vm.prank(operator);

@@ -44,14 +44,15 @@ operator.
 
 The creation path is atomic: a failed request or later deployment failure
 reverts the request and both deployments. The owner configures the exact
-commission and amount used by the requester's signed messages. Users add MON
-weight through the controller; the first exact configured amount creates the
-validator and later permissionless calls delegate through that vault.
+commission and amount used by the requester's signed messages. Users deposit
+MON by creating veMON locks; veMON forwards the value to the controller. The
+controller receive path only accepts value from veMON and custodies it for a
+later admin-controlled staking flow.
 
 Assumptions and deferred integration points:
 
 - Before submitting, call
-  `controller.validatorSigningConfig(requester, secpPubkey, blsPubkey)` to obtain
+  `controller.signingConfigFor(requester, secpPubkey, blsPubkey)` to obtain
   `(authAddress, commission, amount)`. Sign the packed payload
   `secpPubkey || blsPubkey || authAddress || uint256(amount) || uint256(commission)`
   using the consensus keys. Submit via
@@ -64,7 +65,7 @@ Assumptions and deferred integration points:
 - The voter requests the validator and creates the gauge using the expected
   vault address. A single controller call then deploys and initializes the clone
   with the returned request ID and registers the complete vault/gauge pair.
-  Every step is atomic: failure restores nonce, registry, pool and deployment state.
+  Every step is atomic: failure restores nonce, registry, vault and deployment state.
   Other requesters and direct registry requests cannot consume your nonce.
 - Each controller deploys a fixed vault implementation in its constructor.
   The implementation has a no-argument constructor and disables initialization.
@@ -79,7 +80,7 @@ Assumptions and deferred integration points:
 - Global economics are read at execution time. Owner configuration changes
   can invalidate pending signatures; coordinate changes with requesters, who
   must cancel and resubmit with fresh signatures when their payload changes.
-  The post-request `validatorSigningConfig(requestId)` overload remains available.
+  The post-request `signingConfig(requestId)` helper remains available.
 
 - Validator key lengths follow Monad's compressed secp256k1 (33-byte) and BLS
   (48-byte) formats. Signature bytes are passed through for the staking
@@ -87,16 +88,15 @@ Assumptions and deferred integration points:
 - `ValidatorGauge` is deliberately metadata-only for now. Voting, reward
   distribution, capital allocation, and vault rebalancing are deferred.
 - The controller remains the vault owner. Users do not call vaults directly;
-  they add weight through the controller, which forwards MON immediately.
+  they create veMON locks, and veMON forwards MON to the controller for custody.
 - `ValidatorRegistry` owns all request state. `ValidatorVoter` stores only the
   request-to-vault/gauge/operator index needed for cancellation.
 - `StakingController` is `Ownable2Step`, owns every vault, and lets its owner
   bind the voter exactly once. Its owner-managed global validator configuration
-  is exposed through `validatorSigningConfig`, which returns the vault auth
+  is exposed through its distinct signing-config helpers, which return the vault auth
   address, commission, and exact amount expected by `addValidator` signatures.
-- `StakingController.addWeight` selects validator creation or delegation from
-  the current registry state. `delegate` is permissionless; no controller
-  deposit or withdrawal balance is maintained.
+- `StakingController.receive` accepts value only from veMON. It does not select
+  a vault or call validator staking yet; that admin-controlled flow is deferred.
 - The registry's direct request and `addValidator` entry points remain for
   compatibility with existing integrations. They do not create a vault or
   gauge; new integrations should use `ValidatorVoter`.

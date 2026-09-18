@@ -52,7 +52,7 @@ contract ValidatorVoter is IValidatorVoter {
 
         if (msg.sender != stack.operator) revert NotRequestOperator();
 
-        controller.cancelPool(requestId);
+        controller.cancelVault(requestId);
         registry.cancel(requestId);
         delete _stacks[requestId];
         emit ValidatorStackCancelled(requestId, msg.sender, stack.vault, stack.gauge);
