@@ -5,17 +5,21 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
 
 /// @title StakingVault
 /// @notice MON vault bound to exactly one validator.
-contract StakingVault is Ownable2Step, ReentrancyGuardTransient {
-    IValidatorRegistry public immutable registry;
-    IMonadStaking public immutable staking;
+contract StakingVault is Ownable2Step, ReentrancyGuardTransient, Initializable {
+    /// @dev Implementation deployer is the only clone initializer.
+    address private immutable _controller = msg.sender;
+    IValidatorRegistry public registry;
+    IMonadStaking public staking;
 
     /// @notice The only validator request this vault can execute.
-    uint256 public immutable requestId;
+    uint256 public requestId;
 
     /// @notice Set after the request is successfully executed.
     uint64 public validatorId;
@@ -26,10 +30,16 @@ contract StakingVault is Ownable2Step, ReentrancyGuardTransient {
     error AddValidatorFailed();
     error DelegationFailed();
 
-    constructor(address owner_, address registry_, uint256 requestId_) Ownable(owner_) {
-        if (registry_ == address(0) || requestId_ == 0) {
-            revert InvalidRequest();
-        }
+    constructor() Ownable(msg.sender) {
+        _disableInitializers();
+    }
+
+    /// @notice Called by the controller immediately after cloning.
+    function initialize(address registry_, uint256 requestId_) external initializer {
+        if (msg.sender != _controller) revert OwnableUnauthorizedAccount(msg.sender);
+        if (registry_ == address(0) || requestId_ == 0) revert InvalidRequest();
+
+        _transferOwnership(msg.sender);
 
         registry = IValidatorRegistry(registry_);
         staking = registry.staking();

@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "./interfaces/IValidatorVoter.sol";
-import {StakingVault} from "./StakingVault.sol";
 import {ValidatorGauge} from "./ValidatorGauge.sol";
+import {StakingController} from "./StakingController.sol";
 
 /// @title ValidatorVoter
 /// @notice Creates and tracks validator vault/gauge pairs around a registry request.
@@ -12,6 +12,7 @@ import {ValidatorGauge} from "./ValidatorGauge.sol";
 ///      request-to-deployment index needed to cancel its own deployments.
 contract ValidatorVoter is IValidatorVoter {
     IValidatorRegistry public immutable registry;
+    StakingController public immutable controller;
 
     mapping(uint256 requestId => ValidatorStack) private _stacks;
 
@@ -20,26 +21,23 @@ contract ValidatorVoter is IValidatorVoter {
     error InvalidRegistry();
     error NoStack();
 
-    constructor(address registry_) {
-        if (registry_ == address(0)) revert InvalidRegistry();
+    constructor(address registry_, address controller_) {
+        if (registry_ == address(0) || controller_ == address(0)) revert InvalidRegistry();
         registry = IValidatorRegistry(registry_);
+        controller = StakingController(payable(controller_));
     }
 
     /// @notice Requests a validator from the registry and deploys its vault and gauge.
     function createValidator(
+        address expectedAuthAddress,
         bytes calldata secpPubkey,
         bytes calldata blsPubkey,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external returns (uint256 requestId, address vault, address gauge) {
         requestId = registry.requestValidator(secpPubkey, blsPubkey, signedSecpMessage, signedBlsMessage);
-
-        StakingVault deployedVault = new StakingVault(msg.sender, address(registry), requestId);
-        ValidatorGauge deployedGauge =
-            new ValidatorGauge(address(registry), address(deployedVault), msg.sender, requestId);
-
-        vault = address(deployedVault);
-        gauge = address(deployedGauge);
+        gauge = address(new ValidatorGauge(address(registry), expectedAuthAddress, msg.sender, requestId));
+        vault = controller.deployVault(requestId, msg.sender, expectedAuthAddress, gauge);
         _stacks[requestId] = ValidatorStack(vault, gauge, 0, msg.sender);
         emit ValidatorGaugeCreated(requestId, 0, msg.sender, vault, gauge);
     }
@@ -62,4 +60,5 @@ contract ValidatorVoter is IValidatorVoter {
     function stackByRequest(uint256 requestId) external view override returns (ValidatorStack memory) {
         return _stacks[requestId];
     }
+
 }
