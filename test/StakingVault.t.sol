@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Test} from "forge-std/Test.sol";
 import {MonadVm} from "monad-std/MonadVm.sol";
 
@@ -39,12 +41,16 @@ contract StakingVaultTest is Test {
         vm.prank(operator);
         requestId = registry.requestValidator(secpPubkey, blsPubkey, secpSig, blsSig);
 
-        vault = new StakingVault(owner, address(registry), requestId);
+        vm.prank(owner);
+        StakingVault implementation = new StakingVault();
+        vault = StakingVault(payable(Clones.clone(address(implementation))));
+        vm.prank(owner);
+        vault.initialize(address(registry), requestId);
         vm.deal(owner, 1_000_000 ether);
         vm.deal(stranger, 1_000_000 ether);
     }
 
-    function test_constructorBindsOwnerRegistryRequestAndStakingPrecompile() public view {
+    function test_initializeBindsOwnerRegistryRequestAndStakingPrecompile() public view {
         assertEq(vault.owner(), owner);
         assertEq(address(vault.registry()), address(registry));
         assertEq(address(vault.staking()), address(staking));
@@ -52,12 +58,21 @@ contract StakingVaultTest is Test {
         assertEq(vault.validatorId(), 0);
     }
 
-    function test_constructorRejectsInvalidRegistryOrRequest() public {
+    function test_initializeRejectsInvalidRegistryOrRequest() public {
+        StakingVault implementation = new StakingVault();
+        StakingVault clone = StakingVault(payable(Clones.clone(address(implementation))));
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        new StakingVault(owner, address(0), requestId);
-
+        clone.initialize(address(0), requestId);
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        new StakingVault(owner, address(registry), 0);
+        clone.initialize(address(registry), 0);
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        clone.initialize(address(registry), requestId);
+        clone.initialize(address(registry), requestId);
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        clone.initialize(address(registry), requestId);
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        implementation.initialize(address(registry), requestId);
     }
 
     function test_addValidatorExecutesBoundRegistryRequestFromVault() public {

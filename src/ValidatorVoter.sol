@@ -43,15 +43,16 @@ contract ValidatorVoter is IValidatorVoter {
     }
 
     /// @notice Cancels the registry request and removes this voter's deployment index.
-    /// @dev The registry cannot physically destroy already-deployed contracts on
-    ///      Cancun EVM; their code remains. The registry reservation and voter
-    ///      index are removed atomically.
+    /// @dev Cancellation is available only before any weight is routed. The
+    ///      controller clears its pool configuration before the registry request
+    ///      is cancelled; a revert rolls back both actions.
     function cancel(uint256 requestId) external {
         ValidatorStack memory stack = _stacks[requestId];
         if (stack.vault == address(0)) revert NoStack();
 
         if (msg.sender != stack.operator) revert NotRequestOperator();
 
+        controller.cancelPool(requestId);
         registry.cancel(requestId);
         delete _stacks[requestId];
         emit ValidatorStackCancelled(requestId, msg.sender, stack.vault, stack.gauge);
@@ -60,5 +61,4 @@ contract ValidatorVoter is IValidatorVoter {
     function stackByRequest(uint256 requestId) external view override returns (ValidatorStack memory) {
         return _stacks[requestId];
     }
-
 }
