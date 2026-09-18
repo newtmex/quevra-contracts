@@ -43,6 +43,7 @@ interface IValidatorRegistry {
     error NotProposed();
     error NotOperator();
     error InvalidValidatorId();
+    error InvalidValidatorData();
 
     function staking() external view returns (IMonadStaking);
 

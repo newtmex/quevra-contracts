@@ -55,20 +55,19 @@ contract ValidatorRegistryTest is Test {
         assertEq(registry.idByBlsPubkey(keccak256(blsPubkey)), id);
     }
 
-    function test_requestValidatorAcceptsOpaqueKeyAndSignatureBytes() public {
-        bytes memory anySecpPubkey = hex"01";
-        bytes memory anyBlsPubkey = hex"0203";
-        bytes memory anySecpSig = hex"040506";
-        bytes memory anyBlsSig = hex"0708090a";
+    function test_requestValidatorRejectsInvalidValidatorData() public {
+        bytes memory validSecp = new bytes(33);
+        bytes memory validBls = new bytes(48);
+        bytes memory validSecpSig = hex"040506";
+        bytes memory validBlsSig = hex"0708090a";
 
         vm.prank(operator);
-        uint256 id = registry.requestValidator(anySecpPubkey, anyBlsPubkey, anySecpSig, anyBlsSig);
+        vm.expectRevert(IValidatorRegistry.InvalidValidatorData.selector);
+        registry.requestValidator(new bytes(0), validBls, validSecpSig, validBlsSig);
 
-        IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
-        assertEq(proposal.secpPubkey, anySecpPubkey);
-        assertEq(proposal.blsPubkey, anyBlsPubkey);
-        assertEq(proposal.signedSecpMessage, anySecpSig);
-        assertEq(proposal.signedBlsMessage, anyBlsSig);
+        vm.prank(operator);
+        vm.expectRevert(IValidatorRegistry.InvalidValidatorData.selector);
+        registry.requestValidator(validSecp, new bytes(0), validSecpSig, validBlsSig);
     }
 
     function test_requestValidatorRevertsOnDuplicateKeys() public {

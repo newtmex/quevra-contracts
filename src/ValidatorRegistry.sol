@@ -29,20 +29,22 @@ contract ValidatorRegistry is IValidatorRegistry {
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external override returns (uint256 id) {
+        if (
+            secpPubkey.length != 33 || blsPubkey.length != 48 || signedSecpMessage.length == 0
+                || signedBlsMessage.length == 0
+        ) revert InvalidValidatorData();
+
         bytes32 secpKeyHash = keccak256(secpPubkey);
         bytes32 blsKeyHash = keccak256(blsPubkey);
-
         if (idBySecpPubkey[secpKeyHash] != 0 || idByBlsPubkey[blsKeyHash] != 0) {
             revert KeyAlreadyRegistered();
         }
 
         id = nextId++;
-
         idBySecpPubkey[secpKeyHash] = id;
         idByBlsPubkey[blsKeyHash] = id;
 
         Proposal storage proposal = _proposals[id];
-
         proposal.secpPubkey = secpPubkey;
         proposal.blsPubkey = blsPubkey;
         proposal.signedSecpMessage = signedSecpMessage;
@@ -64,49 +66,34 @@ contract ValidatorRegistry is IValidatorRegistry {
         Proposal storage proposal = _proposed(id);
         uint256 amount = msg.value;
         address authAddress = msg.sender;
-
         bytes memory payload = _payload(proposal.secpPubkey, proposal.blsPubkey, authAddress, amount, commission);
-
-        bytes memory signedSecpMessage = proposal.signedSecpMessage;
-        bytes memory signedBlsMessage = proposal.signedBlsMessage;
 
         proposal.status = Status.Executed;
         proposal.executor = msg.sender;
-
-        validatorId = staking.addValidator{value: amount}(payload, signedSecpMessage, signedBlsMessage);
-
+        validatorId =
+            staking.addValidator{value: amount}(payload, proposal.signedSecpMessage, proposal.signedBlsMessage);
         if (validatorId == 0) revert InvalidValidatorId();
 
         proposal.validatorId = validatorId;
-
         // forge-lint: disable-next-line(reentrancy-events)
         emit ValidatorAdded(id, msg.sender, validatorId, authAddress, amount, commission);
     }
 
-    /// @notice Cancel a pending validator request.
     function cancel(uint256 id) external override {
         Proposal storage proposal = _proposed(id);
-
-        if (msg.sender != proposal.operator) {
-            revert NotOperator();
-        }
+        if (msg.sender != proposal.operator) revert NotOperator();
 
         proposal.status = Status.Cancelled;
-
         delete idBySecpPubkey[keccak256(proposal.secpPubkey)];
         delete idByBlsPubkey[keccak256(proposal.blsPubkey)];
-
         emit ValidatorRequestCancelled(id);
     }
 
     function getProposal(uint256 id) external view override returns (Proposal memory proposal) {
         proposal = _proposals[id];
         if (proposal.operator == address(0)) revert UnknownProposal();
-
-        return proposal;
     }
 
-    /// @notice Reconstruct a request's staking payload.
     function stakingPayload(uint256 id, address authAddress, uint256 amount, uint256 commission)
         external
         view
@@ -114,15 +101,11 @@ contract ValidatorRegistry is IValidatorRegistry {
         returns (bytes memory)
     {
         Proposal memory proposal = _proposed(id);
-
-        if (proposal.operator == address(0)) revert UnknownProposal();
-
         return _payload(proposal.secpPubkey, proposal.blsPubkey, authAddress, amount, commission);
     }
 
     function _proposed(uint256 id) private view returns (Proposal storage proposal) {
         proposal = _proposals[id];
-
         if (proposal.operator == address(0)) revert UnknownProposal();
         if (proposal.status != Status.Proposed) revert NotProposed();
     }
