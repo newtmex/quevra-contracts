@@ -13,8 +13,9 @@ CONTAINER="${SOLONET_CONTAINER:-solonet}"
 CHAIN_ID="${SOLONET_CHAIN_ID:-20143}"
 # Anvil account 0 — funded on Solonet genesis.
 PRIVATE_KEY="${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
-# Distinct from Solonet's default staking auth (account 1).
-AUTH_ADDRESS="${AUTH_ADDRESS:-0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC}"
+# Must match the broadcaster because ValidatorRegistry uses msg.sender as the
+# staking auth address when it forwards addValidator.
+AUTH_ADDRESS="${AUTH_ADDRESS:-0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}"
 AMOUNT="${AMOUNT:-100000000000000000000000}"
 COMMISSION="${COMMISSION:-100000000000000000}"
 WAIT_SECS="${SOLONET_WAIT_SECS:-600}"
@@ -109,7 +110,7 @@ BLS_SIG="0x$(printf '%s' "$KEYS_JSON" | json_field blsSig)"
 
 log "secp pubkey ${SECP_PUBKEY}"
 log "bls pubkey  ${BLS_PUBKEY}"
-log "broadcasting ValidatorRegistry propose+execute"
+log "broadcasting ValidatorRegistry request+addValidator"
 
 export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
 
@@ -157,9 +158,7 @@ def run(cmd):
         cmd = ["docker", "exec", container, *cmd]
     return subprocess.check_output(cmd, text=True)
 
-topic0 = run(
-    ["cast", "sig-event", "ValidatorExecuted(uint256,address,uint64,address,uint256,uint256)"]
-).strip()
+topic0 = run(["cast", "sig-event", "ValidatorAdded(uint256,address,uint64,address,uint256,uint256)"]).strip()
 validator_id = None
 for receipt in receipts:
     for log in receipt.get("logs") or []:
@@ -167,7 +166,7 @@ for receipt in receipts:
         if topics and topics[0].lower() == topic0.lower() and len(topics) >= 4:
             validator_id = int(topics[3], 16)
 if validator_id is None:
-    raise SystemExit("ValidatorExecuted event not found")
+    raise SystemExit("ValidatorAdded event not found")
 
 out = run(
     [

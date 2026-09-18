@@ -5,6 +5,9 @@
       "rev": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
     }
   },
+  "lib/monad-std": {
+    "rev": "2e79c40ec7089f51a1a2c9773ae02e6290da546d"
+  },
   "lib/openzeppelin-contracts": {
     "tag": {
       "name": "v5.7.0",

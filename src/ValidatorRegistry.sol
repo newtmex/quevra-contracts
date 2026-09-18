@@ -1,188 +1,139 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
-
-import {IMonadStaking} from "./interfaces/IMonadStaking.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
 
 /// @title ValidatorRegistry
-/// @notice Operators propose consensus keys signed over the registry's current
-///         `authAddress`, `amount`, and `commission`. Anyone can later execute a
-///         proposal by paying `amount`; the stored signatures are forwarded to
-///         `addValidator` at `0x1000`.
-contract ValidatorRegistry is Ownable2Step, Pausable, ReentrancyGuardTransient, IValidatorRegistry {
-    uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
-    uint256 public constant MAX_COMMISSION = 1e18;
-    uint256 public constant SECP_PUBKEY_LENGTH = 33;
-    uint256 public constant BLS_PUBKEY_LENGTH = 48;
-    uint256 public constant SECP_SIG_LENGTH = 64;
-    uint256 public constant BLS_SIG_LENGTH = 96;
-
-    address public constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
-
-    address public override authAddress;
-    uint256 public override amount;
-    uint256 public override commission;
+/// @notice Generic registry for validator registration requests.
+///
+/// Validator registration and validator delegation are intentionally separate:
+/// - Operators request validator registration with signed consensus messages.
+/// - Any supported executor may later submit the request to Monad staking,
+///   supplying the validator economics required by the signed payload.
+contract ValidatorRegistry is IValidatorRegistry {
+    IMonadStaking public constant staking = IMonadStaking(0x0000000000000000000000000000000000001000);
 
     uint256 public override nextId = 1;
+
     mapping(uint256 id => Proposal) private _proposals;
     mapping(bytes32 secpKeyHash => uint256 id) public override idBySecpPubkey;
     mapping(bytes32 blsKeyHash => uint256 id) public override idByBlsPubkey;
 
-    constructor(address owner_, address authAddress_, uint256 amount_, uint256 commission_) Ownable(owner_) {
-        _setConfig(authAddress_, amount_, commission_);
-    }
-
-    /// @dev Config updates must remain available for the lifetime of the registry.
-    function renounceOwnership() public pure override {
-        revert OwnableInvalidOwner(address(0));
-    }
-
-    /// @notice Halt proposals and executions. Cancellation stays available so keys can be freed.
-    function pause() external override onlyOwner {
-        _pause();
-    }
-
-    /// @notice Resume proposals and executions.
-    function unpause() external override onlyOwner {
-        _unpause();
-    }
-
-    /// @notice Atomically update values proposers must sign into the `addValidator` payload.
-    function setConfig(address authAddress_, uint256 amount_, uint256 commission_) external override onlyOwner {
-        _setConfig(authAddress_, amount_, commission_);
-    }
-
-    /// @notice Propose consensus keys. Signatures must be Monad `addValidator` signatures
-    ///         over `stakingPayload(secpPubkey, blsPubkey)` at the current config.
-    /// @dev The registry checks sizes and economics. The staking precompile checks
-    ///      payload binding (blake3 secp + BLS PoP) at execute.
-    function propose(
+    /// @notice Request validator registration.
+    /// @dev The signed messages contain the validator's complete registration
+    ///      payload, including authentication address, stake, and commission.
+    function requestValidator(
         bytes calldata secpPubkey,
         bytes calldata blsPubkey,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) external override whenNotPaused returns (uint256 id) {
-        if (secpPubkey.length != SECP_PUBKEY_LENGTH) revert InvalidSecpPubkeyLength();
-        if (blsPubkey.length != BLS_PUBKEY_LENGTH) revert InvalidBlsPubkeyLength();
-        if (signedSecpMessage.length != SECP_SIG_LENGTH) revert InvalidSecpSignatureLength();
-        if (signedBlsMessage.length != BLS_SIG_LENGTH) revert InvalidBlsSignatureLength();
-
+    ) external override returns (uint256 id) {
         bytes32 secpKeyHash = keccak256(secpPubkey);
         bytes32 blsKeyHash = keccak256(blsPubkey);
+
         if (idBySecpPubkey[secpKeyHash] != 0 || idByBlsPubkey[blsKeyHash] != 0) {
             revert KeyAlreadyRegistered();
         }
 
         id = nextId++;
+
         idBySecpPubkey[secpKeyHash] = id;
         idByBlsPubkey[blsKeyHash] = id;
 
         Proposal storage proposal = _proposals[id];
+
         proposal.secpPubkey = secpPubkey;
         proposal.blsPubkey = blsPubkey;
         proposal.signedSecpMessage = signedSecpMessage;
         proposal.signedBlsMessage = signedBlsMessage;
-        proposal.proposer = msg.sender;
+        proposal.operator = msg.sender;
         proposal.status = Status.Proposed;
-        proposal.authAddress = authAddress;
-        proposal.amount = amount;
-        proposal.commission = commission;
 
-        emit ValidatorProposed(id, msg.sender, secpPubkey, blsPubkey, authAddress, amount, commission);
+        emit ValidatorRequested(id, msg.sender, secpPubkey, blsPubkey);
     }
 
-    /// @notice Execute a proposal. Caller pays the configured `amount` as `msg.value`.
-    /// @dev Forwards the signatures stored at propose time to `addValidator`.
-    function execute(uint256 id) external payable override nonReentrant whenNotPaused returns (uint64 validatorId) {
+    /// @notice Submit a validator request to Monad's staking precompile.
+    ///
+    /// @param id Validator request identifier.
+    /// @param commission Validator commission encoded in the signed message.
+    ///
+    /// The supplied values are not stored. They are used only to reconstruct
+    /// the staking payload and forward it to the Monad staking precompile.
+    function addValidator(uint256 id, uint256 commission) external payable override returns (uint64 validatorId) {
         Proposal storage proposal = _proposed(id);
-        if (proposal.authAddress != authAddress || proposal.amount != amount || proposal.commission != commission) {
-            revert ConfigChanged();
-        }
-        if (msg.value != amount) revert StakeMismatch();
+        uint256 amount = msg.value;
+        address authAddress = msg.sender;
 
         bytes memory payload = _payload(proposal.secpPubkey, proposal.blsPubkey, authAddress, amount, commission);
+
         bytes memory signedSecpMessage = proposal.signedSecpMessage;
         bytes memory signedBlsMessage = proposal.signedBlsMessage;
 
         proposal.status = Status.Executed;
         proposal.executor = msg.sender;
 
-        validatorId = IMonadStaking(STAKING_PRECOMPILE).addValidator{value: msg.value}(
-            payload, signedSecpMessage, signedBlsMessage
-        );
+        validatorId = staking.addValidator{value: amount}(payload, signedSecpMessage, signedBlsMessage);
+
         if (validatorId == 0) revert InvalidValidatorId();
 
         proposal.validatorId = validatorId;
+
         // forge-lint: disable-next-line(reentrancy-events)
-        emit ValidatorExecuted(id, msg.sender, validatorId, authAddress, amount, commission);
+        emit ValidatorAdded(id, msg.sender, validatorId, authAddress, amount, commission);
     }
 
-    /// @notice Cancel a still-pending proposal and free its consensus keys.
+    /// @notice Cancel a pending validator request.
     function cancel(uint256 id) external override {
         Proposal storage proposal = _proposed(id);
-        if (msg.sender != proposal.proposer) revert NotProposer();
+
+        if (msg.sender != proposal.operator) {
+            revert NotOperator();
+        }
 
         proposal.status = Status.Cancelled;
+
         delete idBySecpPubkey[keccak256(proposal.secpPubkey)];
         delete idByBlsPubkey[keccak256(proposal.blsPubkey)];
 
-        emit ValidatorProposalCancelled(id);
+        emit ValidatorRequestCancelled(id);
     }
 
-    function getProposal(uint256 id) external view override returns (Proposal memory) {
-        if (_proposals[id].proposer == address(0)) revert UnknownProposal();
-        return _proposals[id];
+    function getProposal(uint256 id) external view override returns (Proposal memory proposal) {
+        proposal = _proposals[id];
+        if (proposal.operator == address(0)) revert UnknownProposal();
+
+        return proposal;
     }
 
-    /// @notice Packed `addValidator` payload for `secpPubkey`/`blsPubkey` and the current config.
-    function stakingPayload(bytes calldata secpPubkey, bytes calldata blsPubkey)
+    /// @notice Reconstruct a request's staking payload.
+    function stakingPayload(uint256 id, address authAddress, uint256 amount, uint256 commission)
         external
         view
         override
         returns (bytes memory)
     {
-        return _payload(secpPubkey, blsPubkey, authAddress, amount, commission);
-    }
+        Proposal memory proposal = _proposed(id);
 
-    /// @notice Packed `addValidator` payload snapshotted on the proposal at propose time.
-    function stakingPayload(uint256 id) external view override returns (bytes memory) {
-        if (_proposals[id].proposer == address(0)) revert UnknownProposal();
-        Proposal storage proposal = _proposals[id];
-        return
-            _payload(
-                proposal.secpPubkey, proposal.blsPubkey, proposal.authAddress, proposal.amount, proposal.commission
-            );
-    }
+        if (proposal.operator == address(0)) revert UnknownProposal();
 
-    function _setConfig(address authAddress_, uint256 amount_, uint256 commission_) private {
-        if (authAddress_ == address(0)) revert InvalidAuthAddress();
-        if (amount_ < MIN_AUTH_ADDRESS_STAKE) revert StakeTooLow();
-        if (commission_ > MAX_COMMISSION) revert CommissionTooHigh();
-
-        authAddress = authAddress_;
-        amount = amount_;
-        commission = commission_;
-        emit ConfigUpdated(authAddress_, amount_, commission_);
+        return _payload(proposal.secpPubkey, proposal.blsPubkey, authAddress, amount, commission);
     }
 
     function _proposed(uint256 id) private view returns (Proposal storage proposal) {
         proposal = _proposals[id];
-        if (proposal.proposer == address(0)) revert UnknownProposal();
+
+        if (proposal.operator == address(0)) revert UnknownProposal();
         if (proposal.status != Status.Proposed) revert NotProposed();
     }
 
     function _payload(
         bytes memory secpPubkey,
         bytes memory blsPubkey,
-        address authAddress_,
-        uint256 amount_,
-        uint256 commission_
+        address authAddress,
+        uint256 amount,
+        uint256 commission
     ) private pure returns (bytes memory) {
-        return bytes.concat(secpPubkey, blsPubkey, abi.encodePacked(authAddress_, amount_, commission_));
+        return bytes.concat(secpPubkey, blsPubkey, abi.encodePacked(authAddress, amount, commission));
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IMonadStaking} from "../interfaces/IMonadStaking.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title ProtocolTimeLibrary
 /// @notice Vote-cycle windows aligned to Monad staking epochs.
@@ -9,7 +9,7 @@ import {IMonadStaking} from "../interfaces/IMonadStaking.sol";
 ///      Cycle `k` covers Monad epochs `[5k, 5k+5)`. A 1-epoch buffer at each end is the
 ///      discrete analogue of Velodrome's ±1 hour vote window.
 library ProtocolTimeLibrary {
-    uint64 internal constant EPOCHS_PER_CYCLE = 5;
+    uint64 internal constant EPOCHS_PER_CYCLE = 5; // 5 is good for testnet; 40 will be more practical for mainnet
     uint64 internal constant VOTE_BUFFER_EPOCHS = 1;
     address internal constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
 

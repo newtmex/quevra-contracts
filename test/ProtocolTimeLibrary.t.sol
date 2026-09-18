@@ -2,12 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {MonadVm} from "monad-std/MonadVm.sol";
 
-import {IMonadStaking} from "../src/interfaces/IMonadStaking.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 
 contract ProtocolTimeLibraryTest is Test {
-    address internal constant MONAD_VM = 0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA;
+    MonadVm internal constant monadVm = MonadVm(0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA);
 
     function test_cycleIsFiveMonadEpochs() public pure {
         assertEq(ProtocolTimeLibrary.EPOCHS_PER_CYCLE, 5);
@@ -72,7 +73,6 @@ contract ProtocolTimeLibraryTest is Test {
     }
 
     function _setEpoch(uint64 epoch, bool inDelayPeriod) internal {
-        (bool ok,) = MONAD_VM.call(abi.encodeWithSignature("setEpoch(uint64,bool)", epoch, inDelayPeriod));
-        require(ok, "setEpoch");
+        monadVm.setEpoch(epoch, inDelayPeriod);
     }
 }

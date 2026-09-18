@@ -5,12 +5,11 @@ import {Script, console2} from "forge-std/Script.sol";
 
 import {ValidatorRegistry} from "../../src/ValidatorRegistry.sol";
 
-/// @notice Broadcasts propose+execute against a live Solonet. The runner checks
+/// @notice Broadcasts request+addValidator against a live Solonet. The runner checks
 ///         the staking precompile stored the new validator.
 contract AddValidatorOnSolonet is Script {
-    function run() external returns (address registry, uint256 proposalId, uint64 validatorId) {
+    function run() external returns (address registry, uint256 requestId, uint64 validatorId) {
         uint256 pk = vm.envUint("PRIVATE_KEY");
-        address owner = vm.addr(pk);
         address auth = vm.envAddress("AUTH_ADDRESS");
         uint256 amount = vm.envUint("AMOUNT");
         uint256 commission = vm.envUint("COMMISSION");
@@ -20,6 +19,7 @@ contract AddValidatorOnSolonet is Script {
         bytes memory blsSig = vm.envBytes("BLS_SIG");
 
         require(block.chainid == 20143, "not solonet");
+        require(auth == vm.addr(pk), "auth must match broadcaster");
         require(secpPubkey.length == 33, "secp pubkey");
         require(blsPubkey.length == 48, "bls pubkey");
         require(secpSig.length == 64, "secp sig");
@@ -27,16 +27,16 @@ contract AddValidatorOnSolonet is Script {
         require(amount >= 100_000 ether, "stake too low");
 
         vm.startBroadcast(pk);
-        ValidatorRegistry reg = new ValidatorRegistry(owner, auth, amount, commission);
-        proposalId = reg.propose(secpPubkey, blsPubkey, secpSig, blsSig);
-        validatorId = reg.execute{value: amount}(proposalId);
+        ValidatorRegistry reg = new ValidatorRegistry();
+        requestId = reg.requestValidator(secpPubkey, blsPubkey, secpSig, blsSig);
+        validatorId = reg.addValidator{value: amount}(requestId, commission);
         vm.stopBroadcast();
 
         registry = address(reg);
         require(validatorId != 0, "validator id");
 
         console2.log("registry", registry);
-        console2.log("proposalId", proposalId);
+        console2.log("requestId", requestId);
         console2.log("validatorId", validatorId);
     }
 }
