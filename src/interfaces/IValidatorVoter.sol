@@ -12,6 +12,8 @@ interface IValidatorVoter {
     event ValidatorGaugeCreated(
         uint256 indexed requestId, uint64 indexed validatorId, address indexed operator, address vault, address gauge
     );
+    event VoteCast(uint256 indexed tokenId, uint256 indexed cycle, address indexed gauge, uint256 weight);
+    event VoteReset(uint256 indexed tokenId, uint256 indexed cycle);
 
     error GaugeExistsForValidator();
     error NotRequestOperator();
@@ -30,4 +32,12 @@ interface IValidatorVoter {
     function isRewardTokenWhitelisted(address token) external view returns (bool);
 
     function validatorAccepted(uint256 requestId, uint256 cycle) external view returns (bool);
+
+    function vote(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights) external;
+    function reset(uint256 tokenId) external;
+    function poke(uint256 tokenId) external;
+    function voterWeight(uint256 tokenId, address gauge, uint256 cycle) external view returns (uint256);
+    function totalGaugeWeight(address gauge, uint256 cycle) external view returns (uint256);
+    function isGaugeAccepted(address gauge, uint256 cycle) external view returns (bool);
+    function veMON() external view returns (address);
 }

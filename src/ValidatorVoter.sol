@@ -5,6 +5,8 @@ import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "./interfaces/IValidatorVoter.sol";
 import {ValidatorGauge} from "./ValidatorGauge.sol";
 import {StakingController} from "./StakingController.sol";
+import {VeMON} from "./VeMON.sol";
+import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title ValidatorVoter
@@ -14,10 +16,16 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract ValidatorVoter is IValidatorVoter, Ownable {
     IValidatorRegistry public immutable registry;
     StakingController public immutable controller;
+    VeMON public immutable escrow;
 
     mapping(uint256 requestId => ValidatorStack) private _stacks;
     mapping(address token => bool) public override isRewardTokenWhitelisted;
     mapping(uint256 requestId => mapping(uint256 cycle => bool accepted)) public override validatorAccepted;
+    mapping(uint256 tokenId => mapping(uint256 cycle => mapping(address gauge => uint256 weight))) private
+        _voterWeights;
+    mapping(address gauge => mapping(uint256 cycle => uint256 weight)) public override totalGaugeWeight;
+    mapping(uint256 tokenId => mapping(uint256 cycle => address[] gauges)) private _votedGauges;
+    mapping(uint256 tokenId => mapping(uint256 cycle => bool voted)) private _hasVoted;
 
     event ValidatorStackCancelled(uint256 indexed requestId, address indexed operator, address vault, address gauge);
     event RewardTokenWhitelistUpdated(address indexed token, bool whitelisted);
@@ -26,11 +34,16 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     error InvalidRegistry();
     error InvalidRewardToken();
     error NoStack();
+    error InvalidVote();
+    error NotPositionOwner();
+    error VoteWindowClosed();
+    error ValidatorNotAccepted();
 
     constructor(address registry_, address controller_) Ownable(msg.sender) {
         if (registry_ == address(0) || controller_ == address(0)) revert InvalidRegistry();
         registry = IValidatorRegistry(registry_);
         controller = StakingController(payable(controller_));
+        escrow = StakingController(payable(controller_)).veMON();
     }
 
     function setRewardTokenWhitelisted(address token, bool whitelisted) external onlyOwner {
@@ -41,6 +54,7 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
 
     function setValidatorAccepted(uint256 requestId, uint256 cycle, bool accepted) external onlyOwner {
         if (_stacks[requestId].gauge == address(0)) revert NoStack();
+        if (ProtocolTimeLibrary.currentCycle() != cycle) revert VoteWindowClosed();
         validatorAccepted[requestId][cycle] = accepted;
         emit ValidatorAcceptanceUpdated(requestId, cycle, accepted);
     }
@@ -79,5 +93,111 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
 
     function stackByRequest(uint256 requestId) external view override returns (ValidatorStack memory) {
         return _stacks[requestId];
+    }
+
+    function vote(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights) external override {
+        _requirePositionAuthority(tokenId);
+        uint256 cycle = _votingCycle();
+        if (gauges.length == 0 || gauges.length != weights.length) revert InvalidVote();
+        _clearVote(tokenId, cycle);
+
+        uint256 totalInput;
+        for (uint256 i; i < weights.length; ++i) {
+            if (weights[i] == 0) revert InvalidVote();
+            totalInput += weights[i];
+        }
+        uint256 power = escrow.votingPowerOf(tokenId);
+        if (power == 0 || totalInput == 0) revert InvalidVote();
+
+        uint256 allocated;
+        for (uint256 i; i < gauges.length; ++i) {
+            address gauge = gauges[i];
+            uint256 requestId = ValidatorGauge(gauge).requestId();
+            if (_stacks[requestId].gauge != gauge) revert UnknownStack();
+            if (!validatorAccepted[requestId][cycle]) revert ValidatorNotAccepted();
+            for (uint256 j; j < i; ++j) {
+                if (gauges[j] == gauge) revert InvalidVote();
+            }
+            uint256 amount = i + 1 == gauges.length ? power - allocated : power * weights[i] / totalInput;
+            allocated += amount;
+            _voterWeights[tokenId][cycle][gauge] = amount;
+            totalGaugeWeight[gauge][cycle] += amount;
+            _votedGauges[tokenId][cycle].push(gauge);
+            emit VoteCast(tokenId, cycle, gauge, amount);
+        }
+        _hasVoted[tokenId][cycle] = true;
+    }
+
+    function reset(uint256 tokenId) external override {
+        _requirePositionAuthority(tokenId);
+        uint256 cycle = _votingCycle();
+        _clearVote(tokenId, cycle);
+        emit VoteReset(tokenId, cycle);
+    }
+
+    function poke(uint256 tokenId) external override {
+        uint256 cycle = _votingCycle();
+        if (!_hasVoted[tokenId][cycle]) revert InvalidVote();
+        address[] storage gauges = _votedGauges[tokenId][cycle];
+        uint256 length = gauges.length;
+        uint256[] memory oldWeights = new uint256[](length);
+        for (uint256 i; i < length; ++i) {
+            oldWeights[i] = _voterWeights[tokenId][cycle][gauges[i]];
+        }
+        uint256 power = escrow.votingPowerOf(tokenId);
+        uint256 oldTotal;
+        for (uint256 i; i < length; ++i) {
+            oldTotal += oldWeights[i];
+        }
+        if (oldTotal == 0) revert InvalidVote();
+        uint256 allocated;
+        for (uint256 i; i < length; ++i) {
+            uint256 amount = i + 1 == length ? power - allocated : power * oldWeights[i] / oldTotal;
+            allocated += amount;
+            totalGaugeWeight[gauges[i]][cycle] = totalGaugeWeight[gauges[i]][cycle] - oldWeights[i] + amount;
+            _voterWeights[tokenId][cycle][gauges[i]] = amount;
+            emit VoteCast(tokenId, cycle, gauges[i], amount);
+        }
+    }
+
+    function voterWeight(uint256 tokenId, address gauge, uint256 cycle) external view override returns (uint256) {
+        return _voterWeights[tokenId][cycle][gauge];
+    }
+
+    function veMON() external view override returns (address) {
+        return address(escrow);
+    }
+
+    function isGaugeAccepted(address gauge, uint256 cycle) external view override returns (bool) {
+        ValidatorStack memory stack = _stacks[ValidatorGauge(gauge).requestId()];
+        return stack.gauge == gauge && validatorAccepted[ValidatorGauge(gauge).requestId()][cycle];
+    }
+
+    function _clearVote(uint256 tokenId, uint256 cycle) private {
+        address[] storage gauges = _votedGauges[tokenId][cycle];
+        for (uint256 i; i < gauges.length; ++i) {
+            address gauge = gauges[i];
+            uint256 amount = _voterWeights[tokenId][cycle][gauge];
+            totalGaugeWeight[gauge][cycle] -= amount;
+            delete _voterWeights[tokenId][cycle][gauge];
+        }
+        delete _votedGauges[tokenId][cycle];
+        _hasVoted[tokenId][cycle] = false;
+    }
+
+    function _requirePositionAuthority(uint256 tokenId) private view {
+        address tokenOwner = escrow.ownerOf(tokenId);
+        if (
+            msg.sender != tokenOwner && msg.sender != escrow.getApproved(tokenId)
+                && !escrow.isApprovedForAll(tokenOwner, msg.sender)
+        ) revert NotPositionOwner();
+    }
+
+    function _votingCycle() private returns (uint256 cycle) {
+        (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
+        if (epoch < ProtocolTimeLibrary.cycleVoteStart(epoch) || epoch >= ProtocolTimeLibrary.cycleVoteEnd(epoch)) {
+            revert VoteWindowClosed();
+        }
+        cycle = ProtocolTimeLibrary.cycleOf(epoch);
     }
 }

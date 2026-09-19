@@ -5,10 +5,92 @@ import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "../src/interfaces/IValidatorVoter.sol";
 import {StakingVault} from "../src/StakingVault.sol";
 import {ValidatorGauge} from "../src/ValidatorGauge.sol";
+import {ValidatorVoter} from "../src/ValidatorVoter.sol";
 import {StakingController} from "../src/StakingController.sol";
 import {ValidatorVoterFixture} from "./fixtures/ValidatorVoterFixture.sol";
 
 contract ValidatorVoterTest is ValidatorVoterFixture {
+    function test_voteResetAndPokeTrackCycleGaugeWeight() public {
+        _setEpoch(1, false);
+        (uint256 requestId,, address gaugeAddress) = _createValidatorStack();
+        voter.setValidatorAccepted(requestId, 0, true);
+        uint256 tokenId;
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        uint256 secondTokenId;
+        vm.prank(stranger);
+        secondTokenId = veMON.createLock{value: 70 ether}(70 ether, lockDuration);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = gaugeAddress;
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+        vm.prank(operator);
+        voter.vote(tokenId, gauges, weights);
+        vm.prank(stranger);
+        voter.vote(secondTokenId, gauges, weights);
+        uint256 firstWeight = voter.voterWeight(tokenId, gaugeAddress, 0);
+        uint256 secondWeight = voter.voterWeight(secondTokenId, gaugeAddress, 0);
+        assertGt(firstWeight, 0);
+        assertGt(secondWeight, 0);
+        assertEq(voter.totalGaugeWeight(gaugeAddress, 0), firstWeight + secondWeight);
+
+        vm.prank(operator);
+        voter.poke(tokenId);
+        assertEq(voter.voterWeight(tokenId, gaugeAddress, 0), firstWeight);
+        vm.prank(operator);
+        voter.reset(tokenId);
+        assertEq(voter.voterWeight(tokenId, gaugeAddress, 0), 0);
+        assertEq(voter.totalGaugeWeight(gaugeAddress, 0), secondWeight);
+
+        _setEpoch(6, false);
+        voter.setValidatorAccepted(requestId, 1, true);
+        vm.prank(operator);
+        voter.vote(tokenId, gauges, weights);
+        assertEq(voter.voterWeight(tokenId, gaugeAddress, 0), 0);
+        assertEq(voter.totalGaugeWeight(gaugeAddress, 0), secondWeight);
+        assertGt(voter.voterWeight(tokenId, gaugeAddress, 1), 0);
+    }
+
+    function test_votesCannotBeCastOnUnacceptedGaugeOrLockedPosition() public {
+        _setEpoch(1, false);
+        (,, address gaugeAddress) = _createValidatorStack();
+        uint256 tokenId;
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        address[] memory gauges = new address[](1);
+        gauges[0] = gaugeAddress;
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+        vm.prank(operator);
+        vm.expectRevert(ValidatorVoter.ValidatorNotAccepted.selector);
+        voter.vote(tokenId, gauges, weights);
+    }
+
+    function test_managedPositionVotesItsAggregatedEscrowPower() public {
+        _setEpoch(1, false);
+        (uint256 requestId,, address gaugeAddress) = _createValidatorStack();
+        voter.setValidatorAccepted(requestId, 0, true);
+        uint256 managedId;
+        vm.prank(operator);
+        managedId = veMON.createManagedLock();
+        uint256 childId;
+        vm.prank(stranger);
+        childId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        vm.prank(stranger);
+        veMON.depositManaged(childId, managedId);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = gaugeAddress;
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+        vm.prank(operator);
+        voter.vote(managedId, gauges, weights);
+
+        assertGt(voter.voterWeight(managedId, gaugeAddress, 0), 0);
+        assertEq(voter.voterWeight(childId, gaugeAddress, 0), 0);
+    }
+
     function test_createValidatorRequestsAndDeploysVaultAndGaugeAtomically() public {
         (uint256 id, address vaultAddress, address gaugeAddress) = _createValidatorStack();
 
@@ -85,6 +167,7 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
 
     function test_onlyOwnerCanSetValidatorAcceptance() public {
         (uint256 id,,) = _createValidatorStack();
+        _setEpoch(5, false);
         vm.prank(stranger);
         vm.expectRevert();
         voter.setValidatorAccepted(id, 1, true);

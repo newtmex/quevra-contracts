@@ -164,6 +164,83 @@ contract ValidatorGaugeTest is ValidatorGaugeFixture {
         gauge.refundReward(1, address(rewardToken));
     }
 
+    function test_voterClaimsFinalizedGaugeRewardOnce() public {
+        uint256 tokenId;
+        _setEpoch(1, false);
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        voter.setValidatorAccepted(gaugeRequestId, 0, true);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = address(gauge);
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+        vm.prank(operator);
+        voter.vote(tokenId, gauges, weights);
+
+        vm.startPrank(operator);
+        rewardToken.approve(address(gauge), 100 ether);
+        gauge.notifyReward(address(rewardToken), 100 ether);
+        vm.stopPrank();
+
+        assertEq(gauge.earned(tokenId, 0, address(rewardToken)), 100 ether);
+        _setEpoch(5, false);
+        uint256 beforeBalance = rewardToken.balanceOf(operator);
+        assertEq(gauge.claim(tokenId, 0, address(rewardToken)), 100 ether);
+        assertEq(rewardToken.balanceOf(operator), beforeBalance + 100 ether);
+
+        vm.expectRevert(ValidatorGauge.NoReward.selector);
+        gauge.claim(tokenId, 0, address(rewardToken));
+    }
+
+    function test_claimWaitsForRolloverAndAcceptedCycle() public {
+        uint256 tokenId;
+        _setEpoch(1, false);
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        vm.prank(operator);
+        rewardToken.approve(address(gauge), 10 ether);
+        vm.prank(operator);
+        gauge.notifyReward(address(rewardToken), 10 ether);
+
+        vm.expectRevert(ValidatorGauge.CycleNotEnded.selector);
+        gauge.claim(tokenId, 0, address(rewardToken));
+        _setEpoch(5, false);
+        vm.expectRevert(ValidatorGauge.NotAccepted.selector);
+        gauge.claim(tokenId, 0, address(rewardToken));
+    }
+
+    function test_claimsMultipleRewardTokensProportionally() public {
+        _setEpoch(1, false);
+        uint256 tokenId;
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        voter.setValidatorAccepted(gaugeRequestId, 0, true);
+        address[] memory gauges = new address[](1);
+        gauges[0] = address(gauge);
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+        vm.prank(operator);
+        voter.vote(tokenId, gauges, weights);
+
+        vm.startPrank(operator);
+        rewardToken.approve(address(gauge), 100 ether);
+        otherRewardToken.approve(address(gauge), 40 ether);
+        gauge.notifyReward(address(rewardToken), 100 ether);
+        gauge.notifyReward(address(otherRewardToken), 40 ether);
+        vm.stopPrank();
+
+        _setEpoch(5, false);
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(rewardToken);
+        tokens[1] = address(otherRewardToken);
+        uint256[] memory amounts = gauge.claim(tokenId, 0, tokens);
+        assertEq(amounts[0], 100 ether);
+        assertEq(amounts[1], 40 ether);
+        assertEq(rewardToken.balanceOf(operator), 1_000 ether);
+        assertEq(otherRewardToken.balanceOf(operator), 1_000 ether);
+    }
+
     function test_refundsRemainAvailableAfterTokenIsRemovedFromWhitelist() public {
         _setEpoch(5, false);
         vm.prank(operator);
