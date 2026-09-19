@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
-import {MonadVm} from "monad-std/MonadVm.sol";
-
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
+import {BaseTest} from "./fixtures/BaseTest.sol";
 
-contract ProtocolTimeLibraryTest is Test {
-    MonadVm internal constant monadVm = MonadVm(0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA);
-
+contract ProtocolTimeLibraryTest is BaseTest {
     function test_cycleIsFiveMonadEpochs() public pure {
         assertEq(ProtocolTimeLibrary.EPOCHS_PER_CYCLE, 5);
         assertEq(ProtocolTimeLibrary.cycleOf(0), 0);
@@ -70,9 +66,5 @@ contract ProtocolTimeLibraryTest is Test {
         assertTrue(delay);
         assertEq(ProtocolTimeLibrary.currentCycle(), 3);
         assertEq(ProtocolTimeLibrary.cycleStart(epoch), 15);
-    }
-
-    function _setEpoch(uint64 epoch, bool inDelayPeriod) internal {
-        monadVm.setEpoch(epoch, inDelayPeriod);
     }
 }
