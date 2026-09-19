@@ -2,6 +2,12 @@
 pragma solidity ^0.8.24;
 
 interface IVotingEscrow {
+    enum EscrowType {
+        NORMAL,
+        LOCKED,
+        MANAGED
+    }
+
     struct LockedBalance {
         int128 amount;
         uint256 end;
