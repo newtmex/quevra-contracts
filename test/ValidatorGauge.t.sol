@@ -1,16 +1,115 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+import {ValidatorGauge} from "../src/ValidatorGauge.sol";
 import {StakingVault} from "../src/StakingVault.sol";
 import {ValidatorGaugeFixture} from "./fixtures/ValidatorGaugeFixture.sol";
 
 contract ValidatorGaugeTest is ValidatorGaugeFixture {
+    TestToken internal rewardToken;
+    TestToken internal otherRewardToken;
+    FeeToken internal feeToken;
+
+    event RewardNotified(uint256 indexed cycle, address indexed token, address indexed poster, uint256 amount);
+
+    function setUp() public override {
+        super.setUp();
+
+        rewardToken = new TestToken();
+        otherRewardToken = new TestToken();
+        feeToken = new FeeToken(1_000);
+
+        rewardToken.mint(operator, 1_000 ether);
+        rewardToken.mint(stranger, 1_000 ether);
+        otherRewardToken.mint(operator, 1_000 ether);
+        feeToken.mint(operator, 1_000 ether);
+    }
+
     function test_constructorStoresValidatorTargetMetadata() public view {
         assertEq(gauge.registry(), address(registry));
         assertEq(gauge.vault(), gaugeVault);
         assertEq(gauge.operator(), operator);
         assertEq(gauge.requestId(), gaugeRequestId);
         assertEq(gauge.validatorId(), 0);
+    }
+
+    function test_notifyRewardTracksCycleTokenTotalAndPosterContribution() public {
+        uint256 cycle = 7;
+        uint256 amount = 100 ether;
+        _setEpoch(35, false);
+
+        vm.startPrank(operator);
+        rewardToken.approve(address(gauge), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit RewardNotified(cycle, address(rewardToken), operator, amount);
+
+        uint256 received = gauge.notifyReward(address(rewardToken), amount);
+        vm.stopPrank();
+
+        assertEq(received, amount);
+        assertEq(rewardToken.balanceOf(address(gauge)), amount);
+        assertEq(gauge.totalRewards(cycle, address(rewardToken)), amount);
+        assertEq(gauge.rewardContributions(cycle, address(rewardToken), operator), amount);
+    }
+
+    function test_notifyRewardAggregatesByCycleTokenAndPoster() public {
+        _setEpoch(5, false);
+        vm.startPrank(operator);
+        rewardToken.approve(address(gauge), 375 ether);
+        otherRewardToken.approve(address(gauge), 50 ether);
+        gauge.notifyReward(address(rewardToken), 100 ether);
+        gauge.notifyReward(address(rewardToken), 200 ether);
+        gauge.notifyReward(address(otherRewardToken), 50 ether);
+        vm.stopPrank();
+
+        _setEpoch(10, false);
+        vm.prank(operator);
+        gauge.notifyReward(address(rewardToken), 75 ether);
+
+        _setEpoch(5, false);
+        vm.startPrank(stranger);
+        rewardToken.approve(address(gauge), 25 ether);
+        gauge.notifyReward(address(rewardToken), 25 ether);
+        vm.stopPrank();
+
+        assertEq(gauge.totalRewards(1, address(rewardToken)), 325 ether);
+        assertEq(gauge.totalRewards(2, address(rewardToken)), 75 ether);
+        assertEq(gauge.totalRewards(1, address(otherRewardToken)), 50 ether);
+        assertEq(gauge.rewardContributions(1, address(rewardToken), operator), 300 ether);
+        assertEq(gauge.rewardContributions(1, address(rewardToken), stranger), 25 ether);
+        assertEq(gauge.rewardContributions(2, address(rewardToken), stranger), 0);
+    }
+
+    function test_notifyRewardAccountsForActualAmountReceived() public {
+        uint256 cycle = 3;
+        uint256 amount = 100 ether;
+        uint256 expectedReceived = 90 ether;
+        _setEpoch(15, false);
+
+        vm.startPrank(operator);
+        feeToken.approve(address(gauge), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit RewardNotified(cycle, address(feeToken), operator, expectedReceived);
+
+        uint256 received = gauge.notifyReward(address(feeToken), amount);
+        vm.stopPrank();
+
+        assertEq(received, expectedReceived);
+        assertEq(feeToken.balanceOf(address(gauge)), expectedReceived);
+        assertEq(gauge.totalRewards(cycle, address(feeToken)), expectedReceived);
+        assertEq(gauge.rewardContributions(cycle, address(feeToken), operator), expectedReceived);
+    }
+
+    function test_notifyRewardRevertsForInvalidReward() public {
+        vm.expectRevert(ValidatorGauge.InvalidReward.selector);
+        gauge.notifyReward(address(rewardToken), 0);
+
+        vm.expectRevert(ValidatorGauge.InvalidReward.selector);
+        gauge.notifyReward(address(0), 1);
     }
 
     function test_validatorIdTracksRegistryProposal() public {
@@ -21,5 +120,32 @@ contract ValidatorGaugeTest is ValidatorGaugeFixture {
         uint64 validatorId = vault.addValidator{value: validatorStake}(commission);
 
         assertEq(gauge.validatorId(), validatorId);
+    }
+}
+
+contract TestToken is ERC20 {
+    constructor() ERC20("Test Token", "TEST") {}
+
+    function mint(address account, uint256 amount) external {
+        _mint(account, amount);
+    }
+}
+
+contract FeeToken is TestToken {
+    uint256 private immutable _feeBps;
+
+    constructor(uint256 feeBps_) {
+        _feeBps = feeBps_;
+    }
+
+    function _update(address from, address to, uint256 value) internal override {
+        if (from == address(0) || to == address(0) || _feeBps == 0) {
+            super._update(from, to, value);
+            return;
+        }
+
+        uint256 fee = (value * _feeBps) / 10_000;
+        super._update(from, to, value - fee);
+        super._update(from, address(0xdead), fee);
     }
 }
