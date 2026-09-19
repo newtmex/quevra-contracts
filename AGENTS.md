@@ -1,49 +1,54 @@
 # Quevra Contracts
 
-## Solidity test structure
+## Test Architecture
 
-Solidity tests use an inheritance-based fixture model. New tests must follow the existing hierarchy instead of adding ad hoc setup directly to test contracts.
+Use inheritance-based fixtures for all Solidity tests.
 
-- `test/fixtures/BaseTest.sol` is the only global harness. It may contain Foundry/Monad handles, common actors, chain configuration, reusable funding, shared assertions, and small helper functions that are truly useful across contract suites. It must not deploy protocol contracts, mutate contract-specific state, or hide scenario setup.
-- Every tested contract must have a dedicated fixture named `<ContractName>Fixture` under `test/fixtures`. That fixture deploys and configures only that contract and its direct dependencies.
-- Unit tests live in `test/<ContractName>.t.sol`, are named `<ContractName>Test`, and inherit from the matching fixture. Test cases stay in the test file; deployment and reusable setup stay in the fixture.
-- Fixture inheritance is appropriate only when the contract exposes behavior through an upstream dependency path. For example, `StakingVaultFixture` inherits `ValidatorRegistryFixture` because the vault executes a registry request, and `ValidatorVoterFixture` inherits `StakingControllerFixture` because voter creation routes through the controller. Keep inheritance shallow and aligned with real contract dependencies.
-- Avoid circular inheritance, duplicated deployments, oversized base harnesses, hidden state mutation, and fixture helpers that silently perform the behavior under test. Helpers should be explicit about actors, funding, and state changes.
-- Actors shared across suites belong in `BaseTest`; actors that exist only for one contract belong in that contract fixture or test. Reusable mocks belong in `BaseTest` only when broadly shared; otherwise keep mocks beside the fixture that needs them.
-- Unit tests cover one contract boundary and its direct dependencies. Cross-component behavior belongs under `test/integration`. Invariant tests belong under an `invariant` suite, and fork-specific behavioral tests belong under a `fork` suite with clear RPC assumptions.
-- New tests must extend the established fixture hierarchy. If a new contract dependency would require a deep or awkward chain, create a narrow fixture or move the scenario to integration tests instead.
+- `BaseTest` is the only global harness: shared actors, Monad handles, funding, assertions, and generic helpers only. Never deploy protocol contracts here.
+- Every contract has a dedicated `<Contract>Fixture` that deploys only that contract and its direct dependencies.
+- Tests live in `test/<Contract>.t.sol` as `<Contract>Test` and inherit from the matching fixture.
+- Fixture inheritance should mirror real contract dependencies (e.g. `StakingVaultFixture -> ValidatorRegistryFixture`) and remain shallow.
+- Cross-contract flows belong in `test/integration`; invariants in `test/invariant`; fork tests in `test/fork`.
+- Avoid duplicated deployments, hidden setup, circular inheritance, and helpers that perform the behavior under test.
 
-Repo-specific fixture pattern:
+Example:
 
 ```solidity
-abstract contract BaseTest is Test {
-    // Global actors, Monad handles, funding, and shared assertions only.
-}
+abstract contract BaseTest is Test {}
 
 abstract contract ValidatorRegistryFixture is BaseTest {
-    ValidatorRegistry internal registry;
-
-    function setUp() public virtual override {
-        super.setUp();
-        registry = new ValidatorRegistry();
-    }
+    ValidatorRegistry registry;
 }
 
 abstract contract StakingVaultFixture is ValidatorRegistryFixture {
-    StakingVault internal vault;
-
-    function setUp() public virtual override {
-        super.setUp();
-        uint256 requestId = _requestValidator();
-        vault = _deployVault(requestId);
-    }
+    StakingVault vault;
 }
 
-contract StakingVaultTest is StakingVaultFixture {
-    // StakingVault unit tests only.
-}
+contract StakingVaultTest is StakingVaultFixture {}
 ```
 
-## Before finishing
+## Checks
 
-Run `pnpm --filter @quevra/contracts check` from the workspace root for contract-only changes. Run the root `pnpm check` when changes can affect other workspace packages.
+Before finishing:
+
+- Contract changes: `pnpm --filter @quevra/contracts check`
+- Workspace-wide changes: `pnpm check`
+
+## Protocol Time Model
+
+**Monad epoch is the atomic unit of protocol time. Quevra cycle is the economic accounting boundary.**
+
+| Tigris | Quevra |
+|---|---|
+| `block.timestamp` | Monad epoch |
+| Epoch | Cycle |
+| Timestamp-based accounting | Cycle-based accounting |
+
+Rules:
+
+- Never use `block.timestamp` or block numbers for protocol economics.
+- All cycle-scoped state (veMON voting power, voting, validator selection, gauges, rewards, refunds, checkpoints) must transition on **cycle boundaries**.
+- Use the shared protocol epoch/cycle abstraction; do not reimplement cycle calculations per contract.
+- When adapting Tigris code, preserve the economic behavior but translate its timestamp/epoch logic into Monad epoch/cycle semantics.
+
+Tests must model **Monad epoch progression and cycle rollover**, not timestamp progression, for economic behavior.
