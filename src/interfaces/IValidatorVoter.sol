@@ -26,4 +26,8 @@ interface IValidatorVoter {
     ) external returns (uint256 requestId, address vault, address gauge);
 
     function stackByRequest(uint256 requestId) external view returns (ValidatorStack memory);
+
+    function isRewardTokenWhitelisted(address token) external view returns (bool);
+
+    function validatorAccepted(uint256 requestId, uint256 cycle) external view returns (bool);
 }

@@ -70,4 +70,26 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
         assertEq(voter.stackByRequest(1).vault, address(0));
         vm.clearMockedCalls();
     }
+
+    function test_onlyOwnerCanUpdateRewardTokenWhitelist() public {
+        address token = makeAddr("token");
+        vm.prank(stranger);
+        vm.expectRevert();
+        voter.setRewardTokenWhitelisted(token, true);
+
+        voter.setRewardTokenWhitelisted(token, true);
+        assertTrue(voter.isRewardTokenWhitelisted(token));
+        voter.setRewardTokenWhitelisted(token, false);
+        assertFalse(voter.isRewardTokenWhitelisted(token));
+    }
+
+    function test_onlyOwnerCanSetValidatorAcceptance() public {
+        (uint256 id,,) = _createValidatorStack();
+        vm.prank(stranger);
+        vm.expectRevert();
+        voter.setValidatorAccepted(id, 1, true);
+
+        voter.setValidatorAccepted(id, 1, true);
+        assertTrue(voter.validatorAccepted(id, 1));
+    }
 }
