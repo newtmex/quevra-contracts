@@ -13,6 +13,7 @@ import {ValidatorRegistry} from "../src/ValidatorRegistry.sol";
 import {ValidatorVoter} from "../src/ValidatorVoter.sol";
 import {StakingController} from "../src/StakingController.sol";
 import {VeMON} from "../src/VeMON.sol";
+import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 
 contract ValidatorStackTest is Test {
     MonadVm internal constant monadVm = MonadVm(0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA);
@@ -31,7 +32,7 @@ contract ValidatorStackTest is Test {
     bytes internal blsSig = bytes.concat(bytes1(0x80), new bytes(95));
     uint256 internal stake = 100_000 ether;
     uint256 internal commission = 1e17;
-    uint256 internal lockDuration = 52 weeks;
+    uint256 internal lockDuration = 4;
 
     function setUp() public {
         registry = new ValidatorRegistry();
@@ -152,12 +153,17 @@ contract ValidatorStackTest is Test {
         assertEq(veMON.ownerOf(2), stranger);
         assertEq(veMON.balanceOf(operator), 1);
         assertEq(veMON.balanceOf(stranger), 1);
-        (uint256 operatorAmount, uint256 operatorDuration) = veMON.locks(1);
-        (uint256 strangerAmount, uint256 strangerDuration) = veMON.locks(2);
-        assertEq(operatorAmount, stake);
-        assertEq(strangerAmount, 10 ether);
-        assertEq(operatorDuration, lockDuration);
-        assertEq(strangerDuration, lockDuration);
+        uint256 expectedEnd = lockDuration * ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
+        (int128 operatorAmount, uint256 operatorEnd, bool operatorPermanent, uint256 operatorBoost) = veMON.locked(1);
+        (int128 strangerAmount, uint256 strangerEnd, bool strangerPermanent, uint256 strangerBoost) = veMON.locked(2);
+        assertEq(operatorAmount, int128(int256(stake)));
+        assertEq(strangerAmount, int128(int256(10 ether)));
+        assertEq(operatorEnd, expectedEnd);
+        assertEq(strangerEnd, expectedEnd);
+        assertFalse(operatorPermanent);
+        assertFalse(strangerPermanent);
+        assertEq(operatorBoost, 0);
+        assertEq(strangerBoost, 0);
     }
 
     function test_controllerVoterIsOwnerSetOnce() public {
@@ -182,6 +188,15 @@ contract ValidatorStackTest is Test {
 
         vm.expectRevert(VeMON.InvalidValue.selector);
         veMON.createLock{value: 1 ether}(2 ether, lockDuration);
+    }
+
+    function test_createLockRejectsInvalidLockDurations() public {
+        vm.expectRevert(VeMON.LockDurationNotInFuture.selector);
+        veMON.createLock{value: 1 ether}(1 ether, 0);
+
+        uint256 maxLockCycles = veMON.MAX_LOCK_CYCLES();
+        vm.expectRevert(VeMON.LockDurationTooLong.selector);
+        veMON.createLock{value: 1 ether}(1 ether, maxLockCycles + 1);
     }
 
     function test_controllerReceiveOnlyAcceptsMONFromVeMON() public {
