@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ValidatorVoter} from "../../src/ValidatorVoter.sol";
+import {ValidatorVoter} from "../../src/validators/ValidatorVoter.sol";
 import {StakingControllerFixture} from "./StakingControllerFixture.sol";
 
 abstract contract ValidatorVoterFixture is StakingControllerFixture {

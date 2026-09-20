@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
-import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
+import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 
 /// @title ValidatorRegistry
 /// @notice Generic registry for validator registration requests.

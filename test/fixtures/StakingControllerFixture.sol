@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {StakingController} from "../../src/StakingController.sol";
+import {StakingController} from "../../src/staking/StakingController.sol";
 import {VeMON} from "../../src/VeMON.sol";
 import {ValidatorRegistryFixture} from "./ValidatorRegistryFixture.sol";
 

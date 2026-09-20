@@ -3,10 +3,10 @@ pragma solidity ^0.8.24;
 
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "../src/interfaces/IValidatorVoter.sol";
-import {StakingVault} from "../src/StakingVault.sol";
-import {ValidatorGauge} from "../src/ValidatorGauge.sol";
-import {ValidatorVoter} from "../src/ValidatorVoter.sol";
-import {StakingController} from "../src/StakingController.sol";
+import {StakingVault} from "../src/staking/StakingVault.sol";
+import {ValidatorGauge} from "../src/validators/ValidatorGauge.sol";
+import {ValidatorVoter} from "../src/validators/ValidatorVoter.sol";
+import {StakingController} from "../src/staking/StakingController.sol";
 import {ValidatorVoterFixture} from "./fixtures/ValidatorVoterFixture.sol";
 
 contract ValidatorVoterTest is ValidatorVoterFixture {

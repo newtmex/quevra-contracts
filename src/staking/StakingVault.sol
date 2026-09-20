@@ -8,7 +8,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
-import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
+import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 
 /// @title StakingVault
 /// @notice MON vault bound to exactly one validator.

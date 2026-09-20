@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IValidatorRegistry} from "../../src/interfaces/IValidatorRegistry.sol";
-import {ValidatorRegistry} from "../../src/ValidatorRegistry.sol";
+import {ValidatorRegistry} from "../../src/validators/ValidatorRegistry.sol";
 import {BaseTest} from "./BaseTest.sol";
 
 abstract contract ValidatorRegistryFixture is BaseTest {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 
-import {ValidatorRegistry} from "../../src/ValidatorRegistry.sol";
+import {ValidatorRegistry} from "../../src/validators/ValidatorRegistry.sol";
 
 /// @notice Broadcasts request+addValidator against a live Solonet. The runner checks
 ///         the staking precompile stored the new validator.

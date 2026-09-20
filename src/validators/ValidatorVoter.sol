@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
-import {IValidatorVoter} from "./interfaces/IValidatorVoter.sol";
+import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
+import {IValidatorVoter} from "../interfaces/IValidatorVoter.sol";
 import {ValidatorGauge} from "./ValidatorGauge.sol";
-import {StakingController} from "./StakingController.sol";
-import {VeMON} from "./VeMON.sol";
-import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {StakingController} from "../staking/StakingController.sol";
+import {VeMON} from "../VeMON.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title ValidatorVoter

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {StakingController} from "../src/StakingController.sol";
+import {StakingController} from "../src/staking/StakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 

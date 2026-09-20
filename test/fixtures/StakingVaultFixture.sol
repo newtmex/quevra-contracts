@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import {StakingVault} from "../../src/StakingVault.sol";
+import {StakingVault} from "../../src/staking/StakingVault.sol";
 import {ValidatorRegistryFixture} from "./ValidatorRegistryFixture.sol";
 
 abstract contract StakingVaultFixture is ValidatorRegistryFixture {

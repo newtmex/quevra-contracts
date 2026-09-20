@@ -5,9 +5,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
-import {IValidatorVoter} from "./interfaces/IValidatorVoter.sol";
-import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
+import {IValidatorVoter} from "../interfaces/IValidatorVoter.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 interface IVeMONOwner {
     function ownerOf(uint256 tokenId) external view returns (address);

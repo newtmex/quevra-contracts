@@ -6,6 +6,6 @@ export const protocol = {
 export const contracts = {
   ValidatorRegistry: {
     name: "ValidatorRegistry",
-    solPath: "src/ValidatorRegistry.sol",
+    solPath: "src/validators/ValidatorRegistry.sol",
   },
 };

@@ -5,9 +5,9 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
-import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
+import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {StakingVault} from "./StakingVault.sol";
-import {VeMON} from "./VeMON.sol";
+import {VeMON} from "../VeMON.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 

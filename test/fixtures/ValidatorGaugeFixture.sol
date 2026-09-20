@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ValidatorGauge} from "../../src/ValidatorGauge.sol";
+import {ValidatorGauge} from "../../src/validators/ValidatorGauge.sol";
 import {ValidatorVoterFixture} from "./ValidatorVoterFixture.sol";
 
 abstract contract ValidatorGaugeFixture is ValidatorVoterFixture {
