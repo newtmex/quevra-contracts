@@ -15,7 +15,7 @@ abstract contract StakingControllerFixture is ValidatorRegistryFixture {
         veMON = new VeMON(address(controller), 4);
     }
 
-    function _setValidatorConfig() internal {
-        controller.setValidatorConfig(validatorStake, commission);
+    function _setCommission() internal {
+        controller.setCommission(commission);
     }
 }
