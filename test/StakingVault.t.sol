@@ -86,10 +86,11 @@ contract StakingVaultTest is StakingVaultFixture {
     }
 
     function _assertValidator(uint64 validatorId) internal {
-        (address authAddress, uint256 stake, uint256 storedCommission) = _validatorBasics(validatorId);
+        (address authAddress, uint256 storedCommission) = _validatorIdentity(validatorId);
+        uint256 snapshotStake = _validatorStake(validatorId);
 
         assertEq(authAddress, address(vault));
-        assertEq(stake, validatorStake);
+        assertEq(snapshotStake, validatorStake);
         assertEq(storedCommission, commission);
     }
 

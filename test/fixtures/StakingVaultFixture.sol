@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {StakingVault} from "../../src/staking/StakingVault.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ValidatorRegistryFixture} from "./ValidatorRegistryFixture.sol";
 
 abstract contract StakingVaultFixture is ValidatorRegistryFixture {
@@ -34,7 +35,7 @@ abstract contract StakingVaultFixture is ValidatorRegistryFixture {
         returns (uint256 stake, uint256 deltaStake, uint256 nextDeltaStake, uint64 deltaEpoch, uint64 nextDeltaEpoch)
     {
         (bool ok, bytes memory returndata) =
-            address(staking).call(abi.encodeCall(staking.getDelegator, (validatorId, address(vault))));
+            address(staking).call(abi.encodeCall(IMonadStaking.getDelegator, (validatorId, address(vault))));
         require(ok && returndata.length >= 224, "getDelegator");
 
         assembly {

@@ -5,7 +5,6 @@ import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
 import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
 import {StakingVault} from "../src/staking/StakingVault.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
-import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
 
 contract ValidatorsVoterTest is ValidatorsVoterFixture {
@@ -18,7 +17,7 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertTrue(validatorsVoter.isGauge(gauge));
         assertTrue(validatorsVoter.isAlive(gauge));
         assertEq(NonStakingGauge(gauge).voter(), address(validatorsVoter));
-        assertEq(NonStakingGauge(gauge).ve(), ve);
+        assertEq(NonStakingGauge(gauge).ve(), address(veMON));
         assertEq(NonStakingGauge(gauge).rewardsBeneficiary(), operator);
         assertTrue(validatorsVoter.gaugeToBribe(gauge) != address(0));
         IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
@@ -82,8 +81,11 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         (,, address gaugeB) = validatorsVoter.createValidator(auth2, secp2, bls2, secpSig, blsSig);
 
         uint256 power = 100 ether;
-        vm.mockCall(ve, abi.encodeWithSelector(IVotingEscrow.isApprovedOrOwner.selector), abi.encode(true));
-        vm.mockCall(ve, abi.encodeWithSelector(IVotingEscrow.votingPowerOf.selector, 7), abi.encode(power));
+        uint256 tokenId;
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: power}(power, lockDuration);
+        vm.prank(operator);
+        veMON.approve(address(validatorsVoter), tokenId);
         _setEpoch(6, false);
         address[] memory gauges = new address[](2);
         gauges[0] = gaugeA;
@@ -92,13 +94,14 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         weights_[0] = 1;
         weights_[1] = 3;
 
-        validatorsVoter.vote(7, gauges, weights_);
+        vm.prank(operator);
+        validatorsVoter.vote(tokenId, gauges, weights_);
 
-        assertEq(validatorsVoter.votes(7, gaugeA), 25 ether);
-        assertEq(validatorsVoter.votes(7, gaugeB), 75 ether);
+        assertEq(validatorsVoter.votes(tokenId, gaugeA), 25 ether);
+        assertEq(validatorsVoter.votes(tokenId, gaugeB), 75 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeA), 25 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeB), 75 ether);
-        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(7), 25 ether);
-        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeB)).balanceOf(7), 75 ether);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(tokenId), 25 ether);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeB)).balanceOf(tokenId), 75 ether);
     }
 }

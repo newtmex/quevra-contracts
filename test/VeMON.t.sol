@@ -111,6 +111,8 @@ contract VeMONTest is VeMONFixture {
         veMON.transferFrom(operator, stranger, 1);
         assertEq(veMON.votingPowerOf(1), 0);
 
+        // ERC721 transfer protection is explicitly block-scoped, so this EVM block
+        // advance isolates the subsequent read from same-block protection.
         vm.roll(block.number + 1);
         assertEq(veMON.votingPowerOf(1), validatorStake);
         assertEq(veMON.votingPowerOfAt(1, 0), validatorStake);

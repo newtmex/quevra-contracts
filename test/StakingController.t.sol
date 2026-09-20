@@ -2,10 +2,14 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ValidatorsVoter} from "../src/ValidatorsVoter.sol";
+import {FactoryRegistry} from "../src/factories/FactoryRegistry.sol";
+import {GaugeFactory} from "../src/factories/GaugeFactory.sol";
+import {VotingRewardsFactory} from "../src/factories/VotingRewardsFactory.sol";
 
 import {StakingController} from "../src/staking/StakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
-import {IBaseVoter} from "../src/interfaces/IBaseVoter.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
     function test_constructorSetsRegistryAndVaultImplementation() public view {
@@ -45,8 +49,9 @@ contract StakingControllerTest is StakingControllerFixture {
         controller.setCommission(controller.MAX_COMMISSION());
         assertEq(controller.commission(), controller.MAX_COMMISSION());
 
+        uint256 invalidCommission = controller.MAX_COMMISSION() + 1;
         vm.expectRevert(StakingController.InvalidCommission.selector);
-        controller.setCommission(controller.MAX_COMMISSION() + 1);
+        controller.setCommission(invalidCommission);
     }
 
     function test_signingConfigForUsesFixedStakeAmount() public {
@@ -60,17 +65,32 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_receiveOnlyAcceptsMONFromVeMON() public {
-        vm.mockCall(address(veMON), abi.encodeWithSelector(IBaseVoter.ve.selector), abi.encode(address(veMON)));
-        controller.setVoter(address(veMON));
+        FactoryRegistry factoryRegistry = new FactoryRegistry();
+        GaugeFactory gaugeFactory = new GaugeFactory();
+        VotingRewardsFactory rewardsFactory = new VotingRewardsFactory();
+        factoryRegistry.approveGaugeFactory(address(gaugeFactory), address(rewardsFactory));
+        address forwarder = makeAddr("controller-test-forwarder");
+        ValidatorsVoter implementation = new ValidatorsVoter(forwarder);
+        bytes memory init = abi.encodeCall(
+            ValidatorsVoter.initialize,
+            (
+                address(veMON),
+                address(factoryRegistry),
+                address(0),
+                address(registry),
+                address(controller),
+                address(gaugeFactory)
+            )
+        );
+        ValidatorsVoter voter = ValidatorsVoter(address(new ERC1967Proxy(address(implementation), init)));
+        controller.setVoter(address(voter));
 
         vm.prank(operator);
         (bool success,) = address(controller).call{value: validatorStake}("");
         assertFalse(success);
 
-        vm.deal(address(veMON), validatorStake);
-        vm.prank(address(veMON));
-        (success,) = address(controller).call{value: validatorStake}("");
-        assertTrue(success);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         assertEq(address(controller).balance, validatorStake);
     }
 }

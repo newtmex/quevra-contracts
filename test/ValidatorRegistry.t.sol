@@ -71,7 +71,8 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
 
         _assertSubmissionExecuted(id, executor, validatorId);
         assertGt(validatorId, 0);
-        assertEq(_validatorAuth(validatorId), executor);
+        (address authAddress,) = _validatorIdentity(validatorId);
+        assertEq(authAddress, executor);
     }
 
     function test_cancelFreesKeys() public {

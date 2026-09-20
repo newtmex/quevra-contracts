@@ -10,7 +10,6 @@ import {VotingRewardsFactory} from "../../src/factories/VotingRewardsFactory.sol
 
 abstract contract ValidatorsVoterFixture is StakingControllerFixture {
     address internal forwarder = makeAddr("trusted-forwarder");
-    address internal ve = makeAddr("veMON");
     address internal rewardToken = makeAddr("reward-token");
 
     FactoryRegistry internal factoryRegistry;
@@ -28,7 +27,14 @@ abstract contract ValidatorsVoterFixture is StakingControllerFixture {
         ValidatorsVoter implementation = new ValidatorsVoter(forwarder);
         bytes memory init = abi.encodeCall(
             ValidatorsVoter.initialize,
-            (ve, address(factoryRegistry), rewardToken, address(registry), address(controller), address(gaugeFactory))
+            (
+                address(veMON),
+                address(factoryRegistry),
+                rewardToken,
+                address(registry),
+                address(controller),
+                address(gaugeFactory)
+            )
         );
         validatorsVoter = ValidatorsVoter(address(new ERC1967Proxy(address(implementation), init)));
         controller.setVoter(address(validatorsVoter));

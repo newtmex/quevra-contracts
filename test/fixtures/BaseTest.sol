@@ -4,10 +4,11 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {MonadVm} from "monad-std/MonadVm.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
+import {MonadStdConstants} from "monad-std/MonadStdConstants.sol";
 
-abstract contract BaseTest is Test {
-    MonadVm internal constant monadVm = MonadVm(0xc0FFeeCD43A10e1C2b0De63c6CDCFe5B7d0e0CEA);
-    IMonadStaking internal constant staking = IMonadStaking(0x0000000000000000000000000000000000001000);
+abstract contract BaseTest is Test, MonadStdConstants {
+    MonadVm internal constant monadVm = MONAD_VM;
+    IMonadStaking internal constant staking = STAKING;
 
     address internal owner = makeAddr("owner");
     address internal operator = makeAddr("operator");
@@ -30,6 +31,8 @@ abstract contract BaseTest is Test {
         _fundDefaultActors();
     }
 
+    // Foundry funding is infrastructure-only: the actors need native MON before
+    // the real veMON, validator registration, and delegation flows can execute.
     function _fundDefaultActors() internal {
         vm.deal(owner, 1_000_000 ether);
         vm.deal(operator, 1_000_000 ether);
@@ -37,26 +40,28 @@ abstract contract BaseTest is Test {
         vm.deal(stranger, 1_000_000 ether);
     }
 
+    // Monad's canonical test harness owns epoch state; tests do not mock staking reads.
     function _setEpoch(uint64 epoch, bool inDelayPeriod) internal {
         monadVm.setEpoch(epoch, inDelayPeriod);
     }
 
-    function _validatorBasics(uint64 validatorId)
+    function _validatorIdentity(uint64 validatorId)
         internal
-        returns (address authAddress, uint256 stake, uint256 storedCommission)
+        returns (address authAddress, uint256 validatorCommission)
     {
-        (bool ok, bytes memory returndata) =
-            address(staking).call(abi.encodeCall(IMonadStaking.getValidator, (validatorId)));
-        require(ok && returndata.length >= 160, "getValidator");
-
-        assembly {
-            authAddress := mload(add(returndata, 32))
-            stake := mload(add(returndata, 96))
-            storedCommission := mload(add(returndata, 160))
+        (bool ok, bytes memory data) = address(STAKING).call(abi.encodeWithSelector(bytes4(0x2b6d639a), validatorId));
+        require(ok && data.length >= 384, "getValidator");
+        assembly ("memory-safe") {
+            authAddress := mload(add(data, 32))
+            validatorCommission := mload(add(data, 160))
         }
     }
 
-    function _validatorAuth(uint64 validatorId) internal returns (address authAddress) {
-        (authAddress,,) = _validatorBasics(validatorId);
+    function _validatorStake(uint64 validatorId) internal returns (uint256 stake) {
+        (bool ok, bytes memory data) = address(STAKING).call(abi.encodeWithSelector(bytes4(0x2b6d639a), validatorId));
+        require(ok && data.length >= 384, "getValidator");
+        assembly ("memory-safe") {
+            stake := mload(add(data, 96))
+        }
     }
 }
