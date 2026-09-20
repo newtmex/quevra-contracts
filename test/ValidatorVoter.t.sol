@@ -52,7 +52,7 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
         assertGt(voter.voterWeight(tokenId, gaugeAddress, 1), 0);
     }
 
-    function test_votesCannotBeCastOnUnacceptedGaugeOrLockedPosition() public {
+    function test_votesCanRankRequestsBeforeCycleAcceptance() public {
         _setEpoch(1, false);
         (,, address gaugeAddress) = _createValidatorStack();
         uint256 tokenId;
@@ -63,8 +63,43 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
         uint256[] memory weights = new uint256[](1);
         weights[0] = 1;
         vm.prank(operator);
-        vm.expectRevert(ValidatorVoter.ValidatorNotAccepted.selector);
         voter.vote(tokenId, gauges, weights);
+        assertGt(voter.totalGaugeWeight(gaugeAddress, 0), 0);
+    }
+
+    function test_finalizeCycleAcceptsHighestVotedRequestsWithinCapacity() public {
+        _setEpoch(1, false);
+        (,, address firstGauge) = _createValidatorStack();
+
+        bytes memory secondSecp = bytes.concat(bytes1(0x02), bytes32(uint256(7)));
+        bytes memory secondBls = bytes.concat(bytes1(0x97), new bytes(47));
+        address predicted = controller.predictVaultAddress(operator, secondSecp, secondBls);
+        vm.prank(operator);
+        (,, address secondGauge) = voter.createValidator(predicted, secondSecp, secondBls, secpSig, blsSig);
+
+        uint256 tokenId;
+        vm.prank(operator);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
+        address[] memory gauges = new address[](2);
+        gauges[0] = firstGauge;
+        gauges[1] = secondGauge;
+        uint256[] memory weights = new uint256[](2);
+        weights[0] = 9;
+        weights[1] = 1;
+        vm.prank(operator);
+        voter.vote(tokenId, gauges, weights);
+
+        vm.mockCall(
+            address(controller),
+            abi.encodeWithSelector(StakingController.maxAdmissibleValidators.selector),
+            abi.encode(uint256(1))
+        );
+        _setEpoch(6, false);
+        voter.finalizeCycle(0);
+        assertTrue(voter.validatorAccepted(1, 0));
+        assertFalse(voter.validatorAccepted(2, 0));
+        assertTrue(voter.cycleFinalized(0));
+        vm.clearMockedCalls();
     }
 
     function test_managedPositionVotesItsAggregatedEscrowPower() public {

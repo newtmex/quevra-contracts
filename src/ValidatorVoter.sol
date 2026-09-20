@@ -21,6 +21,7 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     mapping(uint256 requestId => ValidatorStack) private _stacks;
     mapping(address token => bool) public override isRewardTokenWhitelisted;
     mapping(uint256 requestId => mapping(uint256 cycle => bool accepted)) public override validatorAccepted;
+    mapping(uint256 cycle => bool finalized) public cycleFinalized;
     mapping(uint256 tokenId => mapping(uint256 cycle => mapping(address gauge => uint256 weight))) private
         _voterWeights;
     mapping(address gauge => mapping(uint256 cycle => uint256 weight)) public override totalGaugeWeight;
@@ -30,6 +31,7 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     event ValidatorStackCancelled(uint256 indexed requestId, address indexed operator, address vault, address gauge);
     event RewardTokenWhitelistUpdated(address indexed token, bool whitelisted);
     event ValidatorAcceptanceUpdated(uint256 indexed requestId, uint256 indexed cycle, bool accepted);
+    event CycleFinalized(uint256 indexed cycle, uint256 capacity, uint256 acceptedCount);
 
     error InvalidRegistry();
     error InvalidRewardToken();
@@ -38,6 +40,8 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     error NotPositionOwner();
     error VoteWindowClosed();
     error ValidatorNotAccepted();
+    error CycleNotEnded();
+    error CycleAlreadyFinalized();
 
     constructor(address registry_, address controller_) Ownable(msg.sender) {
         if (registry_ == address(0) || controller_ == address(0)) revert InvalidRegistry();
@@ -55,8 +59,56 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     function setValidatorAccepted(uint256 requestId, uint256 cycle, bool accepted) external onlyOwner {
         if (_stacks[requestId].gauge == address(0)) revert NoStack();
         if (ProtocolTimeLibrary.currentCycle() != cycle) revert VoteWindowClosed();
+        if (cycleFinalized[cycle]) revert CycleAlreadyFinalized();
         validatorAccepted[requestId][cycle] = accepted;
         emit ValidatorAcceptanceUpdated(requestId, cycle, accepted);
+    }
+
+    /// @notice Finalize this cycle's validator set by finalized vote weight,
+    /// limited by the controller's current economic capacity.
+    function finalizeCycle(uint256 cycle) external {
+        if (ProtocolTimeLibrary.currentCycle() <= cycle) revert CycleNotEnded();
+        if (cycleFinalized[cycle]) revert CycleAlreadyFinalized();
+        cycleFinalized[cycle] = true;
+
+        uint256 capacity = controller.maxAdmissibleValidators();
+        uint256 end = registry.nextId();
+        uint256 count = 0;
+        for (uint256 id = 1; id < end; ++id) {
+            ValidatorStack storage stack = _stacks[id];
+            if (stack.gauge != address(0)) {
+                IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
+                if (proposal.status == IValidatorRegistry.Status.Proposed) ++count;
+            }
+        }
+
+        uint256[] memory ids = new uint256[](count);
+        uint256[] memory weights = new uint256[](count);
+        uint256 cursor = 0;
+        for (uint256 id = 1; id < end; ++id) {
+            ValidatorStack storage stack = _stacks[id];
+            if (stack.gauge == address(0)) continue;
+            IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
+            if (proposal.status != IValidatorRegistry.Status.Proposed) continue;
+            uint256 weight = totalGaugeWeight[stack.gauge][cycle];
+            uint256 at = cursor;
+            while (at != 0 && weights[at - 1] < weight) {
+                weights[at] = weights[at - 1];
+                ids[at] = ids[at - 1];
+                --at;
+            }
+            weights[at] = weight;
+            ids[at] = id;
+            ++cursor;
+        }
+
+        uint256 acceptedCount = capacity < count ? capacity : count;
+        for (uint256 i; i < count; ++i) {
+            bool accepted = i < acceptedCount;
+            validatorAccepted[ids[i]][cycle] = accepted;
+            emit ValidatorAcceptanceUpdated(ids[i], cycle, accepted);
+        }
+        emit CycleFinalized(cycle, capacity, acceptedCount);
     }
 
     /// @notice Requests a validator from the registry and deploys its vault and gauge.
@@ -114,7 +166,6 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
             address gauge = gauges[i];
             uint256 requestId = ValidatorGauge(gauge).requestId();
             if (_stacks[requestId].gauge != gauge) revert UnknownStack();
-            if (!validatorAccepted[requestId][cycle]) revert ValidatorNotAccepted();
             for (uint256 j; j < i; ++j) {
                 if (gauges[j] == gauge) revert InvalidVote();
             }
