@@ -73,16 +73,16 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
             revert InvalidVault();
         }
 
-        IValidatorRegistry.Proposal memory proposal = registry.getProposal(requestId);
-        if (proposal.operator != voter || proposal.status != IValidatorRegistry.Status.Proposed) {
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
+        if (submission.requester != voter || submission.status != IValidatorRegistry.Status.Submitted) {
             revert InvalidValidatorState();
         }
-        if (predictVaultAddress(requester, proposal.secpPubkey, proposal.blsPubkey) != expectedAuthAddress) {
+        if (predictVaultAddress(requester, submission.secpPubkey, submission.blsPubkey) != expectedAuthAddress) {
             revert UnexpectedAuthAddress();
         }
 
         uint256 nonce = _nonces[requester]++;
-        bytes32 salt = _vaultSalt(requester, nonce, proposal.secpPubkey, proposal.blsPubkey);
+        bytes32 salt = _vaultSalt(requester, nonce, submission.secpPubkey, submission.blsPubkey);
         vault = Clones.cloneDeterministic(vaultImplementation, salt);
         StakingVault(payable(vault)).initialize(address(registry), requestId);
         vaultByRequest[requestId] = vault;
@@ -229,8 +229,8 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         if (msg.sender != voter) revert NotVoter();
         address vault = vaultByRequest[requestId];
         if (vault == address(0)) revert InvalidVault();
-        IValidatorRegistry.Proposal memory proposal = registry.getProposal(requestId);
-        if (proposal.status != IValidatorRegistry.Status.Proposed || proposal.validatorId != 0) {
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
+        if (submission.status != IValidatorRegistry.Status.Submitted || submission.validatorId != 0) {
             revert InvalidValidatorState();
         }
         delete vaultByRequest[requestId];

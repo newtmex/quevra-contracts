@@ -34,7 +34,7 @@ contract ValidatorStackTest is ValidatorVoterFixture {
         assertEq(gauge.operator(), operator);
         assertEq(gauge.requestId(), requestId);
         assertEq(gauge.validatorId(), 0);
-        assertEq(uint256(registry.getProposal(requestId).status), uint256(IValidatorRegistry.Status.Proposed));
+        assertEq(uint256(registry.getSubmission(requestId).status), uint256(IValidatorRegistry.Status.Submitted));
     }
 
     function test_createValidatorRejectsInvalidDataBeforeRequestOrDeployment() public {
@@ -84,7 +84,7 @@ contract ValidatorStackTest is ValidatorVoterFixture {
 
         vm.prank(operator);
         voter.cancel(requestId);
-        assertEq(uint256(registry.getProposal(requestId).status), uint256(IValidatorRegistry.Status.Cancelled));
+        assertEq(uint256(registry.getSubmission(requestId).status), uint256(IValidatorRegistry.Status.Cancelled));
         assertEq(voter.stackByRequest(requestId).vault, address(0));
     }
 
@@ -114,8 +114,8 @@ contract ValidatorStackTest is ValidatorVoterFixture {
         veMON.createLock{value: 10 ether}(10 ether, lockDuration);
 
         assertEq(ValidatorGauge(voter.stackByRequest(requestId).gauge).validatorId(), 0);
-        assertEq(uint256(registry.getProposal(requestId).status), uint256(IValidatorRegistry.Status.Proposed));
-        assertEq(registry.getProposal(requestId).executor, address(0));
+        assertEq(uint256(registry.getSubmission(requestId).status), uint256(IValidatorRegistry.Status.Submitted));
+        assertEq(registry.getSubmission(requestId).executor, address(0));
         assertEq(address(controller).balance, validatorStake + 10 ether);
         assertEq(veMON.ownerOf(1), operator);
         assertEq(veMON.ownerOf(2), stranger);

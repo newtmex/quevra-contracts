@@ -16,17 +16,17 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
 
         uint256 id = _requestValidator();
 
-        IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(id);
         assertEq(id, 1);
         assertEq(registry.nextId(), 2);
-        assertEq(proposal.secpPubkey, secpPubkey);
-        assertEq(proposal.blsPubkey, blsPubkey);
-        assertEq(proposal.signedSecpMessage, secpSig);
-        assertEq(proposal.signedBlsMessage, blsSig);
-        assertEq(proposal.operator, operator);
-        assertEq(proposal.executor, address(0));
-        assertEq(proposal.validatorId, 0);
-        assertEq(uint256(proposal.status), uint256(IValidatorRegistry.Status.Proposed));
+        assertEq(submission.secpPubkey, secpPubkey);
+        assertEq(submission.blsPubkey, blsPubkey);
+        assertEq(submission.signedSecpMessage, secpSig);
+        assertEq(submission.signedBlsMessage, blsSig);
+        assertEq(submission.operator, operator);
+        assertEq(submission.executor, address(0));
+        assertEq(submission.validatorId, 0);
+        assertEq(uint256(submission.status), uint256(IValidatorRegistry.Status.Submitted));
         assertEq(registry.idBySecpPubkey(keccak256(secpPubkey)), id);
         assertEq(registry.idByBlsPubkey(keccak256(blsPubkey)), id);
     }
@@ -69,7 +69,7 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
         vm.prank(executor);
         uint64 validatorId = registry.addValidator{value: validatorStake}(id, commission);
 
-        _assertProposalExecuted(id, executor, validatorId);
+        _assertSubmissionExecuted(id, executor, validatorId);
         assertGt(validatorId, 0);
         assertEq(_validatorAuth(validatorId), executor);
     }
@@ -82,7 +82,7 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
 
         uint256 newId = _requestValidator();
         assertEq(newId, 2);
-        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
+        assertEq(uint256(registry.getSubmission(id).status), uint256(IValidatorRegistry.Status.Cancelled));
     }
 
     function test_cancelRevertsIfNotOperator() public {
@@ -100,15 +100,15 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
         registry.cancel(id);
 
         vm.prank(executor);
-        vm.expectRevert(IValidatorRegistry.NotProposed.selector);
+        vm.expectRevert(IValidatorRegistry.NotSubmitted.selector);
         registry.addValidator{value: validatorStake}(id, commission);
     }
 
-    function test_unknownProposalReverts() public {
-        vm.expectRevert(IValidatorRegistry.UnknownProposal.selector);
-        registry.getProposal(1);
+    function test_unknownSubmissionReverts() public {
+        vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
+        registry.getSubmission(1);
 
-        vm.expectRevert(IValidatorRegistry.UnknownProposal.selector);
+        vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
         registry.stakingPayload(1, executor, validatorStake, commission);
     }
 }

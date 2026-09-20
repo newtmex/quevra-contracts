@@ -7,12 +7,12 @@ import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 /// @notice Registry for validator registration requests and registry-owned delegation.
 interface IValidatorRegistry {
     enum Status {
-        Proposed,
+        Submitted,
         Executed,
         Cancelled
     }
 
-    struct Proposal {
+    struct Submission {
         bytes secpPubkey;
         bytes blsPubkey;
         bytes signedSecpMessage;
@@ -23,6 +23,7 @@ interface IValidatorRegistry {
 
         address executor;
         uint64 validatorId;
+        address requester;
     }
 
     event ValidatorRequested(uint256 indexed id, address indexed operator, bytes secpPubkey, bytes blsPubkey);
@@ -39,8 +40,8 @@ interface IValidatorRegistry {
     event ValidatorRequestCancelled(uint256 indexed id);
 
     error KeyAlreadyRegistered();
-    error UnknownProposal();
-    error NotProposed();
+    error UnknownSubmission();
+    error NotSubmitted();
     error NotOperator();
     error InvalidValidatorId();
     error InvalidValidatorData();
@@ -60,11 +61,19 @@ interface IValidatorRegistry {
         bytes calldata signedBlsMessage
     ) external returns (uint256 id);
 
+    function requestValidatorFor(
+        address operator,
+        bytes calldata secpPubkey,
+        bytes calldata blsPubkey,
+        bytes calldata signedSecpMessage,
+        bytes calldata signedBlsMessage
+    ) external returns (uint256 id);
+
     function addValidator(uint256 id, uint256 commission) external payable returns (uint64 validatorId);
 
     function cancel(uint256 id) external;
 
-    function getProposal(uint256 id) external view returns (Proposal memory);
+    function getSubmission(uint256 id) external view returns (Submission memory);
 
     function stakingPayload(uint256 id, address authAddress, uint256 amount, uint256 commission)
         external

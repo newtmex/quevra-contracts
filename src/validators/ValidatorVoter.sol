@@ -77,8 +77,8 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
         for (uint256 id = 1; id < end; ++id) {
             ValidatorStack storage stack = _stacks[id];
             if (stack.gauge != address(0)) {
-                IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
-                if (proposal.status == IValidatorRegistry.Status.Proposed) ++count;
+                IValidatorRegistry.Submission memory submission = registry.getSubmission(id);
+                if (submission.status == IValidatorRegistry.Status.Submitted) ++count;
             }
         }
 
@@ -88,8 +88,8 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
         for (uint256 id = 1; id < end; ++id) {
             ValidatorStack storage stack = _stacks[id];
             if (stack.gauge == address(0)) continue;
-            IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
-            if (proposal.status != IValidatorRegistry.Status.Proposed) continue;
+            IValidatorRegistry.Submission memory submission = registry.getSubmission(id);
+            if (submission.status != IValidatorRegistry.Status.Submitted) continue;
             uint256 weight = totalGaugeWeight[stack.gauge][cycle];
             uint256 at = cursor;
             while (at != 0 && weights[at - 1] < weight) {
@@ -119,7 +119,7 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external returns (uint256 requestId, address vault, address gauge) {
-        requestId = registry.requestValidator(secpPubkey, blsPubkey, signedSecpMessage, signedBlsMessage);
+        requestId = registry.requestValidatorFor(msg.sender, secpPubkey, blsPubkey, signedSecpMessage, signedBlsMessage);
         gauge =
             address(new ValidatorGauge(address(registry), expectedAuthAddress, msg.sender, requestId, address(this)));
         vault = controller.deployVault(requestId, msg.sender, expectedAuthAddress, gauge);

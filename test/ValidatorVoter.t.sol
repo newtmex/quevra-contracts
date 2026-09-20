@@ -166,7 +166,7 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
         vm.prank(operator);
         voter.cancel(id);
 
-        assertEq(uint256(registry.getProposal(id).status), uint256(IValidatorRegistry.Status.Cancelled));
+        assertEq(uint256(registry.getSubmission(id).status), uint256(IValidatorRegistry.Status.Cancelled));
         assertEq(voter.stackByRequest(id).vault, address(0));
     }
 

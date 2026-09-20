@@ -282,7 +282,7 @@ contract ValidatorGaugeTest is ValidatorGaugeFixture {
 
     event RewardRefunded(uint256 indexed cycle, address indexed token, address indexed poster, uint256 amount);
 
-    function test_validatorIdTracksRegistryProposal() public {
+    function test_validatorIdTracksRegistrySubmission() public {
         StakingVault vault = StakingVault(payable(gaugeVault));
 
         vm.deal(address(controller), 1_000_000 ether);

@@ -44,7 +44,7 @@ contract StakingVaultTest is StakingVaultFixture {
 
         assertGt(validatorId, 0);
         assertEq(vault.validatorId(), validatorId);
-        _assertProposalExecuted(requestId, address(vault), validatorId);
+        _assertSubmissionExecuted(requestId, address(vault), validatorId);
         _assertValidator(validatorId);
     }
 

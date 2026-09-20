@@ -24,10 +24,10 @@ abstract contract ValidatorRegistryFixture is BaseTest {
         requestId = id;
     }
 
-    function _assertProposalExecuted(uint256 id, address expectedExecutor, uint64 expectedValidatorId) internal view {
-        IValidatorRegistry.Proposal memory proposal = registry.getProposal(id);
-        assertEq(uint256(proposal.status), uint256(IValidatorRegistry.Status.Executed));
-        assertEq(proposal.executor, expectedExecutor);
-        assertEq(proposal.validatorId, expectedValidatorId);
+    function _assertSubmissionExecuted(uint256 id, address expectedExecutor, uint64 expectedValidatorId) internal view {
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(id);
+        assertEq(uint256(submission.status), uint256(IValidatorRegistry.Status.Executed));
+        assertEq(submission.executor, expectedExecutor);
+        assertEq(submission.validatorId, expectedValidatorId);
     }
 }

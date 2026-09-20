@@ -163,6 +163,6 @@ contract ValidatorGauge {
 
     /// @notice Becomes nonzero after the vault executes its bound request.
     function validatorId() external view returns (uint64) {
-        return IValidatorRegistry(registry).getProposal(requestId).validatorId;
+        return IValidatorRegistry(registry).getSubmission(requestId).validatorId;
     }
 }
