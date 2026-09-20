@@ -47,9 +47,27 @@ library ProtocolTimeLibrary {
         return IMonadStaking(STAKING_PRECOMPILE).getEpoch();
     }
 
+    /// @notice First Monad epoch in which a staking state change takes effect.
+    /// @dev Monad applies changes submitted before the delay period in epoch + 1,
+    ///      and changes submitted during it in epoch + 2.
+    function effectiveEpoch(uint64 epoch, bool inEpochDelayPeriod) internal pure returns (uint64) {
+        return epoch + (inEpochDelayPeriod ? 2 : 1);
+    }
+
+    /// @notice First Monad epoch in which a staking state change takes effect now.
+    function currentEffectiveEpoch() internal returns (uint64) {
+        (uint64 epoch, bool inEpochDelayPeriod) = currentEpoch();
+        return effectiveEpoch(epoch, inEpochDelayPeriod);
+    }
+
     /// @dev Cycle index of the current Monad staking epoch.
     function currentCycle() internal returns (uint64) {
         (uint64 epoch,) = currentEpoch();
         return cycleOf(epoch);
+    }
+
+    function currentCycleStart() internal returns (uint64) {
+        (uint64 epoch,) = currentEpoch();
+        return cycleStart(epoch);
     }
 }
