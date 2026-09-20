@@ -114,12 +114,17 @@ log "broadcasting ValidatorRegistry request+addValidator"
 
 export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
 
+# Override the default Monad testnet pin with the local chain's current block.
+SOLONET_BLOCK_HEX="$(rpc eth_blockNumber | json_field result)"
+SOLONET_BLOCK="$(hex_to_dec "$SOLONET_BLOCK_HEX")"
+
 # Skip local simulation: addValidator lives in the staking precompile and is not
 # present in Foundry's in-process EVM.
 forge_cmd=(
   forge script script/e2e/AddValidatorOnSolonet.s.sol:AddValidatorOnSolonet
   --rpc-url "$RPC_URL"
   --chain-id "$CHAIN_ID"
+  --fork-block-number "$SOLONET_BLOCK"
   --broadcast
   --slow
   --skip-simulation

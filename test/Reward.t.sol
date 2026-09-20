@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {stdError} from "forge-std/StdError.sol";
-import {IReward} from "../rewards/IReward.sol";
+import {IReward} from "../src/interfaces/IReward.sol";
 import {RewardFixture} from "./fixtures/RewardFixture.sol";
 
 contract RewardTest is RewardFixture {

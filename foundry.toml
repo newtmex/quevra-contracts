@@ -17,8 +17,11 @@ remappings = [
 network = "monad"
 eth-rpc-url = "https://testnet-rpc.monad.xyz"
 chain_id = 10143
+# Last cached Monad testnet fork on 2026-09-20; keep test forks reproducible.
+fork_block_number = 64100294
 
 [profile.e2e]
+# The E2E runner overrides the fork block with Solonet's current block.
 eth-rpc-url = "http://localhost:8080"
 chain_id = 20143
 

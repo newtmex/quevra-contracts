@@ -2,13 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IReward} from "./IReward.sol";
-import {IBaseVoter} from "./IBaseVoter.sol";
+import {IReward} from "../interfaces/IReward.sol";
+import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 /// @title Reward
 /// @author velodrome.finance, @figs999, @pegahcarter
@@ -127,8 +127,7 @@ abstract contract Reward is IReward, ERC2771Context, ReentrancyGuard {
         // remain indexed by the Monad epoch at which the change was made.
         if (
             nCheckpoints > 0
-                && ProtocolTimeLibrary.cycleStart(checkpoints[tokenId][nCheckpoints - 1].epoch)
-                    == currentCycleStart
+                && ProtocolTimeLibrary.cycleStart(checkpoints[tokenId][nCheckpoints - 1].epoch) == currentCycleStart
         ) {
             checkpoints[tokenId][nCheckpoints - 1] = Checkpoint(epoch, balance);
         } else {
@@ -143,8 +142,7 @@ abstract contract Reward is IReward, ERC2771Context, ReentrancyGuard {
         uint64 currentCycleStart = ProtocolTimeLibrary.cycleStart(epoch);
         if (
             nCheckpoints > 0
-                && ProtocolTimeLibrary.cycleStart(supplyCheckpoints[nCheckpoints - 1].epoch)
-                    == currentCycleStart
+                && ProtocolTimeLibrary.cycleStart(supplyCheckpoints[nCheckpoints - 1].epoch) == currentCycleStart
         ) {
             supplyCheckpoints[nCheckpoints - 1] = SupplyCheckpoint(epoch, totalSupply);
         } else {
@@ -171,21 +169,15 @@ abstract contract Reward is IReward, ERC2771Context, ReentrancyGuard {
 
         uint256 reward = 0;
         uint256 _supply = 1;
-        uint64 _currCycle = ProtocolTimeLibrary.cycleStart(
-            lastEarn[token][tokenId]
-        ); // take epoch last claimed in as starting point
+        uint64 _currCycle = ProtocolTimeLibrary.cycleStart(lastEarn[token][tokenId]); // take epoch last claimed in as starting point
         uint256 _index = getPriorBalanceIndex(tokenId, _currCycle);
         Checkpoint memory cp0 = checkpoints[tokenId][_index];
 
         // accounts for case where lastEarn is before first checkpoint
-        _currCycle =uint64( Math.max(
-            uint256(_currCycle),
-            uint256(ProtocolTimeLibrary.cycleStart(cp0.epoch))
-        ));
+        _currCycle = uint64(Math.max(uint256(_currCycle), uint256(ProtocolTimeLibrary.cycleStart(cp0.epoch))));
 
         // get epochs between current epoch and first checkpoint in same epoch as last claim
-        uint256 numEpochs = (ProtocolTimeLibrary.currentCycleStart() -
-            _currCycle) / DURATION;
+        uint256 numEpochs = (ProtocolTimeLibrary.currentCycleStart() - _currCycle) / DURATION;
 
         if (numEpochs > 0) {
             for (uint256 i = 0; i < numEpochs; i++) {
@@ -194,15 +186,8 @@ abstract contract Reward is IReward, ERC2771Context, ReentrancyGuard {
                 // get checkpoint in this epoch
                 cp0 = checkpoints[tokenId][_index];
                 // get supply of last checkpoint in this epoch
-                _supply = Math.max(
-                    supplyCheckpoints[
-                        getPriorSupplyIndex(_currCycle + DURATION - 1)
-                    ].supply,
-                    1
-                );
-                reward +=
-                    (cp0.balanceOf * tokenRewardsPerCycle[token][_currCycle]) /
-                    _supply;
+                _supply = Math.max(supplyCheckpoints[getPriorSupplyIndex(_currCycle + DURATION - 1)].supply, 1);
+                reward += (cp0.balanceOf * tokenRewardsPerCycle[token][_currCycle]) / _supply;
                 _currCycle += DURATION;
             }
         }
