@@ -47,6 +47,16 @@ library ProtocolTimeLibrary {
         return IMonadStaking(STAKING_PRECOMPILE).getEpoch();
     }
 
+    /// @dev Read-only counterpart for view APIs that need the current epoch.
+    ///      The staking precompile exposes getEpoch as CALL-only on some runtimes;
+    ///      this static call preserves Solidity view compatibility where supported.
+    function currentEpochView() internal view returns (uint64 epoch, bool inEpochDelayPeriod) {
+        (bool success, bytes memory data) =
+            STAKING_PRECOMPILE.staticcall(abi.encodeWithSelector(IMonadStaking.getEpoch.selector));
+        require(success && data.length >= 64, "EPOCH_READ_FAILED");
+        return abi.decode(data, (uint64, bool));
+    }
+
     /// @notice First Monad epoch in which a staking state change takes effect.
     /// @dev Monad applies changes submitted before the delay period in epoch + 1,
     ///      and changes submitted during it in epoch + 2.
