@@ -10,7 +10,7 @@ abstract contract ValidatorVoterFixture is StakingControllerFixture {
 
     function setUp() public virtual override {
         super.setUp();
-        voter = new ValidatorVoter(address(registry), address(controller));
+        voter = new ValidatorVoter(address(registry), address(controller), address(veMON));
         controller.setVoter(address(voter));
         initialVault = controller.predictVaultAddress(operator, secpPubkey, blsPubkey);
     }

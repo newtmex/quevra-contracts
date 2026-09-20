@@ -6,12 +6,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
+import {ValidatorVoter} from "../src/validators/ValidatorVoter.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
-    function test_constructorDeploysVeMONAndVaultImplementation() public view {
+    function test_constructorSetsRegistryAndVaultImplementation() public view {
         assertEq(address(controller.registry()), address(registry));
         assertEq(controller.owner(), address(this));
-        assertEq(address(controller.veMON()), address(veMON));
+        assertTrue(address(veMON) != address(controller));
         assertTrue(controller.vaultImplementation() != address(0));
     }
 
@@ -95,8 +96,17 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_receiveOnlyAcceptsMONFromVeMON() public {
+        ValidatorVoter voter = new ValidatorVoter(address(registry), address(controller), address(veMON));
+        controller.setVoter(address(voter));
+
         vm.prank(operator);
         (bool success,) = address(controller).call{value: validatorStake}("");
         assertFalse(success);
+
+        vm.deal(address(veMON), validatorStake);
+        vm.prank(address(veMON));
+        (success,) = address(controller).call{value: validatorStake}("");
+        assertTrue(success);
+        assertEq(address(controller).balance, validatorStake);
     }
 }

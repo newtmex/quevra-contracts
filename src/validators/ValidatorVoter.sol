@@ -5,7 +5,7 @@ import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "../interfaces/IValidatorVoter.sol";
 import {ValidatorGauge} from "./ValidatorGauge.sol";
 import {StakingController} from "../staking/StakingController.sol";
-import {VeMON} from "../VeMON.sol";
+import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -16,7 +16,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract ValidatorVoter is IValidatorVoter, Ownable {
     IValidatorRegistry public immutable registry;
     StakingController public immutable controller;
-    VeMON public immutable escrow;
+    IVotingEscrow public immutable escrow;
 
     mapping(uint256 requestId => ValidatorStack) private _stacks;
     mapping(address token => bool) public override isRewardTokenWhitelisted;
@@ -43,11 +43,11 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
     error CycleNotEnded();
     error CycleAlreadyFinalized();
 
-    constructor(address registry_, address controller_) Ownable(msg.sender) {
-        if (registry_ == address(0) || controller_ == address(0)) revert InvalidRegistry();
+    constructor(address registry_, address controller_, address escrow_) Ownable(msg.sender) {
+        if (registry_ == address(0) || controller_ == address(0) || escrow_ == address(0)) revert InvalidRegistry();
         registry = IValidatorRegistry(registry_);
         controller = StakingController(payable(controller_));
-        escrow = StakingController(payable(controller_)).veMON();
+        escrow = IVotingEscrow(escrow_);
     }
 
     function setRewardTokenWhitelisted(address token, bool whitelisted) external onlyOwner {
@@ -215,7 +215,7 @@ contract ValidatorVoter is IValidatorVoter, Ownable {
         return _voterWeights[tokenId][cycle][gauge];
     }
 
-    function veMON() external view override returns (address) {
+    function ve() external view override returns (address) {
         return address(escrow);
     }
 

@@ -5,11 +5,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IValidatorRegistry} from "../../src/interfaces/IValidatorRegistry.sol";
 import {IValidatorVoter} from "../../src/interfaces/IValidatorVoter.sol";
+import {IVotingEscrow} from "../../src/interfaces/IVotingEscrow.sol";
 import {StakingVault} from "../../src/staking/StakingVault.sol";
 import {ValidatorGauge} from "../../src/validators/ValidatorGauge.sol";
 import {ValidatorVoter} from "../../src/validators/ValidatorVoter.sol";
 import {StakingController} from "../../src/staking/StakingController.sol";
 import {VeMON} from "../../src/VeMON.sol";
+import {VotingEscrow} from "../../src/VotingEscrow.sol";
 import {ProtocolTimeLibrary} from "../../src/libraries/ProtocolTimeLibrary.sol";
 import {ValidatorVoterFixture} from "../fixtures/ValidatorVoterFixture.sol";
 
@@ -151,7 +153,7 @@ contract ValidatorStackTest is ValidatorVoterFixture {
     }
 
     function test_createLockRejectsZeroOrMismatchedValue() public {
-        vm.expectRevert(VeMON.InvalidAmount.selector);
+        vm.expectRevert(VotingEscrow.InvalidAmount.selector);
         veMON.createLock(0, lockDuration);
 
         vm.expectRevert(VeMON.InvalidValue.selector);
@@ -159,11 +161,11 @@ contract ValidatorStackTest is ValidatorVoterFixture {
     }
 
     function test_createLockRejectsInvalidLockDurations() public {
-        vm.expectRevert(VeMON.LockDurationNotInFuture.selector);
+        vm.expectRevert(IVotingEscrow.LockDurationNotInFuture.selector);
         veMON.createLock{value: 1 ether}(1 ether, 0);
 
-        uint256 maxLockCycles = veMON.MAX_LOCK_CYCLES();
-        vm.expectRevert(VeMON.LockDurationTooLong.selector);
+        uint256 maxLockCycles = veMON.maxLockCycles();
+        vm.expectRevert(IVotingEscrow.LockDurationTooLong.selector);
         veMON.createLock{value: 1 ether}(1 ether, maxLockCycles + 1);
     }
 
@@ -212,7 +214,8 @@ contract ValidatorStackTest is ValidatorVoterFixture {
 
     function test_registrationFailureRollsBackCreate2AndRegistry() public {
         StakingController unbound = new StakingController(address(registry), address(this));
-        ValidatorVoter unboundVoter = new ValidatorVoter(address(registry), address(unbound));
+        VeMON unboundVeMON = new VeMON(address(unbound), 4);
+        ValidatorVoter unboundVoter = new ValidatorVoter(address(registry), address(unbound), address(unboundVeMON));
         address predicted = unbound.predictVaultAddress(operator, secpPubkey, blsPubkey);
         vm.prank(operator);
         vm.expectRevert(StakingController.NotVoter.selector);

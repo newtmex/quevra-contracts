@@ -12,7 +12,7 @@ abstract contract StakingControllerFixture is ValidatorRegistryFixture {
     function setUp() public virtual override {
         super.setUp();
         controller = new StakingController(address(registry), address(this));
-        veMON = controller.veMON();
+        veMON = new VeMON(address(controller), 4);
     }
 
     function _setValidatorConfig() internal {

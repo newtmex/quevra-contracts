@@ -103,7 +103,7 @@ contract ValidatorRegistry is IValidatorRegistry {
 
     function cancel(uint256 id) external override {
         Submission storage submission = _submitted(id);
-        if (msg.sender != submission.operator && msg.sender != submission.requester) revert NotOperator();
+        if (msg.sender != submission.requester) revert NotOperator();
 
         submission.status = Status.Cancelled;
         delete idBySecpPubkey[keccak256(submission.secpPubkey)];

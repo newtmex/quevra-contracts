@@ -44,5 +44,5 @@ interface IValidatorVoter {
 
     function isGaugeAccepted(address gauge, uint256 cycle) external view returns (bool);
 
-    function veMON() external view returns (address);
+    function ve() external view returns (address);
 }

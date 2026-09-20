@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
 interface IVotingEscrow is IERC721Metadata {
@@ -60,47 +58,10 @@ interface IVotingEscrow is IERC721Metadata {
     /// @notice Withdraw a veNFT from its managed position and re-lock it for the maximum duration.
     function withdrawManaged(uint256 _tokenId) external;
 
-    function name() external view returns (string memory);
-
-    function symbol() external view returns (string memory);
-
-    /// @inheritdoc IERC721Metadata
-    function tokenURI(uint256 tokenId) external view returns (string memory);
-
-    /// @inheritdoc IERC721
-    function ownerOf(uint256 tokenId) external view returns (address owner);
-
-    /// @inheritdoc IERC721
-    function balanceOf(address owner) external view returns (uint256 balance);
-
-    /// @inheritdoc IERC721
-    function getApproved(uint256 _tokenId) external view returns (address operator);
-
-    /// @inheritdoc IERC721
-    function isApprovedForAll(address owner, address operator) external view returns (bool);
-
     /// @notice Check whether spender is owner or an approved user for a given veNFT
     /// @param _spender .
     /// @param _tokenId .
-    function isApprovedOrOwner(address _spender, uint256 _tokenId) external returns (bool);
-
-    /// @inheritdoc IERC721
-    function approve(address to, uint256 tokenId) external;
-
-    /// @inheritdoc IERC721
-    function setApprovalForAll(address operator, bool approved) external;
-
-    /// @inheritdoc IERC721
-    function transferFrom(address from, address to, uint256 tokenId) external;
-
-    /// @inheritdoc IERC721
-    function safeTransferFrom(address from, address to, uint256 tokenId) external;
-
-    /// @inheritdoc IERC721
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external;
-
-    /// @inheritdoc IERC165
-    function supportsInterface(bytes4 _interfaceID) external view returns (bool);
+    function isApprovedOrOwner(address _spender, uint256 _tokenId) external view returns (bool);
 
     /// @notice Index of the latest global voting-power checkpoint.
     function epoch() external view returns (uint256);
@@ -115,8 +76,14 @@ interface IVotingEscrow is IERC721Metadata {
 
     /// @notice Get the LockedBalance (amount, end) of a _tokenId
     /// @param _tokenId .
-    /// @return LockedBalance of _tokenId
-    function locked(uint256 _tokenId) external view returns (LockedBalance memory);
+    /// @return amount The locked MON amount.
+    /// @return end The Monad epoch when the lock expires.
+    /// @return isPermanent Whether the position is permanently locked.
+    /// @return boost The stored boost.
+    function locked(uint256 _tokenId)
+        external
+        view
+        returns (int128 amount, uint256 end, bool isPermanent, uint256 boost);
 
     /// @notice Record global data to checkpoint
     function checkpoint() external;
@@ -125,7 +92,7 @@ interface IVotingEscrow is IERC721Metadata {
     /// @param _value Amount to lock.
     /// @param _lockDuration Lock duration in Quevra cycles.
     /// @return TokenId of the created veNFT.
-    function createLock(uint256 _value, uint256 _lockDuration) external returns (uint256);
+    function createLock(uint256 _value, uint256 _lockDuration) external payable returns (uint256);
 
     /// @notice Permanently lock a normal veNFT.
     function lockPermanent(uint256 _tokenId) external;
@@ -139,4 +106,9 @@ interface IVotingEscrow is IERC721Metadata {
     /// @notice Calculate total voting power at a given Monad epoch.
     /// @param _t Monad epoch to query.
     function totalVotingPowerAt(uint256 _t) external view returns (uint256);
+
+    /// @notice Voting power in Quevra units for a veNFT at the latest checkpoint.
+    function votingPowerOf(uint256 tokenId) external view returns (uint256);
+
+    function votingPowerOfAt(uint256 tokenId, uint256 epoch) external view returns (uint256);
 }

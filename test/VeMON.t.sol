@@ -2,11 +2,17 @@
 pragma solidity ^0.8.24;
 
 import {VeMON} from "../src/VeMON.sol";
+import {VotingEscrow} from "../src/VotingEscrow.sol";
 import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 import {VeMONFixture} from "./fixtures/VeMONFixture.sol";
 
 contract VeMONTest is VeMONFixture {
+    function test_maxLockCyclesIsConfiguredAtDeployment() public view {
+        assertEq(veMON.maxLockCycles(), 4);
+        assertEq(veMON.maxLockEpochs(), 4 * ProtocolTimeLibrary.EPOCHS_PER_CYCLE);
+    }
+
     function test_createLockMintsVeMONAndCustodiesMONInController() public {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
@@ -48,7 +54,7 @@ contract VeMONTest is VeMONFixture {
     }
 
     function test_createLockRejectsZeroOrMismatchedValue() public {
-        vm.expectRevert(VeMON.InvalidAmount.selector);
+        vm.expectRevert(VotingEscrow.InvalidAmount.selector);
         veMON.createLock(0, lockDuration);
 
         vm.expectRevert(VeMON.InvalidValue.selector);
@@ -56,11 +62,11 @@ contract VeMONTest is VeMONFixture {
     }
 
     function test_createLockRejectsInvalidLockDurations() public {
-        vm.expectRevert(VeMON.LockDurationNotInFuture.selector);
+        vm.expectRevert(IVotingEscrow.LockDurationNotInFuture.selector);
         veMON.createLock{value: 1 ether}(1 ether, 0);
 
-        uint256 maxLockCycles = veMON.MAX_LOCK_CYCLES();
-        vm.expectRevert(VeMON.LockDurationTooLong.selector);
+        uint256 maxLockCycles = veMON.maxLockCycles();
+        vm.expectRevert(IVotingEscrow.LockDurationTooLong.selector);
         veMON.createLock{value: 1 ether}(1 ether, maxLockCycles + 1);
     }
 
@@ -162,7 +168,7 @@ contract VeMONTest is VeMONFixture {
         assertEq(address(controller).balance, controllerBalanceBefore);
 
         vm.prank(operator);
-        vm.expectRevert(VeMON.ManagedPositionLocked.selector);
+        vm.expectRevert(VotingEscrow.ManagedPositionLocked.selector);
         veMON.transferFrom(operator, stranger, 1);
 
         _setEpoch(10, false);
@@ -207,21 +213,21 @@ contract VeMONTest is VeMONFixture {
         uint256 managedId = veMON.createManagedLock();
 
         vm.prank(stranger);
-        vm.expectRevert(VeMON.NotApprovedOrOwner.selector);
+        vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
         veMON.lockPermanent(1);
 
         vm.prank(operator);
-        vm.expectRevert(VeMON.NotManagedNFT.selector);
+        vm.expectRevert(IVotingEscrow.NotManagedNFT.selector);
         veMON.depositManaged(1, 1);
 
         vm.prank(operator);
         veMON.depositManaged(1, managedId);
         vm.prank(operator);
-        vm.expectRevert(VeMON.NotNormalNFT.selector);
+        vm.expectRevert(IVotingEscrow.NotNormalNFT.selector);
         veMON.lockPermanent(1);
 
         vm.prank(stranger);
-        vm.expectRevert(VeMON.NotApprovedOrOwner.selector);
+        vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
         veMON.withdrawManaged(1);
     }
 }

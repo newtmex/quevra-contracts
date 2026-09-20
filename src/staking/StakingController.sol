@@ -6,19 +6,18 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
+import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {StakingVault} from "./StakingVault.sol";
-import {VeMON} from "../VeMON.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
-/// @dev Accepts MON only from veMON. Admin-controlled staking flow is deferred.
+/// @dev Accepts MON only from the ve token configured on the voter. Admin-controlled staking flow is deferred.
 contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     IValidatorRegistry public immutable registry;
     address public voter;
     address public immutable vaultImplementation;
-    VeMON public immutable veMON;
     mapping(address requester => uint256 nonce) private _nonces;
     error UnexpectedAuthAddress();
 
@@ -39,7 +38,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     error InvalidValidatorAmount();
     error InvalidValidatorState();
     error InvalidDepositAmount();
-    error NotVeMON();
+    error NotVe();
 
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -52,7 +51,6 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         if (registry_ == address(0) || owner_ == address(0)) revert InvalidAddress();
         registry = IValidatorRegistry(registry_);
         vaultImplementation = address(new StakingVault());
-        veMON = new VeMON(address(this));
     }
 
     /// @notice Bind the voter once. The owner must set this after both contracts are deployed.
@@ -220,7 +218,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     }
 
     receive() external payable nonReentrant {
-        if (msg.sender != address(veMON)) revert NotVeMON();
+        if (voter == address(0) || msg.sender != IBaseVoter(voter).ve()) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
         emit MONReceived(msg.value);
     }

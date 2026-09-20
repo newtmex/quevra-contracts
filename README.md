@@ -46,8 +46,10 @@ The creation path is atomic: a failed request or later deployment failure
 reverts the request and both deployments. The owner configures the exact
 commission and amount used by the requester's signed messages. Users deposit
 MON by creating veMON locks; veMON forwards the value to the controller. The
-controller receive path only accepts value from veMON and custodies it for a
-later admin-controlled staking flow.
+controller receive path reads the ve address from the configured voter,
+accepts value only from that escrow, and custodies it for a later
+admin-controlled staking flow. Deploy veMON with the controller address, then
+pass its address to `ValidatorVoter` before binding the voter on the controller.
 
 Assumptions and deferred integration points:
 
@@ -95,7 +97,8 @@ Assumptions and deferred integration points:
   bind the voter exactly once. Its owner-managed global validator configuration
   is exposed through its distinct signing-config helpers, which return the vault auth
   address, commission, and exact amount expected by `addValidator` signatures.
-- `StakingController.receive` accepts value only from veMON. It does not select
+- `StakingController.receive` accepts value only from the ve address exposed
+  by its configured voter. It does not select
   a vault or call validator staking yet; that admin-controlled flow is deferred.
 - The registry's direct request and `addValidator` entry points remain for
   compatibility with existing integrations. They do not create a vault or

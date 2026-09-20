@@ -143,7 +143,7 @@ contract ValidatorGauge {
 
     function veMONOwner(uint256 tokenId) private view returns (address) {
         // The voter validates that tokenId has historical weight; the current owner receives the claim.
-        return IVeMONOwner(address(voter.veMON())).ownerOf(tokenId);
+        return IVeMONOwner(voter.ve()).ownerOf(tokenId);
     }
 
     /// @notice Returns a poster's contribution after the cycle ends if the validator was rejected.
