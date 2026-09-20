@@ -5,6 +5,8 @@ import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
 import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
 import {StakingVault} from "../src/staking/StakingVault.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
+import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
+import {IReward} from "../src/interfaces/IReward.sol";
 
 contract ValidatorsVoterTest is ValidatorsVoterFixture {
     function test_createValidatorCreatesInitializedVaultAndWiredGauge() public {
@@ -69,5 +71,34 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertEq(validatorsVoter.validatorToGauge(secondId), secondGauge);
         validatorsVoter.notifyValidatorLeft(secondId);
         assertTrue(validatorsVoter.isAlive(secondGauge));
+    }
+
+    function test_voteAllocatesProportionallyAndDepositsRewardWeight() public {
+        (,, address gaugeA) = _createValidator();
+        bytes memory secp2 = abi.encodePacked(bytes1(0x02), bytes32(uint256(2)));
+        bytes memory bls2 = abi.encodePacked(bytes32(uint256(3)), bytes16(uint128(4)));
+        address auth2 = controller.predictVaultAddress(operator, secp2, bls2);
+        vm.prank(operator);
+        (,, address gaugeB) = validatorsVoter.createValidator(auth2, secp2, bls2, secpSig, blsSig);
+
+        uint256 power = 100 ether;
+        vm.mockCall(ve, abi.encodeWithSelector(IVotingEscrow.isApprovedOrOwner.selector), abi.encode(true));
+        vm.mockCall(ve, abi.encodeWithSelector(IVotingEscrow.votingPowerOf.selector, 7), abi.encode(power));
+        _setEpoch(6, false);
+        address[] memory gauges = new address[](2);
+        gauges[0] = gaugeA;
+        gauges[1] = gaugeB;
+        uint256[] memory weights_ = new uint256[](2);
+        weights_[0] = 1;
+        weights_[1] = 3;
+
+        validatorsVoter.vote(7, gauges, weights_);
+
+        assertEq(validatorsVoter.votes(7, gaugeA), 25 ether);
+        assertEq(validatorsVoter.votes(7, gaugeB), 75 ether);
+        assertEq(validatorsVoter.cycleWeights(5, gaugeA), 25 ether);
+        assertEq(validatorsVoter.cycleWeights(5, gaugeB), 75 ether);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(7), 25 ether);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeB)).balanceOf(7), 75 ether);
     }
 }
