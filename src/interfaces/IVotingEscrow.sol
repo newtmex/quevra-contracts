@@ -19,44 +19,12 @@ interface IVotingEscrow is IERC721Metadata {
         uint256 boost;
     }
 
-    /// @dev Different types of veNFTs:
-    /// NORMAL  - typical veNFT
-    /// LOCKED  - veNFT which is locked into a MANAGED veNFT
-    /// MANAGED - veNFT which can accept the deposit of NORMAL veNFTs
-    enum EscrowType {
-        NORMAL,
-        LOCKED,
-        MANAGED
-    }
-
-    error InvalidManagedNFTId();
     error LockDurationNotInFuture();
     error LockDurationTooLong();
     error LockExpired();
     error NotApprovedOrOwner();
-    error NotManagedNFT();
-    error NotLockedNFT();
-    error NotNormalNFT();
     error NotPermanentLock();
     error PermanentLock();
-
-    /// @dev Mapping of token id to escrow type
-    ///      Takes advantage of the fact default value is EscrowType.NORMAL
-    function escrowType(uint256 tokenId) external view returns (EscrowType);
-
-    /// @dev Mapping of token id to managed id
-    function idToManaged(uint256 tokenId) external view returns (uint256 managedTokenId);
-
-    /// @dev Mapping of user token id to managed token id to weight of token id
-    function weights(uint256 tokenId, uint256 managedTokenId) external view returns (uint256 weight);
-
-    /// @notice Deposit a normal veNFT into a managed veNFT.
-    /// @param _tokenId Id of the depositing veNFT.
-    /// @param _mTokenId Id of the managed veNFT.
-    function depositManaged(uint256 _tokenId, uint256 _mTokenId) external;
-
-    /// @notice Withdraw a veNFT from its managed position and re-lock it for the maximum duration.
-    function withdrawManaged(uint256 _tokenId) external;
 
     /// @notice Check whether spender is owner or an approved user for a given veNFT
     /// @param _spender .

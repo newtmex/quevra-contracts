@@ -25,9 +25,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     uint256 public nextId = 1;
 
     mapping(uint256 tokenId => IVotingEscrow.LockedBalance lock) private _locked;
-    mapping(uint256 tokenId => IVotingEscrow.EscrowType) public override escrowType;
-    mapping(uint256 tokenId => uint256 managedTokenId) public override idToManaged;
-    mapping(uint256 tokenId => mapping(uint256 managedTokenId => uint256 amount)) public override weights;
     uint256 public override epoch;
     mapping(uint256 index => Point) public pointHistory;
     mapping(uint256 tokenId => Point[]) private _userPointHistory;
@@ -37,20 +34,11 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
     error InvalidAmount();
     error NonexistentToken();
-    error PositionHasNoVotingPower();
-    error ManagedPositionLocked();
     error EpochOutOfRange();
     event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
     event Checkpoint(uint64 indexed epoch, uint256 indexed pointIndex);
     event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
     event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
-    event ManagedLockCreated(address indexed account, uint256 indexed tokenId);
-    event DepositManaged(
-        address indexed account, uint256 indexed tokenId, uint256 indexed managedTokenId, uint256 amount
-    );
-    event WithdrawManaged(
-        address indexed account, uint256 indexed tokenId, uint256 indexed managedTokenId, uint256 amount
-    );
 
     constructor(uint64 maxLockCycles_, string memory name_, string memory symbol_) ERC721(name_, symbol_) {
         if (maxLockCycles_ == 0) revert LockDurationNotInFuture();
@@ -83,19 +71,8 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
     function _deposit(uint256 amount) internal virtual;
 
-    function createManagedLock() external nonReentrant returns (uint256 tokenId) {
-        tokenId = nextId++;
-        IVotingEscrow.LockedBalance memory managedLock = IVotingEscrow.LockedBalance(0, 0, true, 0);
-        _locked[tokenId] = managedLock;
-        escrowType[tokenId] = IVotingEscrow.EscrowType.MANAGED;
-        _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), managedLock);
-        _mint(msg.sender, tokenId);
-        emit ManagedLockCreated(msg.sender, tokenId);
-    }
-
     function lockPermanent(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
-        if (escrowType[tokenId] != IVotingEscrow.EscrowType.NORMAL) revert NotNormalNFT();
         IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
         if (oldLock.isPermanent) revert PermanentLock();
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
@@ -109,7 +86,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
     function unlockPermanent(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
-        if (escrowType[tokenId] != IVotingEscrow.EscrowType.NORMAL) revert NotNormalNFT();
         IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
         if (!oldLock.isPermanent) revert NotPermanentLock();
 
@@ -119,60 +95,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         _checkpointLock(tokenId, oldLock, newLock);
         _locked[tokenId] = newLock;
         emit UnlockPermanent(msg.sender, tokenId, uint256(uint128(newLock.amount)), currentEpoch);
-    }
-
-    function depositManaged(uint256 tokenId, uint256 managedTokenId) external override nonReentrant {
-        _requireApprovedOrOwner(msg.sender, tokenId);
-        if (escrowType[managedTokenId] != IVotingEscrow.EscrowType.MANAGED) revert NotManagedNFT();
-        if (escrowType[tokenId] != IVotingEscrow.EscrowType.NORMAL) revert NotNormalNFT();
-
-        uint64 currentEpoch = _currentEpoch();
-        IVotingEscrow.LockedBalance memory userLock = _locked[tokenId];
-        Point memory userPoint = _lockPoint(userLock, currentEpoch);
-        if (userPoint.bias == 0) revert PositionHasNoVotingPower();
-        uint256 amount = uint256(uint128(userLock.amount));
-
-        IVotingEscrow.LockedBalance memory emptyLock = IVotingEscrow.LockedBalance(0, 0, false, 0);
-        _checkpointLock(tokenId, userLock, emptyLock);
-        _locked[tokenId] = emptyLock;
-
-        IVotingEscrow.LockedBalance memory managedLock = _locked[managedTokenId];
-        IVotingEscrow.LockedBalance memory newManagedLock = IVotingEscrow.LockedBalance(
-            managedLock.amount + userLock.amount, managedLock.end, managedLock.isPermanent, managedLock.boost
-        );
-        _checkpointLock(managedTokenId, managedLock, newManagedLock);
-        _locked[managedTokenId] = newManagedLock;
-
-        weights[tokenId][managedTokenId] = amount;
-        idToManaged[tokenId] = managedTokenId;
-        escrowType[tokenId] = IVotingEscrow.EscrowType.LOCKED;
-        emit DepositManaged(ownerOf(tokenId), tokenId, managedTokenId, amount);
-    }
-
-    function withdrawManaged(uint256 tokenId) external override nonReentrant {
-        _requireApprovedOrOwner(msg.sender, tokenId);
-        uint256 managedTokenId = idToManaged[tokenId];
-        if (managedTokenId == 0) revert InvalidManagedNFTId();
-        if (escrowType[tokenId] != IVotingEscrow.EscrowType.LOCKED) revert NotLockedNFT();
-
-        uint256 amount = weights[tokenId][managedTokenId];
-        IVotingEscrow.LockedBalance memory managedLock = _locked[managedTokenId];
-        IVotingEscrow.LockedBalance memory newManagedLock = IVotingEscrow.LockedBalance(
-            managedLock.amount - int128(int256(amount)), managedLock.end, managedLock.isPermanent, managedLock.boost
-        );
-        _checkpointLock(managedTokenId, managedLock, newManagedLock);
-        _locked[managedTokenId] = newManagedLock;
-
-        uint256 unlockEpoch = _unlockEpoch(maxLockCycles);
-        IVotingEscrow.LockedBalance memory restoredLock =
-            IVotingEscrow.LockedBalance(int128(int256(amount)), unlockEpoch, false, 0);
-        IVotingEscrow.LockedBalance memory emptyLock = _locked[tokenId];
-        _checkpointLock(tokenId, emptyLock, restoredLock);
-        _locked[tokenId] = restoredLock;
-        delete idToManaged[tokenId];
-        delete weights[tokenId][managedTokenId];
-        escrowType[tokenId] = IVotingEscrow.EscrowType.NORMAL;
-        emit WithdrawManaged(ownerOf(tokenId), tokenId, managedTokenId, amount);
     }
 
     /// @notice Advances global voting-power checkpoints to the current staking epoch.
@@ -350,10 +272,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     }
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
-        address currentOwner = _ownerOf(tokenId);
-        if (currentOwner != address(0) && to != address(0)) {
-            if (escrowType[tokenId] == IVotingEscrow.EscrowType.LOCKED) revert ManagedPositionLocked();
-        }
         from = super._update(to, tokenId, auth);
         if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
     }

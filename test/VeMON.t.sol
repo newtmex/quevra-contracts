@@ -127,7 +127,6 @@ contract VeMONTest is VeMONFixture {
         assertEq(amount, int128(int256(validatorStake)));
         assertEq(end, 0);
         assertTrue(permanent);
-        assertTrue(veMON.escrowType(1) == IVotingEscrow.EscrowType.NORMAL);
         assertEq(veMON.permanentLockBalance(), validatorStake);
         assertEq(veMON.votingPowerOf(1), validatorStake);
         assertEq(veMON.votingPowerOfAt(1, 20), validatorStake);
@@ -144,90 +143,12 @@ contract VeMONTest is VeMONFixture {
         assertEq(veMON.votingPowerOfAt(1, 25), 0);
     }
 
-    function test_managedDepositAndWithdrawalPreservePrincipalAndVotingPower() public {
+    function test_invalidPermanentTransitionsRevert() public {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
-        _setEpoch(5, false);
-        uint256 managedId = veMON.createManagedLock();
-        uint256 controllerBalanceBefore = address(controller).balance;
-
-        vm.prank(operator);
-        veMON.depositManaged(1, managedId);
-        assertTrue(veMON.escrowType(1) == IVotingEscrow.EscrowType.LOCKED);
-        assertTrue(veMON.escrowType(managedId) == IVotingEscrow.EscrowType.MANAGED);
-        assertEq(veMON.idToManaged(1), managedId);
-        assertEq(veMON.weights(1, managedId), validatorStake);
-        (int128 userAmount,,,) = veMON.locked(1);
-        (int128 managedAmount,, bool managedPermanent,) = veMON.locked(managedId);
-        assertEq(userAmount, 0);
-        assertEq(managedAmount, int128(int256(validatorStake)));
-        assertTrue(managedPermanent);
-        assertEq(veMON.votingPowerOf(1), 0);
-        assertEq(veMON.votingPowerOf(managedId), validatorStake);
-        assertEq(veMON.totalVotingPower(), validatorStake);
-        assertEq(address(controller).balance, controllerBalanceBefore);
-
-        vm.prank(operator);
-        vm.expectRevert(VotingEscrow.ManagedPositionLocked.selector);
-        veMON.transferFrom(operator, stranger, 1);
-
-        _setEpoch(10, false);
-        vm.prank(operator);
-        veMON.withdrawManaged(1);
-        assertTrue(veMON.escrowType(1) == IVotingEscrow.EscrowType.NORMAL);
-        assertEq(veMON.idToManaged(1), 0);
-        (int128 restoredAmount,,,) = veMON.locked(1);
-        (int128 remainder,,,) = veMON.locked(managedId);
-        assertEq(restoredAmount, int128(int256(validatorStake)));
-        assertEq(remainder, 0);
-        assertEq(veMON.votingPowerOf(1), validatorStake);
-        assertEq(veMON.votingPowerOf(managedId), 0);
-        assertEq(veMON.totalVotingPower(), validatorStake);
-        assertEq(veMON.votingPowerOfAt(1, 30), 0);
-        assertEq(veMON.totalVotingPowerAt(5), validatorStake);
-    }
-
-    function test_managedPositionAggregatesDepositedVotingPowerAndWithdrawRemovesIt() public {
-        vm.prank(operator);
-        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
-        vm.prank(stranger);
-        veMON.createLock{value: 20 ether}(20 ether, lockDuration);
-        uint256 managedId = veMON.createManagedLock();
-
-        vm.prank(operator);
-        veMON.depositManaged(1, managedId);
-
-        assertEq(veMON.votingPowerOf(managedId), validatorStake);
-        assertEq(veMON.totalVotingPower(), validatorStake + 20 ether);
-
-        vm.prank(operator);
-        veMON.withdrawManaged(1);
-        assertEq(veMON.votingPowerOf(1), validatorStake);
-        assertEq(veMON.votingPowerOf(managedId), 0);
-        assertEq(veMON.totalVotingPower(), validatorStake + 20 ether);
-    }
-
-    function test_invalidPermanentAndManagedTransitionsRevert() public {
-        vm.prank(operator);
-        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
-        uint256 managedId = veMON.createManagedLock();
 
         vm.prank(stranger);
         vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
         veMON.lockPermanent(1);
-
-        vm.prank(operator);
-        vm.expectRevert(IVotingEscrow.NotManagedNFT.selector);
-        veMON.depositManaged(1, 1);
-
-        vm.prank(operator);
-        veMON.depositManaged(1, managedId);
-        vm.prank(operator);
-        vm.expectRevert(IVotingEscrow.NotNormalNFT.selector);
-        veMON.lockPermanent(1);
-
-        vm.prank(stranger);
-        vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
-        veMON.withdrawManaged(1);
     }
 }

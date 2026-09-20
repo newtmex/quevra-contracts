@@ -102,28 +102,22 @@ contract ValidatorVoterTest is ValidatorVoterFixture {
         vm.clearMockedCalls();
     }
 
-    function test_managedPositionVotesItsAggregatedEscrowPower() public {
+    function test_normalPositionVotesItsEscrowPower() public {
         _setEpoch(1, false);
         (uint256 requestId,, address gaugeAddress) = _createValidatorStack();
         voter.setValidatorAccepted(requestId, 0, true);
-        uint256 managedId;
+        uint256 tokenId;
         vm.prank(operator);
-        managedId = veMON.createManagedLock();
-        uint256 childId;
-        vm.prank(stranger);
-        childId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
-        vm.prank(stranger);
-        veMON.depositManaged(childId, managedId);
+        tokenId = veMON.createLock{value: 100 ether}(100 ether, lockDuration);
 
         address[] memory gauges = new address[](1);
         gauges[0] = gaugeAddress;
         uint256[] memory weights = new uint256[](1);
         weights[0] = 1;
         vm.prank(operator);
-        voter.vote(managedId, gauges, weights);
+        voter.vote(tokenId, gauges, weights);
 
-        assertGt(voter.voterWeight(managedId, gaugeAddress, 0), 0);
-        assertEq(voter.voterWeight(childId, gaugeAddress, 0), 0);
+        assertGt(voter.voterWeight(tokenId, gaugeAddress, 0), 0);
     }
 
     function test_createValidatorRequestsAndDeploysVaultAndGaugeAtomically() public {
