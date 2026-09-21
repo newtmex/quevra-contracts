@@ -18,6 +18,13 @@ abstract contract BaseTest is Test, MonadStdConstants {
     bytes internal secpPubkey = hex"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     bytes internal blsPubkey =
         hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb";
+    bytes internal validatorPayload = bytes.concat(
+        hex"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
+        bytes20(address(0x1234)),
+        bytes32(uint256(100_000 ether)),
+        bytes32(uint256(1e17))
+    );
     bytes internal secpSig = hex"1111";
     bytes internal blsSig = bytes.concat(bytes1(0x80), new bytes(95));
 

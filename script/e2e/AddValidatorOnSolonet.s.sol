@@ -10,26 +10,21 @@ import {ValidatorRegistry} from "../../src/validators/ValidatorRegistry.sol";
 contract AddValidatorOnSolonet is Script {
     function run() external returns (address registry, uint256 requestId, uint64 validatorId) {
         uint256 pk = vm.envUint("PRIVATE_KEY");
-        address auth = vm.envAddress("AUTH_ADDRESS");
         uint256 amount = vm.envUint("AMOUNT");
-        uint256 commission = vm.envUint("COMMISSION");
-        bytes memory secpPubkey = vm.envBytes("SECP_PUBKEY");
-        bytes memory blsPubkey = vm.envBytes("BLS_PUBKEY");
+        bytes memory payload = vm.envBytes("PAYLOAD");
         bytes memory secpSig = vm.envBytes("SECP_SIG");
         bytes memory blsSig = vm.envBytes("BLS_SIG");
 
         require(block.chainid == 20143, "not solonet");
-        require(auth == vm.addr(pk), "auth must match broadcaster");
-        require(secpPubkey.length == 33, "secp pubkey");
-        require(blsPubkey.length == 48, "bls pubkey");
+        require(payload.length == 165, "payload length");
         require(secpSig.length == 64, "secp sig");
         require(blsSig.length == 96, "bls sig");
         require(amount >= 100_000 ether, "stake too low");
 
         vm.startBroadcast(pk);
         ValidatorRegistry reg = new ValidatorRegistry();
-        requestId = reg.requestValidator(secpPubkey, blsPubkey, secpSig, blsSig);
-        validatorId = reg.addValidator{value: amount}(requestId, commission);
+        requestId = reg.requestValidator(payload, secpSig, blsSig);
+        validatorId = reg.addValidator{value: amount}(requestId);
         vm.stopBroadcast();
 
         registry = address(reg);

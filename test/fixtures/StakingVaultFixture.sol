@@ -13,21 +13,25 @@ abstract contract StakingVaultFixture is ValidatorRegistryFixture {
 
     function setUp() public virtual override {
         super.setUp();
-        requestId = _requestValidator();
-        vault = _deployVault(requestId);
+        vault = _newVault();
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(address(vault)), bytes32(validatorStake), bytes32(commission)
+        );
+        vm.prank(operator);
+        requestId = registry.requestValidator(payload, secpSig, blsSig);
+        vm.prank(owner);
+        vault.initialize(address(registry), requestId);
     }
 
-    function _deployVault(uint256 requestId_) internal returns (StakingVault deployedVault) {
+    function _newVault() internal returns (StakingVault deployedVault) {
         vm.prank(owner);
         StakingVault implementation = new StakingVault();
         deployedVault = StakingVault(payable(Clones.clone(address(implementation))));
-        vm.prank(owner);
-        deployedVault.initialize(address(registry), requestId_);
     }
 
     function _addVaultValidator() internal returns (uint64 validatorId) {
         vm.prank(owner);
-        validatorId = vault.addValidator{value: validatorStake}(commission);
+        validatorId = vault.addValidator{value: validatorStake}();
     }
 
     function _delegatorPosition(uint64 validatorId)

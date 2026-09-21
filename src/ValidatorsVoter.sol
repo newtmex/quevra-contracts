@@ -42,23 +42,22 @@ contract ValidatorsVoter is NonStakingVoter, Initializable {
     }
 
     function createValidator(
+        bytes32 saltSeed,
         address expectedAuthAddress,
-        bytes calldata secpPubkey,
-        bytes calldata blsPubkey,
+        bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external nonReentrant returns (uint256 requestId, address vault, address gauge) {
-        requestId =
-            registry.requestValidatorFor(_msgSender(), secpPubkey, blsPubkey, signedSecpMessage, signedBlsMessage);
-        (vault, gauge) = _deployValidator(requestId, _msgSender(), expectedAuthAddress);
+        requestId = registry.requestValidatorFor(_msgSender(), payload, signedSecpMessage, signedBlsMessage);
+        (vault, gauge) = _deployValidator(requestId, _msgSender(), saltSeed, expectedAuthAddress);
     }
 
-    function _deployValidator(uint256 requestId, address operator, address expectedAuthAddress)
+    function _deployValidator(uint256 requestId, address operator, bytes32 saltSeed, address expectedAuthAddress)
         private
         returns (address vault, address gauge)
     {
         gauge = _createValidatorGauge(requestId, operator, operator);
-        vault = controller.deployVault(requestId, operator, expectedAuthAddress, gauge);
+        vault = controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
     }
 
     function notifyValidatorLeft(uint256 submissionId) external nonReentrant {

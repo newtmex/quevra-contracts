@@ -51,13 +51,13 @@ contract StakingVaultTest is StakingVaultFixture {
     function test_addValidatorIsOwnerOnlyAndCanOnlyRunOnce() public {
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
-        vault.addValidator{value: validatorStake}(commission);
+        vault.addValidator{value: validatorStake}();
 
         _addVaultValidator();
 
         vm.prank(owner);
         vm.expectRevert(StakingVault.ValidatorAlreadyAdded.selector);
-        vault.addValidator{value: validatorStake}(commission);
+        vault.addValidator{value: validatorStake}();
     }
 
     function test_delegateSendsOwnerFundsToVaultValidator() public {

@@ -37,7 +37,7 @@ abstract contract RewardFixture is BaseTest {
     function setUp() public virtual override {
         super.setUp();
         registry = new ValidatorRegistry();
-        controller = new StakingController(address(registry), address(this));
+        controller = new StakingController(address(registry), address(this), 0);
         veMON = new VeMON(address(controller), 4);
         rewardToken = new RewardTestToken();
         otherToken = new RewardTestToken();
@@ -64,10 +64,13 @@ abstract contract RewardFixture is BaseTest {
         bytes memory secp = hex"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
         bytes memory bls =
             hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb";
-        address auth = controller.predictVaultAddress(operator, secp, bls);
+        bytes32 saltSeed = keccak256("reward-validator");
+        address auth = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload =
+            bytes.concat(secp, bls, bytes20(auth), bytes32(uint256(100_000 ether)), bytes32(uint256(0)));
         vm.prank(operator);
         (,, address gauge) =
-            rewardVoter.createValidator(auth, secp, bls, hex"11", bytes.concat(bytes1(0x80), new bytes(95)));
+            rewardVoter.createValidator(saltSeed, auth, payload, hex"11", bytes.concat(bytes1(0x80), new bytes(95)));
         bribe = rewardVoter.gaugeToBribe(gauge);
         reward = BribeVotingReward(bribe);
         rewardToken.approve(address(reward), type(uint256).max);

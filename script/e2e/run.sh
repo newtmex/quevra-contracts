@@ -103,6 +103,7 @@ KEYS_JSON="$(
     < "${ROOT}/script/e2e/sign_payload.py"
 )"
 
+PAYLOAD="0x$(printf '%s' "$KEYS_JSON" | json_field payload)"
 SECP_PUBKEY="0x$(printf '%s' "$KEYS_JSON" | json_field secpPubkey)"
 BLS_PUBKEY="0x$(printf '%s' "$KEYS_JSON" | json_field blsPubkey)"
 SECP_SIG="0x$(printf '%s' "$KEYS_JSON" | json_field secpSig)"
@@ -112,7 +113,7 @@ log "secp pubkey ${SECP_PUBKEY}"
 log "bls pubkey  ${BLS_PUBKEY}"
 log "broadcasting ValidatorRegistry request+addValidator"
 
-export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
+export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION PAYLOAD SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
 
 # Override the default Monad testnet pin with the local chain's current block.
 SOLONET_BLOCK_HEX="$(rpc eth_blockNumber | json_field result)"
@@ -134,8 +135,8 @@ forge_cmd=(
 )
 if (( USE_DOCKER_RPC == 1 )); then
   docker exec -i \
-    -e PRIVATE_KEY -e AUTH_ADDRESS -e AMOUNT -e COMMISSION \
-    -e SECP_PUBKEY -e BLS_PUBKEY -e SECP_SIG -e BLS_SIG \
+    -e PRIVATE_KEY -e AMOUNT -e PAYLOAD \
+    -e SECP_SIG -e BLS_SIG \
     -w /quevra-contracts \
     "$CONTAINER" "${forge_cmd[@]}"
 else

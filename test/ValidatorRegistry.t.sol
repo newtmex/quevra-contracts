@@ -12,70 +12,57 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
 
     function test_requestValidatorStoresPendingRequest() public {
         vm.expectEmit(true, true, false, true);
-        emit IValidatorRegistry.ValidatorRequested(1, operator, secpPubkey, blsPubkey);
+        emit IValidatorRegistry.ValidatorRequested(1, operator, validatorPayload);
 
         uint256 id = _requestValidator();
 
         IValidatorRegistry.Submission memory submission = registry.getSubmission(id);
         assertEq(id, 1);
         assertEq(registry.nextId(), 2);
-        assertEq(submission.secpPubkey, secpPubkey);
-        assertEq(submission.blsPubkey, blsPubkey);
+        assertEq(submission.payload, validatorPayload);
         assertEq(submission.signedSecpMessage, secpSig);
         assertEq(submission.signedBlsMessage, blsSig);
         assertEq(submission.operator, operator);
         assertEq(submission.executor, address(0));
         assertEq(submission.validatorId, 0);
         assertEq(uint256(submission.status), uint256(IValidatorRegistry.Status.Submitted));
-        assertEq(registry.idBySecpPubkey(keccak256(secpPubkey)), id);
-        assertEq(registry.idByBlsPubkey(keccak256(blsPubkey)), id);
     }
 
     function test_requestValidatorRejectsInvalidValidatorData() public {
-        bytes memory validSecp = new bytes(33);
-        bytes memory validBls = new bytes(48);
         bytes memory validSecpSig = hex"040506";
         bytes memory validBlsSig = hex"0708090a";
 
         vm.prank(operator);
         vm.expectRevert(IValidatorRegistry.InvalidValidatorData.selector);
-        registry.requestValidator(new bytes(0), validBls, validSecpSig, validBlsSig);
+        registry.requestValidator(new bytes(0), validSecpSig, validBlsSig);
 
         vm.prank(operator);
         vm.expectRevert(IValidatorRegistry.InvalidValidatorData.selector);
-        registry.requestValidator(validSecp, new bytes(0), validSecpSig, validBlsSig);
+        registry.requestValidator(bytes.concat(validatorPayload, bytes1(0)), validSecpSig, validBlsSig);
     }
 
-    function test_requestValidatorRevertsOnDuplicateKeys() public {
-        _requestValidator();
-
-        vm.prank(operator);
-        vm.expectRevert(IValidatorRegistry.KeyAlreadyRegistered.selector);
-        registry.requestValidator(secpPubkey, blsPubkey, secpSig, blsSig);
-    }
-
-    function test_stakingPayloadReconstructsCallerSuppliedEconomics() public {
+    function test_stakingPayloadReturnsOpaqueSubmittedPayload() public {
         uint256 id = _requestValidator();
 
-        bytes memory payload = registry.stakingPayload(id, executor, validatorStake, commission);
+        bytes memory payload = registry.stakingPayload(id);
 
         assertEq(payload.length, 165);
-        assertEq(payload, bytes.concat(secpPubkey, blsPubkey, abi.encodePacked(executor, validatorStake, commission)));
+        assertEq(payload, validatorPayload);
     }
 
-    function test_anyoneCanAddValidatorWithCallerEconomics() public {
+    function test_anyoneCanAddValidatorWithSignedPayload() public {
         uint256 id = _requestValidator();
 
         vm.prank(executor);
-        uint64 validatorId = registry.addValidator{value: validatorStake}(id, commission);
+        uint64 validatorId = registry.addValidator{value: validatorStake}(id);
 
         _assertSubmissionExecuted(id, executor, validatorId);
         assertGt(validatorId, 0);
         (address authAddress,) = _validatorIdentity(validatorId);
-        assertEq(authAddress, executor);
+        assertEq(authAddress, address(0x1234));
     }
 
-    function test_cancelFreesKeys() public {
+    function test_cancelAllowsNewSubmission() public {
         uint256 id = _requestValidator();
 
         vm.prank(operator);
@@ -102,7 +89,7 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
 
         vm.prank(executor);
         vm.expectRevert(IValidatorRegistry.NotSubmitted.selector);
-        registry.addValidator{value: validatorStake}(id, commission);
+        registry.addValidator{value: validatorStake}(id);
     }
 
     function test_unknownSubmissionReverts() public {
@@ -110,6 +97,6 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
         registry.getSubmission(1);
 
         vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
-        registry.stakingPayload(1, executor, validatorStake, commission);
+        registry.stakingPayload(1);
     }
 }

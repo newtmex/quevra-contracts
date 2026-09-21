@@ -47,18 +47,14 @@ contract StakingVault is Ownable2Step, ReentrancyGuardTransient, Initializable {
     }
 
     /// @notice Add the vault's bound validator.
-    function addValidator(uint256 commission)
-        external
-        payable
-        nonReentrant
-        onlyOwner
-        returns (uint64 addedValidatorId)
-    {
+    /// @dev `StakingController` must validate the requested payload's commision against
+    ///       it's effective commision before calling this fnuction
+    function addValidator() external payable nonReentrant onlyOwner returns (uint64 addedValidatorId) {
         if (validatorId != 0) {
             revert ValidatorAlreadyAdded();
         }
 
-        addedValidatorId = registry.addValidator{value: msg.value}(requestId, commission);
+        addedValidatorId = registry.addValidator{value: msg.value}(requestId);
 
         if (addedValidatorId == 0) {
             revert AddValidatorFailed();

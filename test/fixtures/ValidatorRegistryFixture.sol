@@ -16,7 +16,7 @@ abstract contract ValidatorRegistryFixture is BaseTest {
 
     function _requestValidator() internal returns (uint256 id) {
         vm.prank(operator);
-        id = registry.requestValidator(secpPubkey, blsPubkey, secpSig, blsSig);
+        id = registry.requestValidator(validatorPayload, secpSig, blsSig);
     }
 
     function _requestBoundValidator() internal returns (uint256 id) {

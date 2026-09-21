@@ -19,6 +19,16 @@ contract StakingControllerTest is StakingControllerFixture {
         assertTrue(controller.vaultImplementation() != address(0));
     }
 
+    function test_constructorSetsInitialCommissionImmediately() public {
+        StakingController configured = new StakingController(address(registry), address(this), commission);
+        assertEq(configured.commission(), commission);
+    }
+
+    function test_constructorRejectsCommissionAboveMaximum() public {
+        vm.expectRevert(StakingController.InvalidCommission.selector);
+        new StakingController(address(registry), address(this), 1e18 + 1);
+    }
+
     function test_voterIsOwnerSetOnce() public {
         address voter = makeAddr("voter");
         address replacement = makeAddr("replacement-voter");
@@ -39,27 +49,40 @@ contract StakingControllerTest is StakingControllerFixture {
         controller.setCommission(commission);
 
         vm.expectEmit(false, false, false, true);
-        emit StakingController.ValidatorCommissionSet(commission);
+        emit StakingController.ValidatorCommissionScheduled(commission, 2);
         _setCommission();
 
-        assertEq(controller.commission(), commission);
+        assertEq(controller.commission(), 0);
     }
 
     function test_setCommissionEnforcesPrecompileMaximum() public {
         controller.setCommission(controller.MAX_COMMISSION());
-        assertEq(controller.commission(), controller.MAX_COMMISSION());
+        assertEq(controller.commission(), 0);
 
         uint256 invalidCommission = controller.MAX_COMMISSION() + 1;
         vm.expectRevert(StakingController.InvalidCommission.selector);
         controller.setCommission(invalidCommission);
     }
 
+    function test_scheduledCommissionTakesEffectAtCyclePlusTwo() public {
+        _setEpoch(9, false);
+        controller.setCommission(commission);
+        assertEq(controller.commission(), 0);
+
+        _setEpoch(14, false);
+        assertEq(controller.commission(), 0);
+        _setEpoch(15, false);
+        assertEq(controller.commission(), commission);
+        assertEq(controller.commission(), commission);
+    }
+
     function test_signingConfigForUsesFixedStakeAmount() public {
         controller.setVoter(makeAddr("voter"));
+        bytes32 saltSeed = keccak256("controller-test");
         (address authAddress, uint256 configuredCommission, uint256 amount) =
-            controller.signingConfigFor(operator, secpPubkey, blsPubkey);
+            controller.signingConfigFor(operator, saltSeed);
 
-        assertEq(authAddress, controller.predictVaultAddress(operator, secpPubkey, blsPubkey));
+        assertEq(authAddress, controller.predictVaultAddress(operator, saltSeed));
         assertEq(configuredCommission, 0);
         assertEq(amount, controller.VALIDATOR_STAKE_AMOUNT());
     }

@@ -9,6 +9,8 @@ import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {StakingVault} from "./StakingVault.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
+import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
@@ -17,11 +19,12 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     IValidatorRegistry public immutable registry;
     address public voter;
     address public immutable vaultImplementation;
-    mapping(address requester => uint256 nonce) private _nonces;
     error UnexpectedAuthAddress();
 
     mapping(uint256 requestId => address vault) public vaultByRequest;
-    uint256 public commission;
+    uint256 private _commission;
+    uint256 private _pendingCommission;
+    uint64 private _pendingCommissionCycle;
 
     /// @notice Fixed stake amount committed to validator registration signatures.
     uint256 public constant VALIDATOR_STAKE_AMOUNT = 100_000 ether;
@@ -40,12 +43,15 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
     event ValidatorCommissionSet(uint256 commission);
+    event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONReceived(uint256 amount);
     event VaultCancelled(uint256 indexed requestId, address indexed vault);
 
-    constructor(address registry_, address owner_) Ownable(owner_) {
+    constructor(address registry_, address owner_, uint256 initialCommission_) Ownable(owner_) {
         if (registry_ == address(0) || owner_ == address(0)) revert InvalidAddress();
+        if (initialCommission_ > MAX_COMMISSION) revert InvalidCommission();
         registry = IValidatorRegistry(registry_);
+        _commission = initialCommission_;
         vaultImplementation = address(new StakingVault());
     }
 
@@ -58,10 +64,13 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     }
 
     /// @notice Deploy, initialize, and register a vault with its gauge, only through the voter.
-    function deployVault(uint256 requestId, address requester, address expectedAuthAddress, address gauge)
-        external
-        returns (address vault)
-    {
+    function deployVault(
+        uint256 requestId,
+        address requester,
+        bytes32 saltSeed,
+        address expectedAuthAddress,
+        address gauge
+    ) external returns (address vault) {
         if (msg.sender != voter) revert NotVoter();
         if (requester == address(0) || gauge == address(0) || vaultByRequest[requestId] != address(0)) {
             revert InvalidVault();
@@ -71,64 +80,72 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         if (submission.requester != voter || submission.status != IValidatorRegistry.Status.Submitted) {
             revert InvalidValidatorState();
         }
-        if (predictVaultAddress(requester, submission.secpPubkey, submission.blsPubkey) != expectedAuthAddress) {
+        if (ValidatorPayloadLibrary.authAddress(submission.payload) != expectedAuthAddress) {
+            revert UnexpectedAuthAddress();
+        }
+        if (predictVaultAddress(requester, saltSeed) != expectedAuthAddress) {
             revert UnexpectedAuthAddress();
         }
 
-        uint256 nonce = _nonces[requester]++;
-        bytes32 salt = _vaultSalt(requester, nonce, submission.secpPubkey, submission.blsPubkey);
+        bytes32 salt = _vaultSalt(requester, saltSeed);
         vault = Clones.cloneDeterministic(vaultImplementation, salt);
         StakingVault(payable(vault)).initialize(address(registry), requestId);
         vaultByRequest[requestId] = vault;
         emit VaultRegistered(requestId, vault, gauge, requester);
     }
 
-    function predictVaultAddress(address requester, bytes memory secpPubkey, bytes memory blsPubkey)
-        public
-        view
-        returns (address)
-    {
-        return Clones.predictDeterministicAddress(
-            vaultImplementation, _vaultSalt(requester, _nonces[requester], secpPubkey, blsPubkey), address(this)
-        );
+    function predictVaultAddress(address requester, bytes32 saltSeed) public view returns (address) {
+        return Clones.predictDeterministicAddress(vaultImplementation, _vaultSalt(requester, saltSeed), address(this));
     }
 
-    function _vaultSalt(address requester, uint256 nonce, bytes memory secpPubkey, bytes memory blsPubkey)
-        private
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(requester, nonce, keccak256(secpPubkey), keccak256(blsPubkey)));
+    function _vaultSalt(address requester, bytes32 saltSeed) private pure returns (bytes32) {
+        return keccak256(abi.encode(requester, saltSeed));
     }
 
-    /// @notice Set the commission encoded in a requester's signed messages.
+    /// @notice Schedule commission for the cycle two cycles after the current cycle.
     function setCommission(uint256 commission_) external onlyOwner {
         if (commission_ > MAX_COMMISSION) revert InvalidCommission();
-        commission = commission_;
+        uint64 effectiveCycle = ProtocolTimeLibrary.currentCycle() + 2;
+        _pendingCommission = commission_;
+        _pendingCommissionCycle = effectiveCycle;
         emit ValidatorCommissionSet(commission_);
+        emit ValidatorCommissionScheduled(commission_, effectiveCycle);
     }
 
     /// @notice Return the auth address, commission, and amount required by addValidator signatures.
     function signingConfig(uint256 requestId)
         external
-        view
         returns (address authAddress, uint256 commission_, uint256 amount)
     {
         address vault = vaultByRequest[requestId];
         if (vault == address(0)) revert InvalidVault();
-        return (vault, commission, VALIDATOR_STAKE_AMOUNT);
+        return (vault, _effectiveCommission(), VALIDATOR_STAKE_AMOUNT);
     }
 
     /// @notice Configuration to sign BEFORE requesting a validator.
     /// @dev Submit the returned authAddress as expectedAuthAddress.
-    function signingConfigFor(address requester, bytes calldata secpPubkey, bytes calldata blsPubkey)
+    function signingConfigFor(address requester, bytes32 saltSeed)
         external
-        view
         returns (address authAddress, uint256 commission_, uint256 amount)
     {
         if (voter == address(0) || requester == address(0)) revert InvalidAddress();
-        authAddress = predictVaultAddress(requester, secpPubkey, blsPubkey);
-        return (authAddress, commission, VALIDATOR_STAKE_AMOUNT);
+        authAddress = predictVaultAddress(requester, saltSeed);
+        return (authAddress, _effectiveCommission(), VALIDATOR_STAKE_AMOUNT);
+    }
+
+    function _effectiveCommission() private returns (uint256) {
+        uint64 pendingCycle = _pendingCommissionCycle;
+        (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
+        if (pendingCycle != 0 && ProtocolTimeLibrary.cycleOf(epoch) >= pendingCycle) {
+            _commission = _pendingCommission;
+            _pendingCommission = 0;
+            _pendingCommissionCycle = 0;
+        }
+        return _commission;
+    }
+
+    function commission() external returns (uint256) {
+        return _effectiveCommission();
     }
 
     receive() external payable nonReentrant {

@@ -41,8 +41,12 @@ abstract contract ValidatorsVoterFixture is StakingControllerFixture {
     }
 
     function _createValidator() internal returns (uint256 id, address vault, address gauge) {
-        address expectedAuthAddress = controller.predictVaultAddress(operator, secpPubkey, blsPubkey);
+        bytes32 saltSeed = keccak256("validator-0");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
         vm.prank(operator);
-        return validatorsVoter.createValidator(expectedAuthAddress, secpPubkey, blsPubkey, secpSig, blsSig);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        return validatorsVoter.createValidator(saltSeed, expectedAuthAddress, payload, secpSig, blsSig);
     }
 }

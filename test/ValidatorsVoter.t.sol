@@ -27,11 +27,12 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
     }
 
     function test_createValidatorRevertsForUnexpectedAuthAddressAndRollsBackSubmission() public {
-        address expectedAuthAddress = controller.predictVaultAddress(operator, secpPubkey, blsPubkey);
+        bytes32 saltSeed = keccak256("validator-0");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
         vm.prank(operator);
         vm.expectRevert();
         validatorsVoter.createValidator(
-            address(uint160(expectedAuthAddress) + 1), secpPubkey, blsPubkey, secpSig, blsSig
+            saltSeed, address(uint160(expectedAuthAddress) + 1), validatorPayload, secpSig, blsSig
         );
         assertEq(registry.nextId(), 1);
     }
@@ -50,13 +51,28 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
 
     function test_operatorCanManageMultipleSubmissionsById() public {
         (uint256 firstId,, address firstGauge) = _createValidator();
-        bytes memory secondSecpPubkey = abi.encodePacked(bytes1(0x02), bytes32(uint256(2)));
-        bytes memory secondBlsPubkey = abi.encodePacked(bytes32(uint256(3)), bytes16(uint128(4)));
-        address secondAuthAddress = controller.predictVaultAddress(operator, secondSecpPubkey, secondBlsPubkey);
+        bytes memory secondPayload = abi.encodePacked(
+            bytes1(0x02),
+            bytes32(uint256(2)),
+            blsPubkey,
+            bytes20(address(0x1234)),
+            bytes32(validatorStake),
+            bytes32(commission)
+        );
+        bytes32 secondSaltSeed = keccak256("validator-1");
+        address secondAuthAddress = controller.predictVaultAddress(operator, secondSaltSeed);
+        secondPayload = abi.encodePacked(
+            bytes1(0x02),
+            bytes32(uint256(2)),
+            blsPubkey,
+            bytes20(secondAuthAddress),
+            bytes32(validatorStake),
+            bytes32(commission)
+        );
 
         vm.prank(operator);
         (uint256 secondId,, address secondGauge) =
-            validatorsVoter.createValidator(secondAuthAddress, secondSecpPubkey, secondBlsPubkey, secpSig, blsSig);
+            validatorsVoter.createValidator(secondSaltSeed, secondAuthAddress, secondPayload, secpSig, blsSig);
 
         assertTrue(firstId != secondId);
         assertEq(validatorsVoter.validatorToGauge(firstId), firstGauge);
@@ -74,11 +90,21 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
 
     function test_voteAllocatesProportionallyAndDepositsRewardWeight() public {
         (,, address gaugeA) = _createValidator();
-        bytes memory secp2 = abi.encodePacked(bytes1(0x02), bytes32(uint256(2)));
-        bytes memory bls2 = abi.encodePacked(bytes32(uint256(3)), bytes16(uint128(4)));
-        address auth2 = controller.predictVaultAddress(operator, secp2, bls2);
+        bytes memory payload2 = abi.encodePacked(
+            bytes1(0x02),
+            bytes32(uint256(2)),
+            blsPubkey,
+            bytes20(address(0x1234)),
+            bytes32(validatorStake),
+            bytes32(commission)
+        );
+        bytes32 secondSaltSeed = keccak256("validator-1");
+        address auth2 = controller.predictVaultAddress(operator, secondSaltSeed);
+        payload2 = abi.encodePacked(
+            bytes1(0x02), bytes32(uint256(2)), blsPubkey, bytes20(auth2), bytes32(validatorStake), bytes32(commission)
+        );
         vm.prank(operator);
-        (,, address gaugeB) = validatorsVoter.createValidator(auth2, secp2, bls2, secpSig, blsSig);
+        (,, address gaugeB) = validatorsVoter.createValidator(secondSaltSeed, auth2, payload2, secpSig, blsSig);
 
         uint256 power = 100 ether;
         uint256 tokenId;

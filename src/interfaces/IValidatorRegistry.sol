@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title IValidatorRegistry
-/// @notice Registry for validator registration requests and registry-owned delegation.
+/// @notice Registry for opaque validator registration payloads and registry-owned delegation.
 interface IValidatorRegistry {
     enum Status {
         Submitted,
@@ -13,8 +13,7 @@ interface IValidatorRegistry {
     }
 
     struct Submission {
-        bytes secpPubkey;
-        bytes blsPubkey;
+        bytes payload;
         bytes signedSecpMessage;
         bytes signedBlsMessage;
 
@@ -26,7 +25,7 @@ interface IValidatorRegistry {
         address requester;
     }
 
-    event ValidatorRequested(uint256 indexed id, address indexed operator, bytes secpPubkey, bytes blsPubkey);
+    event ValidatorRequested(uint256 indexed id, address indexed operator, bytes payload);
 
     event ValidatorAdded(
         uint256 indexed id,
@@ -39,7 +38,6 @@ interface IValidatorRegistry {
 
     event ValidatorRequestCancelled(uint256 indexed id);
 
-    error KeyAlreadyRegistered();
     error UnknownSubmission();
     error NotSubmitted();
     error NotOperator();
@@ -50,33 +48,22 @@ interface IValidatorRegistry {
 
     function nextId() external view returns (uint256);
 
-    function idBySecpPubkey(bytes32 secpKeyHash) external view returns (uint256 id);
-
-    function idByBlsPubkey(bytes32 blsKeyHash) external view returns (uint256 id);
-
-    function requestValidator(
-        bytes calldata secpPubkey,
-        bytes calldata blsPubkey,
-        bytes calldata signedSecpMessage,
-        bytes calldata signedBlsMessage
-    ) external returns (uint256 id);
+    function requestValidator(bytes calldata payload, bytes calldata signedSecpMessage, bytes calldata signedBlsMessage)
+        external
+        returns (uint256 id);
 
     function requestValidatorFor(
         address operator,
-        bytes calldata secpPubkey,
-        bytes calldata blsPubkey,
+        bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external returns (uint256 id);
 
-    function addValidator(uint256 id, uint256 commission) external payable returns (uint64 validatorId);
+    function addValidator(uint256 id) external payable returns (uint64 validatorId);
 
     function cancel(uint256 id) external;
 
     function getSubmission(uint256 id) external view returns (Submission memory);
 
-    function stakingPayload(uint256 id, address authAddress, uint256 amount, uint256 commission)
-        external
-        view
-        returns (bytes memory);
+    function stakingPayload(uint256 id) external view returns (bytes memory);
 }

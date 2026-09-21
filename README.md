@@ -2,7 +2,7 @@
 
 Foundry package for Quevra protocol contracts on Monad.
 
-`ValidatorRegistry` stores validator registration requests. Operators submit consensus keys and the signatures they generated for a Monad `addValidator` payload. A supported executor later calls `addValidator`, paying the stake and supplying the commission; the registry reconstructs the payload from the request, the executor address, `msg.value`, and the supplied commission before forwarding the stored signatures to the staking precompile at `0x1000`.
+`ValidatorRegistry` stores validator registration requests as an opaque, complete 165-byte Monad `addValidator` payload and its two signatures. The payload is forwarded unchanged to the staking precompile at `0x1000`; contracts do not store public keys separately or index them. `addValidator` forwards the signed payload and `msg.value` without interpreting or changing either.
 
 `StakingVault` binds one owner-controlled vault to one registry request. The vault can add that validator once, then delegate additional MON to the validator through the staking precompile.
 
@@ -13,11 +13,14 @@ Vault access control and reentrancy protection come from OpenZeppelin Contracts 
 
 The staking precompile interface is the official Monad `IMonadStaking` ABI.
 
-`StakingController` exposes `signingConfig` and `signingConfigFor` for the
-auth address, commission, and fixed `VALIDATOR_STAKE_AMOUNT` used in validator
-registration signatures. The owner configures commission with `setCommission`;
-the stake amount is a contract constant. Commission uses 1e18 scaling and is
-capped at `MAX_COMMISSION` (100%), matching the staking precompile.
+`StakingController` exposes `signingConfig` after vault creation and
+`signingConfigFor(requester, saltSeed)` before submission. The caller can use
+the resulting auth address, configured commission, and fixed
+`VALIDATOR_STAKE_AMOUNT` to construct and sign the complete payload.
+The constructor sets the initial commission immediately. Later owner updates
+through `setCommission` take effect at the start of cycle + 2. The stake amount
+is a contract constant. Commission uses 1e18 scaling and is capped at
+`MAX_COMMISSION` (100%), matching the staking precompile.
 
 ## Usage
 
