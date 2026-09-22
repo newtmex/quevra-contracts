@@ -9,6 +9,7 @@ import {GaugeFactory} from "../src/factories/GaugeFactory.sol";
 import {VotingRewardsFactory} from "../src/factories/VotingRewardsFactory.sol";
 
 import {StakingController} from "../src/staking/StakingController.sol";
+import {IStakingController} from "../src/interfaces/IStakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
@@ -25,7 +26,7 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_constructorRejectsCommissionAboveMaximum() public {
-        vm.expectRevert(StakingController.InvalidCommission.selector);
+        vm.expectRevert(IStakingController.InvalidCommission.selector);
         new StakingController(address(registry), address(this), 1e18 + 1);
     }
 
@@ -39,7 +40,7 @@ contract StakingControllerTest is StakingControllerFixture {
 
         controller.setVoter(voter);
 
-        vm.expectRevert(StakingController.VoterAlreadySet.selector);
+        vm.expectRevert(IStakingController.VoterAlreadySet.selector);
         controller.setVoter(replacement);
     }
 
@@ -49,7 +50,7 @@ contract StakingControllerTest is StakingControllerFixture {
         controller.setCommission(commission);
 
         vm.expectEmit(false, false, false, true);
-        emit StakingController.ValidatorCommissionScheduled(commission, 2);
+        emit IStakingController.ValidatorCommissionScheduled(commission, 2);
         _setCommission();
 
         assertEq(controller.commission(), 0);
@@ -60,7 +61,7 @@ contract StakingControllerTest is StakingControllerFixture {
         assertEq(controller.commission(), 0);
 
         uint256 invalidCommission = controller.MAX_COMMISSION() + 1;
-        vm.expectRevert(StakingController.InvalidCommission.selector);
+        vm.expectRevert(IStakingController.InvalidCommission.selector);
         controller.setCommission(invalidCommission);
     }
 
@@ -87,7 +88,7 @@ contract StakingControllerTest is StakingControllerFixture {
         assertEq(amount, controller.VALIDATOR_STAKE_AMOUNT());
     }
 
-    function test_receiveOnlyAcceptsMONFromVeMON() public {
+    function test_depositOnlyAcceptsMONFromVeMONAndTracksTokenId() public {
         FactoryRegistry factoryRegistry = new FactoryRegistry();
         GaugeFactory gaugeFactory = new GaugeFactory();
         VotingRewardsFactory rewardsFactory = new VotingRewardsFactory();
@@ -115,5 +116,6 @@ contract StakingControllerTest is StakingControllerFixture {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         assertEq(address(controller).balance, validatorStake);
+        assertEq(controller.balanceOf(1), validatorStake);
     }
 }

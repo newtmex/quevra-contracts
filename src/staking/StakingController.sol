@@ -7,6 +7,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
+import {IStakingController} from "../interfaces/IStakingController.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
@@ -14,14 +15,13 @@ import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol"
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
-/// @dev Accepts MON only from the ve token configured on the voter. Admin-controlled staking flow is deferred.
-contract StakingController is Ownable2Step, ReentrancyGuardTransient {
-    IValidatorRegistry public immutable registry;
-    address public voter;
-    address public immutable vaultImplementation;
-    error UnexpectedAuthAddress();
-
-    mapping(uint256 requestId => address vault) public vaultByRequest;
+/// @dev Accepts MON only through the ve token's explicit deposit call. Admin-controlled staking flow is deferred.
+contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingController {
+    IValidatorRegistry public immutable override registry;
+    address public override voter;
+    address public immutable override vaultImplementation;
+    mapping(uint256 requestId => address vault) public override vaultByRequest;
+    mapping(uint256 tokenId => uint256 amount) public override balanceOf;
     uint256 private _commission;
     uint256 private _pendingCommission;
     uint64 private _pendingCommissionCycle;
@@ -30,22 +30,6 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     uint256 public constant VALIDATOR_STAKE_AMOUNT = 100_000 ether;
     /// @notice Maximum commission accepted by Monad's staking precompile (100%, scaled by 1e18).
     uint256 public constant MAX_COMMISSION = 1e18;
-
-    error InvalidAddress();
-    error InvalidCommission();
-    error VoterAlreadySet();
-    error NotVoter();
-    error InvalidVault();
-    error InvalidValidatorState();
-    error InvalidDepositAmount();
-    error NotVe();
-
-    event VoterSet(address indexed voter);
-    event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
-    event ValidatorCommissionSet(uint256 commission);
-    event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
-    event MONReceived(uint256 amount);
-    event VaultCancelled(uint256 indexed requestId, address indexed vault);
 
     constructor(address registry_, address owner_, uint256 initialCommission_) Ownable(owner_) {
         if (registry_ == address(0) || owner_ == address(0)) revert InvalidAddress();
@@ -56,7 +40,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     }
 
     /// @notice Bind the voter once. The owner must set this after both contracts are deployed.
-    function setVoter(address voter_) external onlyOwner {
+    function setVoter(address voter_) external override onlyOwner {
         if (voter != address(0)) revert VoterAlreadySet();
         if (voter_ == address(0)) revert InvalidAddress();
         voter = voter_;
@@ -70,7 +54,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         bytes32 saltSeed,
         address expectedAuthAddress,
         address gauge
-    ) external returns (address vault) {
+    ) external override returns (address vault) {
         if (msg.sender != voter) revert NotVoter();
         if (requester == address(0) || gauge == address(0) || vaultByRequest[requestId] != address(0)) {
             revert InvalidVault();
@@ -94,7 +78,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         emit VaultRegistered(requestId, vault, gauge, requester);
     }
 
-    function predictVaultAddress(address requester, bytes32 saltSeed) public view returns (address) {
+    function predictVaultAddress(address requester, bytes32 saltSeed) public view override returns (address) {
         return Clones.predictDeterministicAddress(vaultImplementation, _vaultSalt(requester, saltSeed), address(this));
     }
 
@@ -103,7 +87,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     }
 
     /// @notice Schedule commission for the cycle two cycles after the current cycle.
-    function setCommission(uint256 commission_) external onlyOwner {
+    function setCommission(uint256 commission_) external override onlyOwner {
         if (commission_ > MAX_COMMISSION) revert InvalidCommission();
         uint64 effectiveCycle = ProtocolTimeLibrary.currentCycle() + 2;
         _pendingCommission = commission_;
@@ -115,6 +99,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     /// @notice Return the auth address, commission, and amount required by addValidator signatures.
     function signingConfig(uint256 requestId)
         external
+        override
         returns (address authAddress, uint256 commission_, uint256 amount)
     {
         address vault = vaultByRequest[requestId];
@@ -126,6 +111,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
     /// @dev Submit the returned authAddress as expectedAuthAddress.
     function signingConfigFor(address requester, bytes32 saltSeed)
         external
+        override
         returns (address authAddress, uint256 commission_, uint256 amount)
     {
         if (voter == address(0) || requester == address(0)) revert InvalidAddress();
@@ -144,17 +130,22 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient {
         return _commission;
     }
 
-    function commission() external returns (uint256) {
+    function commission() external override returns (uint256) {
         return _effectiveCommission();
     }
 
-    receive() external payable nonReentrant {
-        if (voter == address(0) || msg.sender != IBaseVoter(voter).ve()) revert NotVe();
+    function deposit(uint256 tokenId) external payable override nonReentrant {
+        if (voter == address(0) || msg.sender != _ve()) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
-        emit MONReceived(msg.value);
+        balanceOf[tokenId] += msg.value;
+        emit MONDeposited(tokenId, msg.value);
     }
 
-    function cancelVault(uint256 requestId) external {
+    function _ve() private view returns (address) {
+        return IBaseVoter(voter).ve();
+    }
+
+    function cancelVault(uint256 requestId) external override {
         if (msg.sender != voter) revert NotVoter();
         address vault = vaultByRequest[requestId];
         if (vault == address(0)) revert InvalidVault();

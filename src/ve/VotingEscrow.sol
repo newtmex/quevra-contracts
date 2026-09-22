@@ -55,9 +55,9 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     {
         uint256 unlockEpoch = _unlockEpoch(_lockDuration);
         if (_value == 0) revert InvalidAmount();
-        _deposit(_value);
 
         tokenId = nextId++;
+        _deposit(_value, tokenId);
         IVotingEscrow.LockedBalance memory newLock =
             IVotingEscrow.LockedBalance(int128(int256(_value)), unlockEpoch, false, 0);
         _locked[tokenId] = newLock;
@@ -69,7 +69,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
     /// @dev Custody implementation supplied by the concrete escrow. The lock
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
-    function _deposit(uint256 amount) internal virtual;
+    function _deposit(uint256 amount, uint256 tokenId) internal virtual;
 
     function lockPermanent(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
