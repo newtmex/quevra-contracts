@@ -52,6 +52,13 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     error VoteNotAuthorized();
     error InvalidVote();
     error VotingClosed();
+    error AlreadyVoted();
+
+    modifier onlyNewCycle(uint256 tokenId) {
+        uint64 cycle = ProtocolTimeLibrary.currentCycleStart();
+        if (lastVotedCycle[tokenId] == cycle && usedWeights[tokenId] != 0) revert AlreadyVoted();
+        _;
+    }
 
     event GaugeCreated(address indexed gauge, address indexed bribeVotingReward, address indexed creator);
     event GaugeKilled(address indexed gauge);
@@ -132,6 +139,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         virtual
         override
         nonReentrant
+        onlyNewCycle(tokenId)
     {
         if (!IVotingEscrow(ve).isApprovedOrOwner(_msgSender(), tokenId)) revert VoteNotAuthorized();
         if (gauges.length == 0 || gauges.length != weights_.length) revert InvalidVote();
@@ -156,40 +164,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             uint256 amount = i + 1 == gauges.length ? power - allocated : power * weights_[i] / requested;
             allocated += amount;
             _addVote(tokenId, gauges[i], amount, cycle);
-        }
-        usedWeights[tokenId] = power;
-        lastVotedCycle[tokenId] = cycle;
-        emit Voted(_msgSender(), tokenId, power);
-    }
-
-    function reset(uint256 tokenId) external virtual override nonReentrant {
-        if (!IVotingEscrow(ve).isApprovedOrOwner(_msgSender(), tokenId)) revert VoteNotAuthorized();
-        (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
-        _checkVoteWindow(epoch);
-        _reset(tokenId, ProtocolTimeLibrary.cycleStart(epoch));
-    }
-
-    function poke(uint256 tokenId) external virtual override nonReentrant {
-        if (!IVotingEscrow(ve).isApprovedOrOwner(_msgSender(), tokenId)) revert VoteNotAuthorized();
-        (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
-        _checkVoteWindow(epoch);
-        uint64 cycle = ProtocolTimeLibrary.cycleStart(epoch);
-        address[] memory oldGauges = poolVote[tokenId];
-        uint256[] memory oldAmounts = new uint256[](oldGauges.length);
-        uint256 oldTotal;
-        for (uint256 i; i < oldGauges.length; ++i) {
-            oldAmounts[i] = votes[tokenId][oldGauges[i]];
-            oldTotal += oldAmounts[i];
-        }
-        if (oldTotal == 0) revert InvalidVote();
-        uint256 power = IVotingEscrow(ve).votingPowerOf(tokenId);
-        _reset(tokenId, cycle);
-        uint256 allocated;
-        for (uint256 i; i < oldGauges.length; ++i) {
-            if (!isGauge[oldGauges[i]] || !isAlive[oldGauges[i]]) revert InvalidVote();
-            uint256 amount = i + 1 == oldGauges.length ? power - allocated : power * oldAmounts[i] / oldTotal;
-            allocated += amount;
-            _addVote(tokenId, oldGauges[i], amount, cycle);
         }
         usedWeights[tokenId] = power;
         lastVotedCycle[tokenId] = cycle;

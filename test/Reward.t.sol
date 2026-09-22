@@ -17,7 +17,7 @@ contract RewardTest is RewardFixture {
         assertEq(address(rewardVoter.gaugeToBribe(rewardVoter.validatorToGauge(1))), address(reward));
     }
 
-    function test_voteAndResetUpdateRealBribeBalancesAndCheckpoints() public {
+    function test_voteUpdatesRealBribeBalancesAndCheckpoints() public {
         _setEpoch(6, false);
         uint256 tokenId = _vote(100 ether);
 
@@ -28,17 +28,8 @@ contract RewardTest is RewardFixture {
         assertEq(epoch, 6);
         assertEq(balance, 100 ether);
 
-        _setEpoch(7, false);
-        vm.expectEmit(true, true, false, true, address(reward));
-        emit IReward.Withdraw(address(rewardVoter), tokenId, 100 ether);
-        vm.prank(operator);
-        rewardVoter.reset(tokenId);
-
-        assertEq(reward.balanceOf(tokenId), 0);
-        assertEq(reward.totalSupply(), 0);
-        (epoch, balance) = reward.checkpoints(tokenId, 0);
-        assertEq(epoch, 7);
-        assertEq(balance, 0);
+        assertEq(reward.balanceOf(tokenId), 100 ether);
+        assertEq(reward.totalSupply(), 100 ether);
     }
 
     function test_onlyRealVoterCanMutateBribeBalances() public {

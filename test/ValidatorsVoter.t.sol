@@ -6,6 +6,7 @@ import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
+import {StakingVoter} from "../src/staking/StakingVoter.sol";
 
 contract ValidatorsVoterTest is ValidatorsVoterFixture {
     function test_createValidatorCreatesInitializedVaultAndWiredGauge() public {
@@ -129,5 +130,9 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertEq(validatorsVoter.cycleWeights(5, gaugeB), 75 ether);
         assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(tokenId), 25 ether);
         assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeB)).balanceOf(tokenId), 75 ether);
+
+        vm.prank(operator);
+        vm.expectRevert(StakingVoter.AlreadyVoted.selector);
+        validatorsVoter.vote(tokenId, gauges, weights_);
     }
 }
