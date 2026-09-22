@@ -13,19 +13,26 @@ interface IStakingController {
     error InvalidValidatorState();
     error InvalidDepositAmount();
     error NotVe();
+    error EmptyArray();
+    error LengthMismatch();
+    error ZeroAmount();
+    error InsufficientBalance();
+    error ValidatorNotActivated();
 
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
-    event VaultCancelled(uint256 indexed requestId, address indexed vault);
+    event AgentCreated(uint256 indexed tokenId, address indexed agent);
+    event Staked(uint256 indexed tokenId, uint256 amount);
 
     function voter() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
     function vaultImplementation() external view returns (address);
-    function vaultByRequest(uint256 requestId) external view returns (address);
+    function vaultByGauge(address gauge) external view returns (address);
     function balanceOf(uint256 tokenId) external view returns (uint256);
+    function agentByToken(uint256 tokenId) external view returns (address);
 
     function setVoter(address voter_) external;
 
@@ -40,12 +47,11 @@ interface IStakingController {
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
 
     function setCommission(uint256 commission_) external;
-    function signingConfig(uint256 requestId) external returns (address authAddress, uint256 commission, uint256 amount);
     function signingConfigFor(address requester, bytes32 saltSeed)
         external
         returns (address authAddress, uint256 commission, uint256 amount);
     function commission() external returns (uint256);
 
     function deposit(uint256 tokenId) external payable;
-    function cancelVault(uint256 requestId) external;
+    function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
 }

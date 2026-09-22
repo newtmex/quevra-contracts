@@ -84,14 +84,6 @@ contract ValidatorRegistry is IValidatorRegistry {
         );
     }
 
-    function cancel(uint256 id) external override {
-        Submission storage submission = _submitted(id);
-        if (msg.sender != submission.requester) revert NotOperator();
-
-        submission.status = Status.Cancelled;
-        emit ValidatorRequestCancelled(id);
-    }
-
     function getSubmission(uint256 id) external view override returns (Submission memory submission) {
         submission = _submissions[id];
         if (submission.operator == address(0)) revert UnknownSubmission();

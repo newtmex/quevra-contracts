@@ -9,6 +9,7 @@ import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
+import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
@@ -20,8 +21,9 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     IValidatorRegistry public immutable override registry;
     address public override voter;
     address public immutable override vaultImplementation;
-    mapping(uint256 requestId => address vault) public override vaultByRequest;
+    mapping(address gauge => address vault) public override vaultByGauge;
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
+    mapping(uint256 tokenId => address agent) public override agentByToken;
     uint256 private _commission;
     uint256 private _pendingCommission;
     uint64 private _pendingCommissionCycle;
@@ -56,7 +58,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         address gauge
     ) external override returns (address vault) {
         if (msg.sender != voter) revert NotVoter();
-        if (requester == address(0) || gauge == address(0) || vaultByRequest[requestId] != address(0)) {
+        if (requester == address(0) || gauge == address(0) || vaultByGauge[gauge] != address(0)) {
             revert InvalidVault();
         }
 
@@ -74,7 +76,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         bytes32 salt = _vaultSalt(requester, saltSeed);
         vault = Clones.cloneDeterministic(vaultImplementation, salt);
         StakingVault(payable(vault)).initialize(address(registry), requestId);
-        vaultByRequest[requestId] = vault;
+        vaultByGauge[gauge] = vault;
         emit VaultRegistered(requestId, vault, gauge, requester);
     }
 
@@ -94,17 +96,6 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         _pendingCommissionCycle = effectiveCycle;
         emit ValidatorCommissionSet(commission_);
         emit ValidatorCommissionScheduled(commission_, effectiveCycle);
-    }
-
-    /// @notice Return the auth address, commission, and amount required by addValidator signatures.
-    function signingConfig(uint256 requestId)
-        external
-        override
-        returns (address authAddress, uint256 commission_, uint256 amount)
-    {
-        address vault = vaultByRequest[requestId];
-        if (vault == address(0)) revert InvalidVault();
-        return (vault, _effectiveCommission(), VALIDATOR_STAKE_AMOUNT);
     }
 
     /// @notice Configuration to sign BEFORE requesting a validator.
@@ -141,19 +132,73 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         emit MONDeposited(tokenId, msg.value);
     }
 
-    function _ve() private view returns (address) {
-        return IBaseVoter(voter).ve();
+    /// @notice Allocate a token's available MON to validator requests selected by the voter.
+    /// @dev A request's vault is topped up first. Any allocation left after activation is
+    /// delegated by the token-bound agent, so changing allocations in a later cycle is safe.
+    function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        if (msg.sender != voter) revert NotVoter();
+        if (gauges.length == 0) revert EmptyArray();
+        if (gauges.length != amounts.length) revert LengthMismatch();
+
+        uint256 total;
+        for (uint256 i; i < amounts.length; ++i) {
+            if (amounts[i] == 0) revert ZeroAmount();
+            total += amounts[i];
+        }
+        if (total > balanceOf[tokenId]) revert InsufficientBalance();
+        balanceOf[tokenId] -= total;
+
+        address agent = agentByToken[tokenId];
+        if (agent == address(0)) {
+            agent = address(new StakingAgent(tokenId));
+            agentByToken[tokenId] = agent;
+            emit AgentCreated(tokenId, agent);
+        }
+
+        uint64[] memory validatorIds = new uint64[](gauges.length);
+        uint256[] memory delegated = new uint256[](gauges.length);
+        uint256 delegatedCount;
+        uint256 delegatedTotal;
+        for (uint256 i; i < gauges.length; ++i) {
+            (uint64 validatorId, uint256 remainder) = _allocate(tokenId, gauges[i], amounts[i]);
+            if (remainder != 0) {
+                validatorIds[delegatedCount] = validatorId;
+                delegated[delegatedCount] = remainder;
+                delegatedTotal += remainder;
+                ++delegatedCount;
+            }
+        }
+        if (delegatedTotal != 0) {
+            assembly {
+                mstore(validatorIds, delegatedCount)
+                mstore(delegated, delegatedCount)
+            }
+            StakingAgent(payable(agent)).delegate{value: delegatedTotal}(validatorIds, delegated);
+        }
+        emit Staked(tokenId, total);
     }
 
-    function cancelVault(uint256 requestId) external override {
-        if (msg.sender != voter) revert NotVoter();
-        address vault = vaultByRequest[requestId];
+    function _allocate(uint256 tokenId, address gauge, uint256 amount)
+        private
+        returns (uint64 validatorId, uint256 remainder)
+    {
+        address vault = vaultByGauge[gauge];
         if (vault == address(0)) revert InvalidVault();
-        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
-        if (submission.status != IValidatorRegistry.Status.Submitted || submission.validatorId != 0) {
-            revert InvalidValidatorState();
+        uint256 deficit = StakingVault(payable(vault)).deficit();
+        uint256 toVault = amount < deficit ? amount : deficit;
+        if (toVault != 0) StakingVault(payable(vault)).deposit{value: toVault}(tokenId);
+        remainder = amount - toVault;
+        if (remainder != 0) {
+            validatorId = StakingVault(payable(vault)).validatorId();
+            if (validatorId == 0) revert ValidatorNotActivated();
         }
-        delete vaultByRequest[requestId];
-        emit VaultCancelled(requestId, vault);
+    }
+
+    function _ve() private view returns (address) {
+        return IBaseVoter(voter).ve();
     }
 }

@@ -62,36 +62,6 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
         assertEq(authAddress, address(0x1234));
     }
 
-    function test_cancelAllowsNewSubmission() public {
-        uint256 id = _requestValidator();
-
-        vm.prank(operator);
-        registry.cancel(id);
-
-        uint256 newId = _requestValidator();
-        assertEq(newId, 2);
-        assertEq(uint256(registry.getSubmission(id).status), uint256(IValidatorRegistry.Status.Cancelled));
-    }
-
-    function test_cancelRevertsIfNotOperator() public {
-        uint256 id = _requestValidator();
-
-        vm.prank(executor);
-        vm.expectRevert(IValidatorRegistry.NotOperator.selector);
-        registry.cancel(id);
-    }
-
-    function test_addValidatorRevertsAfterCancellation() public {
-        uint256 id = _requestValidator();
-
-        vm.prank(operator);
-        registry.cancel(id);
-
-        vm.prank(executor);
-        vm.expectRevert(IValidatorRegistry.NotSubmitted.selector);
-        registry.addValidator{value: validatorStake}(id);
-    }
-
     function test_unknownSubmissionReverts() public {
         vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
         registry.getSubmission(1);

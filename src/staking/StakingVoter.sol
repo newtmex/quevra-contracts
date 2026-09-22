@@ -31,7 +31,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     mapping(address => bool) public override isWhitelistedToken;
     mapping(address => address) public gaugeToBribe;
     mapping(address => bool) public isGauge;
-    mapping(address => bool) public isAlive;
     mapping(address => uint256) public claimable;
 
     // Voting records are shared across staking voter implementations.
@@ -46,8 +45,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
     error ZeroAddress();
     error GaugeFactoryNotApproved();
-    error GaugeDoesNotExist(address gauge);
-    error GaugeAlreadyKilled();
     error NotGovernor();
     error VoteNotAuthorized();
     error InvalidVote();
@@ -61,7 +58,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     }
 
     event GaugeCreated(address indexed gauge, address indexed bribeVotingReward, address indexed creator);
-    event GaugeKilled(address indexed gauge);
     event SplitterSet(address indexed splitter);
     event WhitelistToken(address indexed whitelister, address indexed token, bool indexed whitelisted);
     event Voted(address indexed voter, uint256 indexed tokenId, uint256 weight);
@@ -117,21 +113,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
         gaugeToBribe[gauge] = bribe;
         isGauge[gauge] = true;
-        isAlive[gauge] = true;
         emit GaugeCreated(gauge, bribe, _msgSender());
-    }
-
-    function _onGaugeKilled(address gauge) internal {
-        if (!isGauge[gauge]) revert GaugeDoesNotExist(gauge);
-        if (!isAlive[gauge]) revert GaugeAlreadyKilled();
-
-        uint256 amount = claimable[gauge];
-        if (amount != 0) {
-            delete claimable[gauge];
-            IERC20(rewardToken).safeTransfer(splitter, amount);
-        }
-        isAlive[gauge] = false;
-        emit GaugeKilled(gauge);
     }
 
     function vote(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights_)
@@ -149,7 +131,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
         uint256 requested;
         for (uint256 i; i < gauges.length; ++i) {
-            if (!isGauge[gauges[i]] || !isAlive[gauges[i]] || weights_[i] == 0) revert InvalidVote();
+            if (!isGauge[gauges[i]] || weights_[i] == 0) revert InvalidVote();
             for (uint256 j; j < i; ++j) {
                 if (gauges[j] == gauges[i]) revert InvalidVote();
             }

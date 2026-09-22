@@ -13,10 +13,9 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         (uint256 requestId, address vault, address gauge) = _createValidator();
 
         assertEq(StakingVault(payable(vault)).requestId(), requestId);
-        assertEq(controller.vaultByRequest(requestId), vault);
+        assertEq(controller.vaultByGauge(gauge), vault);
         assertEq(validatorsVoter.validatorToGauge(requestId), gauge);
         assertTrue(validatorsVoter.isGauge(gauge));
-        assertTrue(validatorsVoter.isAlive(gauge));
         assertEq(NonStakingGauge(gauge).voter(), address(validatorsVoter));
         assertEq(NonStakingGauge(gauge).ve(), address(veMON));
         assertEq(NonStakingGauge(gauge).rewardsBeneficiary(), operator);
@@ -38,19 +37,7 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertEq(registry.nextId(), 1);
     }
 
-    function test_notifyValidatorLeftKillsGaugeAfterSubmissionIsCancelled() public {
-        (uint256 requestId,, address gauge) = _createValidator();
-
-        vm.prank(operator);
-        validatorsVoter.cancel(requestId);
-
-        assertFalse(validatorsVoter.isAlive(gauge));
-        assertEq(validatorsVoter.validatorToGauge(requestId), address(0));
-        assertEq(controller.vaultByRequest(requestId), address(0));
-        assertEq(uint256(registry.getSubmission(requestId).status), uint256(IValidatorRegistry.Status.Cancelled));
-    }
-
-    function test_operatorCanManageMultipleSubmissionsById() public {
+    function test_multipleSubmissionsRemainPermanentlyMapped() public {
         (uint256 firstId,, address firstGauge) = _createValidator();
         bytes memory secondPayload = abi.encodePacked(
             bytes1(0x02),
@@ -79,14 +66,8 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertEq(validatorsVoter.validatorToGauge(firstId), firstGauge);
         assertEq(validatorsVoter.validatorToGauge(secondId), secondGauge);
 
-        vm.prank(operator);
-        validatorsVoter.cancel(firstId);
-
-        assertFalse(validatorsVoter.isAlive(firstGauge));
-        assertTrue(validatorsVoter.isAlive(secondGauge));
         assertEq(validatorsVoter.validatorToGauge(secondId), secondGauge);
-        validatorsVoter.notifyValidatorLeft(secondId);
-        assertTrue(validatorsVoter.isAlive(secondGauge));
+        assertTrue(controller.vaultByGauge(firstGauge) != address(0));
     }
 
     function test_voteAllocatesProportionallyAndDepositsRewardWeight() public {

@@ -13,12 +13,8 @@ contract ValidatorsVoter is StakingVoter, Initializable {
     address public gaugeFactory;
 
     event ValidatorGaugeCreated(address indexed operator, address indexed gauge, address indexed beneficiary);
-    event ValidatorLeft(address indexed operator, address indexed gauge);
 
     error GaugeExistsForValidator();
-    error SubmissionCancelled();
-    error NoSubmission();
-    error NotSubmissionOperator();
 
     constructor(address forwarder_) StakingVoter(forwarder_) {
         _disableInitializers();
@@ -57,41 +53,10 @@ contract ValidatorsVoter is StakingVoter, Initializable {
         vault = controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
     }
 
-    function notifyValidatorLeft(uint256 submissionId) external nonReentrant {
-        _notifyValidatorLeft(submissionId);
-    }
-
-    function cancel(uint256 submissionId) external nonReentrant {
-        if (validatorToGauge[submissionId] == address(0)) revert NoSubmission();
-        IValidatorRegistry.Submission memory submission = registry.getSubmission(submissionId);
-        address operator = submission.operator;
-        if (operator == address(0)) revert NoSubmission();
-        if (_msgSender() != operator) revert NotSubmissionOperator();
-
-        controller.cancelVault(submissionId);
-        registry.cancel(submissionId);
-        _notifyValidatorLeft(submissionId);
-    }
-
-    function _notifyValidatorLeft(uint256 submissionId) private {
-        address gauge = validatorToGauge[submissionId];
-        if (!isGauge[gauge] || !isAlive[gauge]) return;
-
-        if (registry.getSubmission(submissionId).status != IValidatorRegistry.Status.Cancelled) return;
-
-        address operator = registry.getSubmission(submissionId).operator;
-        delete validatorToGauge[submissionId];
-        _onGaugeKilled(gauge);
-        emit ValidatorLeft(operator, gauge);
-    }
-
     function _createValidatorGauge(uint256 requestId, address operator, address beneficiary)
         internal
         returns (address gauge)
     {
-        if (registry.getSubmission(requestId).status == IValidatorRegistry.Status.Cancelled) {
-            revert SubmissionCancelled();
-        }
         if (validatorToGauge[requestId] != address(0)) revert GaugeExistsForValidator();
 
         gauge = _createGauge(gaugeFactory, beneficiary);
