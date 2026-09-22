@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {VeMON} from "../src/VeMON.sol";
-import {VotingEscrow} from "../src/VotingEscrow.sol";
+import {VotingEscrow} from "../src/ve/VotingEscrow.sol";
 import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 import {VeMONFixture} from "./fixtures/VeMONFixture.sol";

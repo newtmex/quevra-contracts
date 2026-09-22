@@ -1,29 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IBaseVoter} from "./interfaces/IBaseVoter.sol";
-import {IFactoryRegistry} from "./interfaces/factories/IFactoryRegistry.sol";
-import {IGaugeFactory} from "./interfaces/factories/IGaugeFactory.sol";
-import {IVotingRewardsFactory} from "./interfaces/factories/IVotingRewardsFactory.sol";
+import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
+import {IFactoryRegistry} from "../interfaces/factories/IFactoryRegistry.sol";
+import {IGaugeFactory} from "../interfaces/factories/IGaugeFactory.sol";
+import {IVotingRewardsFactory} from "../interfaces/factories/IVotingRewardsFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {IVoter} from "./interfaces/IVoter.sol";
-import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
-import {IReward} from "./interfaces/IReward.sol";
-import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {IVoter} from "../interfaces/IVoter.sol";
+import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {IReward} from "../interfaces/IReward.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
+import {StakingController} from "./StakingController.sol";
 
-/// @notice Gauge creation and lifecycle hooks shared by validator voters.
+/// @notice Gauge creation and lifecycle hooks shared by staking voters.
 /// @dev This carries the Tigris creation dependencies while leaving Quevra's
 ///      cycle voting and reward accounting in its existing voter contracts.
-abstract contract NonStakingVoter is IBaseVoter, IVoter, ERC2771Context, ReentrancyGuard {
+abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     address public immutable forwarder;
     address public override ve;
     address public factoryRegistry;
     address public rewardToken;
+    StakingController public controller;
     address public splitter;
     address public governor;
     mapping(address => bool) public override isWhitelistedToken;
@@ -32,7 +34,7 @@ abstract contract NonStakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentra
     mapping(address => bool) public isAlive;
     mapping(address => uint256) public claimable;
 
-    // Voting records are shared across non-staking voter implementations.
+    // Voting records are shared across staking voter implementations.
     mapping(uint256 => address[]) public poolVote;
     mapping(uint256 => uint256) public usedWeights;
     mapping(uint256 => mapping(address => uint256)) public votes;
@@ -63,11 +65,14 @@ abstract contract NonStakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentra
         forwarder = forwarder_;
     }
 
-    function __NonStakingVoter_init(address ve_, address factoryRegistry_, address rewardToken_) internal {
-        if (ve_ == address(0) || factoryRegistry_ == address(0)) revert ZeroAddress();
+    function __StakingVoter_init(address ve_, address factoryRegistry_, address rewardToken_, address controller_)
+        internal
+    {
+        if (ve_ == address(0) || factoryRegistry_ == address(0) || controller_ == address(0)) revert ZeroAddress();
         ve = ve_;
         factoryRegistry = factoryRegistry_;
         rewardToken = rewardToken_;
+        controller = StakingController(payable(controller_));
         splitter = _msgSender();
         governor = _msgSender();
     }

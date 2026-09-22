@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
-import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
-import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 /// @title VotingEscrow
 /// @notice Abstract veNFT escrow implementation for Quevra voting power.

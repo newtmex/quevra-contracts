@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {VotingEscrow} from "./VotingEscrow.sol";
+import {VotingEscrow} from "./ve/VotingEscrow.sol";
 
 /// @title veMON
 /// @notice Quevra voting escrow for MON routed into validator staking.

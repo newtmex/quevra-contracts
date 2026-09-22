@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {NonStakingVoter} from "./NonStakingVoter.sol";
+import {StakingVoter} from "./staking/StakingVoter.sol";
 import {IValidatorRegistry} from "./interfaces/IValidatorRegistry.sol";
-import {StakingController} from "./staking/StakingController.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /// @title ValidatorsVoter
 /// @notice Creates validator submissions with an initialized staking vault and gauge.
-contract ValidatorsVoter is NonStakingVoter, Initializable {
+contract ValidatorsVoter is StakingVoter, Initializable {
     IValidatorRegistry public registry;
     mapping(uint256 => address) public validatorToGauge;
-    StakingController public controller;
     address public gaugeFactory;
 
     event ValidatorGaugeCreated(address indexed operator, address indexed gauge, address indexed beneficiary);
@@ -22,7 +20,7 @@ contract ValidatorsVoter is NonStakingVoter, Initializable {
     error NoSubmission();
     error NotSubmissionOperator();
 
-    constructor(address forwarder_) NonStakingVoter(forwarder_) {
+    constructor(address forwarder_) StakingVoter(forwarder_) {
         _disableInitializers();
     }
 
@@ -34,10 +32,9 @@ contract ValidatorsVoter is NonStakingVoter, Initializable {
         address controller_,
         address gaugeFactory_
     ) external initializer {
-        __NonStakingVoter_init(ve_, factoryRegistry_, rewardToken_);
+        __StakingVoter_init(ve_, factoryRegistry_, rewardToken_, controller_);
         if (registry_ == address(0) || controller_ == address(0) || gaugeFactory_ == address(0)) revert ZeroAddress();
         registry = IValidatorRegistry(registry_);
-        controller = StakingController(payable(controller_));
         gaugeFactory = gaugeFactory_;
     }
 
