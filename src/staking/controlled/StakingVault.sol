@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {StakeControlled} from "./StakeControlled.sol";
 
-import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
+import {IValidatorRegistry} from "../../interfaces/IValidatorRegistry.sol";
 
 /// @title StakingVault
 /// @notice MON vault bound to exactly one validator.

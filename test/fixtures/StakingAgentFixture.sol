@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {StakingAgent} from "../../src/staking/StakingAgent.sol";
+import {StakingAgent} from "../../src/staking/controlled/StakingAgent.sol";
 import {BaseTest} from "./BaseTest.sol";
 
 abstract contract StakingAgentFixture is BaseTest {

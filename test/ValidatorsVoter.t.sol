@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
 import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
-import {StakingVault} from "../src/staking/StakingVault.sol";
+import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
 

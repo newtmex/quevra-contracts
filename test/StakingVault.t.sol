@@ -7,8 +7,8 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
-import {StakingVault} from "../src/staking/StakingVault.sol";
-import {StakeControlled} from "../src/staking/StakeControlled.sol";
+import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
+import {StakeControlled} from "../src/staking/controlled/StakeControlled.sol";
 import {StakingVaultFixture} from "./fixtures/StakingVaultFixture.sol";
 
 contract StakingVaultTest is StakingVaultFixture {

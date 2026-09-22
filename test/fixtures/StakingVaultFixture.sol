@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import {StakingVault} from "../../src/staking/StakingVault.sol";
+import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ValidatorRegistryFixture} from "./ValidatorRegistryFixture.sol";
 

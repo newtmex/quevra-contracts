@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {StakingAgent} from "../src/staking/StakingAgent.sol";
-import {StakeControlled} from "../src/staking/StakeControlled.sol";
+import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
+import {StakeControlled} from "../src/staking/controlled/StakeControlled.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {StakingAgentFixture} from "./fixtures/StakingAgentFixture.sol";
 

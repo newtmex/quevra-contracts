@@ -7,7 +7,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
-import {StakingVault} from "./StakingVault.sol";
+import {StakingVault} from "./controlled/StakingVault.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
