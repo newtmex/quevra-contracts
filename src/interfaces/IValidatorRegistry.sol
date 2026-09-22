@@ -4,7 +4,9 @@ pragma solidity ^0.8.24;
 /// @title IValidatorRegistry
 /// @notice Registry for opaque validator registration payloads and registry-owned delegation.
 interface IValidatorRegistry {
-    enum Status { Submitted }
+    enum Status {
+        Submitted
+    }
 
     struct Submission {
         bytes payload;
@@ -38,5 +40,4 @@ interface IValidatorRegistry {
     ) external returns (uint256 id);
 
     function getSubmission(uint256 id) external view returns (Submission memory);
-
 }

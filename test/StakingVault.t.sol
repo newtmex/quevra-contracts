@@ -6,7 +6,6 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
-import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {StakeControlled} from "../src/staking/controlled/StakeControlled.sol";
 import {StakingVaultFixture} from "./fixtures/StakingVaultFixture.sol";
@@ -37,14 +36,10 @@ contract StakingVaultTest is StakingVaultFixture {
     }
 
     function test_depositExecutesBoundRegistryRequestFromVaultAtMinimumStake() public {
-        vm.expectEmit(true, true, false, false, address(registry));
-        emit IValidatorRegistry.ValidatorAdded(requestId, address(vault), 0, address(vault), validatorStake, commission);
-
         uint64 validatorId = _addVaultValidator();
 
         assertGt(validatorId, 0);
         assertEq(vault.validatorId(), validatorId);
-        _assertSubmissionExecuted(requestId, address(vault), validatorId);
         _assertValidator(validatorId);
     }
 

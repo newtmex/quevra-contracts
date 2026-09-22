@@ -57,7 +57,10 @@ contract StakingVault is StakeControlled {
         if (validatorId != 0) {
             STAKING.delegate{value: balance}(validatorId);
         } else {
-            validatorId = registry.addValidator{value: balance}(requestId);
+            IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
+            validatorId = STAKING.addValidator{value: balance}(
+                submission.payload, submission.signedSecpMessage, submission.signedBlsMessage
+            );
             if (validatorId == 0) revert AddValidatorFailed();
         }
     }
