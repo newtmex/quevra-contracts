@@ -31,7 +31,8 @@ abstract contract StakingVaultFixture is ValidatorRegistryFixture {
 
     function _addVaultValidator() internal returns (uint64 validatorId) {
         vm.prank(owner);
-        validatorId = vault.addValidator{value: validatorStake}();
+        vault.deposit{value: validatorStake}(0);
+        validatorId = vault.validatorId();
     }
 
     function _delegatorPosition(uint64 validatorId)

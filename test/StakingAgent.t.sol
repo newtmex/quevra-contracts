@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {StakingAgent} from "../src/staking/StakingAgent.sol";
+import {StakeControlled} from "../src/staking/StakeControlled.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {StakingAgentFixture} from "./fixtures/StakingAgentFixture.sol";
 
@@ -13,25 +14,20 @@ contract StakingAgentTest is StakingAgentFixture {
         assertEq(agent.controller(), address(this));
     }
 
-    function test_constructorRejectsZeroController() public {
-        vm.expectRevert(StakingAgent.InvalidController.selector);
-        new StakingAgent(tokenId, address(0));
-    }
-
     function test_onlyControllerCanCallActions() public {
         uint64[] memory ids = _ids(validatorA);
         uint256[] memory amounts = _amounts(1 ether);
 
         vm.prank(stranger);
-        vm.expectRevert(StakingAgent.OnlyController.selector);
+        vm.expectRevert(StakeControlled.OnlyController.selector);
         agent.delegate{value: 1 ether}(ids, amounts);
 
         vm.prank(stranger);
-        vm.expectRevert(StakingAgent.OnlyController.selector);
+        vm.expectRevert(StakeControlled.OnlyController.selector);
         agent.undelegate(ids, amounts);
 
         vm.prank(stranger);
-        vm.expectRevert(StakingAgent.OnlyController.selector);
+        vm.expectRevert(StakeControlled.OnlyController.selector);
         agent.withdraw(ids);
     }
 

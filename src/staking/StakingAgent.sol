@@ -2,18 +2,15 @@
 pragma solidity ^0.8.24;
 
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
-import {MonadStdConstants} from "monad-std/MonadStdConstants.sol";
+import {StakeControlled} from "./StakeControlled.sol";
 
 /// @title StakingAgent
 /// @notice A token-bound agent that delegates MON to Monad validators.
-contract StakingAgent is MonadStdConstants {
+contract StakingAgent is StakeControlled {
     uint8 public constant WITHDRAW_ID = 0;
 
     uint256 public immutable tokenId;
-    address public immutable controller;
 
-    error InvalidController();
-    error OnlyController();
     error EmptyArray();
     error LengthMismatch();
     error ZeroAmount();
@@ -22,15 +19,8 @@ contract StakingAgent is MonadStdConstants {
     error TransferFailed();
     error UnexpectedEtherSender();
 
-    constructor(uint256 tokenId_, address controller_) {
-        if (controller_ == address(0)) revert InvalidController();
+    constructor(uint256 tokenId_) {
         tokenId = tokenId_;
-        controller = controller_;
-    }
-
-    modifier onlyController() {
-        if (msg.sender != controller) revert OnlyController();
-        _;
     }
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
@@ -59,7 +49,7 @@ contract StakingAgent is MonadStdConstants {
             if (!STAKING.withdraw(validatorIds[i], WITHDRAW_ID)) revert StakingCallFailed();
         }
 
-        uint256 balance = address(this).balance;
+        uint256 balance = availableBalance();
         if (balance != 0) {
             (bool success,) = payable(controller).call{value: balance}("");
             if (!success) revert TransferFailed();
