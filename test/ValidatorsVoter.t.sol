@@ -105,8 +105,8 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         vm.prank(operator);
         validatorsVoter.vote(tokenId, gauges, weights_);
 
-        assertEq(validatorsVoter.votes(tokenId, gaugeA), 25 ether);
-        assertEq(validatorsVoter.votes(tokenId, gaugeB), 75 ether);
+        _assertVoteAllocation(tokenId, gaugeA, 25 ether, 25 ether);
+        _assertVoteAllocation(tokenId, gaugeB, 75 ether, 75 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeA), 25 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeB), 75 ether);
         assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(tokenId), 25 ether);
@@ -115,5 +115,14 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         vm.prank(operator);
         vm.expectRevert(StakingVoter.AlreadyVoted.selector);
         validatorsVoter.vote(tokenId, gauges, weights_);
+    }
+
+    function _assertVoteAllocation(uint256 tokenId, address gauge, uint256 expectedWeight, uint256 expectedStake)
+        internal
+        view
+    {
+        (uint128 weight, uint128 stakeAmount) = validatorsVoter.votes(tokenId, gauge);
+        assertEq(weight, expectedWeight);
+        assertEq(stakeAmount, expectedStake);
     }
 }

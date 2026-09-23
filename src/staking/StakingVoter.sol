@@ -21,12 +21,16 @@ import {StakingController} from "./StakingController.sol";
 abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    struct VoteAllocation {
+        uint128 weight;
+        uint128 stakeAmount;
+    }
+
     address public immutable forwarder;
     address public override ve;
     address public factoryRegistry;
     address public rewardToken;
     StakingController public controller;
-    address public splitter;
     address public governor;
     mapping(address => bool) public override isWhitelistedToken;
     mapping(address => address) public gaugeToBribe;
@@ -36,7 +40,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     // Voting records are shared across staking voter implementations.
     mapping(uint256 => address[]) public poolVote;
     mapping(uint256 => uint256) public usedWeights;
-    mapping(uint256 => mapping(address => uint256)) public votes;
+    mapping(uint256 => mapping(address => VoteAllocation)) public votes;
     mapping(address => uint256) public weights;
     uint256 public totalWeight;
     mapping(uint64 => mapping(address => uint256)) public cycleWeights;
@@ -58,7 +62,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     }
 
     event GaugeCreated(address indexed gauge, address indexed bribeVotingReward, address indexed creator);
-    event SplitterSet(address indexed splitter);
     event WhitelistToken(address indexed whitelister, address indexed token, bool indexed whitelisted);
     event Voted(address indexed voter, uint256 indexed tokenId, uint256 weight);
     event Abstained(uint256 indexed tokenId, uint256 weight);
@@ -76,7 +79,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         factoryRegistry = factoryRegistry_;
         rewardToken = rewardToken_;
         controller = StakingController(payable(controller_));
-        splitter = _msgSender();
         governor = _msgSender();
     }
 
@@ -88,13 +90,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         if (_msgSender() != governor) revert NotGovernor();
         if (governor_ == address(0)) revert ZeroAddress();
         governor = governor_;
-    }
-
-    function setSplitter(address splitter_) external {
-        if (_msgSender() != governor) revert NotGovernor();
-        if (splitter_ == address(0)) revert ZeroAddress();
-        splitter = splitter_;
-        emit SplitterSet(splitter_);
     }
 
     function whitelistToken(address token, bool whitelisted) external {
@@ -139,17 +134,36 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         }
         uint256 power = IVotingEscrow(ve).votingPowerOf(tokenId);
         if (requested == 0 || power == 0) revert InvalidVote();
+        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
+        if (lockedAmount <= 0) revert InvalidVote();
+        uint256 principal = uint256(uint128(lockedAmount));
 
         _reset(tokenId, cycle);
-        uint256 allocated;
-        for (uint256 i; i < gauges.length; ++i) {
-            uint256 amount = i + 1 == gauges.length ? power - allocated : power * weights_[i] / requested;
-            allocated += amount;
-            _addVote(tokenId, gauges[i], amount, cycle);
-        }
+        _addVoteAllocations(tokenId, gauges, weights_, requested, power, principal, cycle);
         usedWeights[tokenId] = power;
         lastVotedCycle[tokenId] = cycle;
         emit Voted(_msgSender(), tokenId, power);
+    }
+
+    function _addVoteAllocations(
+        uint256 tokenId,
+        address[] calldata gauges,
+        uint256[] calldata weights_,
+        uint256 requested,
+        uint256 power,
+        uint256 principal,
+        uint64 cycle
+    ) private {
+        uint256 allocatedWeight;
+        uint256 allocatedStake;
+        for (uint256 i; i < gauges.length; ++i) {
+            bool isLast = i + 1 == gauges.length;
+            uint256 weight = _distributed(power, weights_[i], requested, allocatedWeight, isLast);
+            uint256 stakeAmount = _distributed(principal, weights_[i], requested, allocatedStake, isLast);
+            allocatedWeight += weight;
+            allocatedStake += stakeAmount;
+            _addVote(tokenId, gauges[i], weight, stakeAmount, cycle);
+        }
     }
 
     function poolVoteLength(uint256 tokenId) external view returns (uint256) {
@@ -166,29 +180,42 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         address[] storage oldGauges = poolVote[tokenId];
         for (uint256 i; i < oldGauges.length; ++i) {
             address gauge = oldGauges[i];
-            uint256 amount = votes[tokenId][gauge];
-            if (amount == 0) continue;
-            weights[gauge] -= amount;
-            totalWeight -= amount;
+            VoteAllocation memory allocation = votes[tokenId][gauge];
+            if (allocation.weight == 0) continue;
+            weights[gauge] -= allocation.weight;
+            totalWeight -= allocation.weight;
             if (lastVotedCycle[tokenId] == cycle) {
-                cycleWeights[cycle][gauge] -= amount;
-                cycleTotalWeight[cycle] -= amount;
+                cycleWeights[cycle][gauge] -= allocation.weight;
+                cycleTotalWeight[cycle] -= allocation.weight;
             }
             delete votes[tokenId][gauge];
-            IReward(gaugeToBribe[gauge])._withdraw(amount, tokenId);
-            emit Abstained(tokenId, amount);
+            IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
+            emit Abstained(tokenId, allocation.weight);
         }
         delete poolVote[tokenId];
         usedWeights[tokenId] = 0;
     }
 
-    function _addVote(uint256 tokenId, address gauge, uint256 amount, uint64 cycle) private {
+    function _addVote(uint256 tokenId, address gauge, uint256 weight, uint256 stakeAmount, uint64 cycle) private {
         poolVote[tokenId].push(gauge);
-        votes[tokenId][gauge] = amount;
-        weights[gauge] += amount;
-        totalWeight += amount;
-        cycleWeights[cycle][gauge] += amount;
-        cycleTotalWeight[cycle] += amount;
-        IReward(gaugeToBribe[gauge])._deposit(amount, tokenId);
+        votes[tokenId][gauge] = VoteAllocation(_toUint128(weight), _toUint128(stakeAmount));
+        weights[gauge] += weight;
+        totalWeight += weight;
+        cycleWeights[cycle][gauge] += weight;
+        cycleTotalWeight[cycle] += weight;
+        IReward(gaugeToBribe[gauge])._deposit(weight, tokenId);
+    }
+
+    function _toUint128(uint256 value) private pure returns (uint128) {
+        if (value > type(uint128).max) revert InvalidVote();
+        return uint128(value);
+    }
+
+    function _distributed(uint256 total, uint256 requestedWeight, uint256 requested, uint256 allocated, bool isLast)
+        private
+        pure
+        returns (uint256)
+    {
+        return isLast ? total - allocated : total * requestedWeight / requested;
     }
 }
