@@ -5,6 +5,7 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
@@ -26,6 +27,17 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     mapping(address => bool) private _isAgent;
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
+    /// @dev Enumerable positions only. Amounts are always read from the vault and agent.
+    mapping(uint256 tokenId => address[] gauges) private _allocatedGauges;
+    mapping(uint256 tokenId => mapping(address gauge => uint256 indexPlusOne)) private _allocatedGaugeIndex;
+    IMonadStaking private constant STAKING = IMonadStaking(0x0000000000000000000000000000000000001000);
+    uint8 private constant WITHDRAW_ID = 0;
+
+    struct UnstakePlan {
+        uint64 validatorId;
+        uint256 agentAmount;
+        uint256 vaultAmount;
+    }
     uint256 private _commission;
     uint256 private _pendingCommission;
     uint64 private _pendingCommissionCycle;
@@ -128,6 +140,56 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         return _effectiveCommission();
     }
 
+    /// @inheritdoc IStakingController
+    function allocationOf(uint256 tokenId, address gauge) public view override returns (uint256) {
+        address vaultAddress = vaultByGauge[gauge];
+        if (vaultAddress == address(0)) return 0;
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        uint256 allocated = vault.exiting() ? 0 : vault.balanceOf(tokenId);
+        address agent = agentByToken[tokenId];
+        uint64 validatorId = vault.validatorId();
+        if (agent == address(0) || validatorId == 0) return allocated;
+        return allocated + StakingAgent(payable(agent)).balanceOf(validatorId);
+    }
+
+    /// @inheritdoc IStakingController
+    function allocatedGauges(uint256 tokenId) external view override returns (address[] memory) {
+        return _allocatedGauges[tokenId];
+    }
+
+    /// @inheritdoc IStakingController
+    function executableStake(address gauge, uint256 amount) public view override returns (uint256) {
+        address vaultAddress = vaultByGauge[gauge];
+        if (vaultAddress == address(0) || amount == 0) return 0;
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        if (vault.validatorId() != 0) return amount;
+        uint256 deficit = vault.deficit();
+        // Covering the deficit activates the validator inside `stake`, which can also delegate the surplus.
+        if (deficit != 0 && amount >= deficit) return amount;
+        return amount < deficit ? amount : 0;
+    }
+
+    /// @inheritdoc IStakingController
+    function executableUnstake(uint256 tokenId, address gauge, uint256 amount)
+        external
+        view
+        override
+        returns (uint256)
+    {
+        if (amount == 0 || vaultByGauge[gauge] == address(0)) return 0;
+        UnstakePlan memory plan = _planUnstake(tokenId, gauge, amount);
+        return plan.agentAmount + plan.vaultAmount;
+    }
+
+    /// @inheritdoc IStakingController
+    function withdrawalReady(uint256 tokenId, address gauge) external override returns (bool) {
+        address vaultAddress = vaultByGauge[gauge];
+        if (vaultAddress == address(0)) return false;
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        if (_vaultReady(vault, tokenId)) return true;
+        return _agentReady(agentByToken[tokenId], vault.validatorId());
+    }
+
     function deposit(uint256 tokenId) external payable override nonReentrant {
         if (voter == address(0) || msg.sender != _ve()) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
@@ -188,11 +250,16 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             }
             StakingAgent(payable(agent)).delegate{value: delegatedTotal}(validatorIds, delegated);
         }
+        for (uint256 i; i < gauges.length; ++i) {
+            _trackGauge(tokenId, gauges[i]);
+        }
         emit Staked(tokenId, total);
     }
 
     /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
-    /// @dev Monad requires undelegation and withdrawal to happen in different epochs.
+    /// @dev Agent delegation is consumed before vault auth stake. Monad requires
+    ///      undelegation and withdrawal to happen in different epochs, except for
+    ///      vault MON that was never delegated, which is returned immediately.
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
@@ -205,21 +272,26 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         address agent = agentByToken[tokenId];
         uint64[] memory validatorIds = new uint64[](gauges.length);
         uint256[] memory delegated = new uint256[](gauges.length);
+        bool[] memory unwindVault = new bool[](gauges.length);
         uint256 delegatedCount;
         uint256 total;
 
         for (uint256 i; i < gauges.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
-            (uint64 validatorId, uint256 remainder) = _prepareUnstake(tokenId, gauges[i], amounts[i]);
-            if (remainder != 0) {
+            UnstakePlan memory plan = _planUnstake(tokenId, gauges[i], amounts[i]);
+            if (plan.agentAmount + plan.vaultAmount != amounts[i]) revert InvalidUnstakeAmount();
+            if (plan.agentAmount != 0) {
                 if (agent == address(0)) revert InvalidUnstakeAmount();
-                validatorIds[delegatedCount] = validatorId;
-                delegated[delegatedCount] = remainder;
+                validatorIds[delegatedCount] = plan.validatorId;
+                delegated[delegatedCount] = plan.agentAmount;
                 ++delegatedCount;
             }
+            unwindVault[i] = plan.vaultAmount != 0;
             total += amounts[i];
         }
 
+        // Undelegate agent allocations before touching the vault. Monad may
+        // reject validator operations when the vault is undelegated first.
         if (delegatedCount != 0) {
             assembly {
                 mstore(validatorIds, delegatedCount)
@@ -228,72 +300,94 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             StakingAgent(payable(agent)).undelegate(validatorIds, delegated);
         }
 
-        // Undelegate agent allocations before touching the vault. Monad may
-        // reject validator operations when the vault is undelegated first.
+        uint256 returnedToLiquid;
         for (uint256 i; i < gauges.length; ++i) {
-            address vault = vaultByGauge[gauges[i]];
-            uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
-            if (vaultBalance != 0 && amounts[i] >= vaultBalance && StakingVault(payable(vault)).validatorId() != 0) {
-                StakingVault(payable(vault)).undelegate();
+            if (!unwindVault[i]) continue;
+            address vaultAddress = vaultByGauge[gauges[i]];
+            if (StakingVault(payable(vaultAddress)).validatorId() == 0) {
+                returnedToLiquid += _collectVault(tokenId, vaultAddress);
+            } else {
+                StakingVault(payable(vaultAddress)).undelegate();
             }
+        }
+        if (returnedToLiquid != 0) {
+            balanceOf[tokenId] += returnedToLiquid;
+            emit Withdrawn(tokenId, returnedToLiquid);
+        }
+        for (uint256 i; i < gauges.length; ++i) {
+            _trackGauge(tokenId, gauges[i]);
         }
         emit Unstaked(tokenId, total);
     }
 
-    function _prepareUnstake(uint256 tokenId, address gauge, uint256 amount)
-        private
-        view
-        returns (uint64 validatorId, uint256 remainder)
-    {
-        address vault = vaultByGauge[gauge];
-        if (vault == address(0)) revert InvalidVault();
-        uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
-        uint256 fromVault = amount < vaultBalance ? amount : vaultBalance;
-        if (fromVault != 0 && fromVault != vaultBalance) revert InvalidUnstakeAmount();
-        remainder = amount - fromVault;
-        if (remainder != 0) {
-            validatorId = StakingVault(payable(vault)).validatorId();
-            if (validatorId == 0) revert ValidatorNotActivated();
-        }
-    }
-
     /// @notice Complete a prior `unstake` after Monad's withdrawal delay.
+    /// @dev Only pulls vault balances that are exiting and agent withdrawals that have matured.
     function withdraw(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
         if (msg.sender != voter) revert NotVoter();
         if (gauges.length == 0) revert EmptyArray();
 
         uint256 reclaimed;
+        address agent = agentByToken[tokenId];
+        uint64[] memory validatorIds = new uint64[](gauges.length);
+        uint256 validatorCount;
+
         for (uint256 i; i < gauges.length; ++i) {
-            address vault = vaultByGauge[gauges[i]];
-            if (vault == address(0)) revert InvalidVault();
-            uint256 beforeBalance = address(this).balance;
-            StakingVault(payable(vault)).withdraw(tokenId);
-            reclaimed += address(this).balance - beforeBalance;
+            address vaultAddress = vaultByGauge[gauges[i]];
+            if (vaultAddress == address(0)) revert InvalidVault();
+            StakingVault vault = StakingVault(payable(vaultAddress));
+            if (_vaultReady(vault, tokenId)) reclaimed += _collectVault(tokenId, vaultAddress);
+
+            uint64 validatorId = vault.validatorId();
+            if (_agentReady(agent, validatorId) && !_contains(validatorIds, validatorCount, validatorId)) {
+                validatorIds[validatorCount] = validatorId;
+                ++validatorCount;
+            }
         }
 
-        address agent = agentByToken[tokenId];
-        if (agent != address(0)) {
+        if (validatorCount != 0) {
+            assembly {
+                mstore(validatorIds, validatorCount)
+            }
             uint256 beforeBalance = address(this).balance;
-            uint64[] memory validatorIds = new uint64[](gauges.length);
-            uint256 validatorCount;
-            for (uint256 i; i < gauges.length; ++i) {
-                uint64 validatorId = StakingVault(payable(vaultByGauge[gauges[i]])).validatorId();
-                if (StakingAgent(payable(agent)).pendingWithdrawal(validatorId) != 0) {
-                    validatorIds[validatorCount] = validatorId;
-                    ++validatorCount;
-                }
-            }
-            if (validatorCount != 0) {
-                assembly {
-                    mstore(validatorIds, validatorCount)
-                }
-                StakingAgent(payable(agent)).withdraw(validatorIds);
-                reclaimed += address(this).balance - beforeBalance;
-            }
+            StakingAgent(payable(agent)).withdraw(validatorIds);
+            reclaimed += address(this).balance - beforeBalance;
         }
         if (reclaimed == 0) revert InvalidUnstakeAmount();
         balanceOf[tokenId] += reclaimed;
+        for (uint256 i; i < gauges.length; ++i) {
+            _trackGauge(tokenId, gauges[i]);
+        }
         emit Withdrawn(tokenId, reclaimed);
+    }
+
+    /// @dev Agent stake is spent before vault auth stake. A busy agent withdrawal slot blocks
+    ///      another undelegation, and the vault moves only when the request takes its entire balance.
+    function _planUnstake(uint256 tokenId, address gauge, uint256 amount)
+        private
+        view
+        returns (UnstakePlan memory plan)
+    {
+        address vaultAddress = vaultByGauge[gauge];
+        if (vaultAddress == address(0)) revert InvalidVault();
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        plan.validatorId = vault.validatorId();
+        uint256 activeVault = vault.exiting() ? 0 : vault.balanceOf(tokenId);
+
+        uint256 agentBalance;
+        bool agentBlocked;
+        address agent = agentByToken[tokenId];
+        if (agent != address(0) && plan.validatorId != 0) {
+            StakingAgent stakingAgent = StakingAgent(payable(agent));
+            agentBalance = stakingAgent.balanceOf(plan.validatorId);
+            agentBlocked = stakingAgent.pendingWithdrawal(plan.validatorId) != 0;
+        }
+        // Occupied slot: leave the vault in place until the agent stake can move with it.
+        if (agentBlocked && agentBalance != 0) return plan;
+
+        uint256 coveredByAgent = amount < agentBalance ? amount : agentBalance;
+        uint256 vaultNeed = amount - coveredByAgent;
+        plan.agentAmount = coveredByAgent;
+        if (vaultNeed != 0 && vaultNeed == activeVault) plan.vaultAmount = vaultNeed;
     }
 
     function _allocate(uint256 tokenId, address gauge, uint256 amount)
@@ -314,5 +408,76 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
 
     function _ve() private view returns (address) {
         return IBaseVoter(voter).ve();
+    }
+
+    function _collectVault(uint256 tokenId, address vaultAddress) private returns (uint256 amount) {
+        uint256 beforeBalance = address(this).balance;
+        StakingVault(payable(vaultAddress)).withdraw(tokenId);
+        return address(this).balance - beforeBalance;
+    }
+
+    function _positionOf(uint256 tokenId, address gauge) private view returns (uint256) {
+        address vaultAddress = vaultByGauge[gauge];
+        if (vaultAddress == address(0)) return 0;
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        uint256 position = vault.balanceOf(tokenId);
+        address agent = agentByToken[tokenId];
+        uint64 validatorId = vault.validatorId();
+        if (agent == address(0) || validatorId == 0) return position;
+        StakingAgent stakingAgent = StakingAgent(payable(agent));
+        return position + stakingAgent.balanceOf(validatorId) + stakingAgent.pendingWithdrawal(validatorId);
+    }
+
+    function _trackGauge(uint256 tokenId, address gauge) private {
+        if (_positionOf(tokenId, gauge) == 0) {
+            _forgetGauge(tokenId, gauge);
+            return;
+        }
+        if (_allocatedGaugeIndex[tokenId][gauge] != 0) return;
+        _allocatedGauges[tokenId].push(gauge);
+        _allocatedGaugeIndex[tokenId][gauge] = _allocatedGauges[tokenId].length;
+    }
+
+    function _forgetGauge(uint256 tokenId, address gauge) private {
+        uint256 indexPlusOne = _allocatedGaugeIndex[tokenId][gauge];
+        if (indexPlusOne == 0) return;
+        uint256 last = _allocatedGauges[tokenId].length;
+        if (indexPlusOne != last) {
+            address moved = _allocatedGauges[tokenId][last - 1];
+            _allocatedGauges[tokenId][indexPlusOne - 1] = moved;
+            _allocatedGaugeIndex[tokenId][moved] = indexPlusOne;
+        }
+        _allocatedGauges[tokenId].pop();
+        delete _allocatedGaugeIndex[tokenId][gauge];
+    }
+
+    function _vaultReady(StakingVault vault, uint256 tokenId) private returns (bool) {
+        uint256 amount = vault.balanceOf(tokenId);
+        if (amount == 0 || !vault.exiting()) return false;
+        if (vault.availableBalance() >= amount) return true;
+        uint64 validatorId = vault.validatorId();
+        if (validatorId == 0) return false;
+        return _mature(validatorId, address(vault));
+    }
+
+    function _agentReady(address agent, uint64 validatorId) private returns (bool) {
+        if (agent == address(0) || validatorId == 0) return false;
+        if (StakingAgent(payable(agent)).pendingWithdrawal(validatorId) == 0) return false;
+        return _mature(validatorId, agent);
+    }
+
+    /// @dev Claimable on the epoch after the precompile's `withdrawEpoch`, matching Monad's withdrawal delay.
+    function _mature(uint64 validatorId, address delegator) private returns (bool) {
+        (uint256 amount,, uint64 withdrawEpoch) = STAKING.getWithdrawalRequest(validatorId, delegator, WITHDRAW_ID);
+        if (amount == 0) return false;
+        (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
+        return epoch > withdrawEpoch;
+    }
+
+    function _contains(uint64[] memory validatorIds, uint256 count, uint64 validatorId) private pure returns (bool) {
+        for (uint256 i; i < count; ++i) {
+            if (validatorIds[i] == validatorId) return true;
+        }
+        return false;
     }
 }

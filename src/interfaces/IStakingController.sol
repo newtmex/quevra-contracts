@@ -38,6 +38,22 @@ interface IStakingController {
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
 
+    /// @notice Realized MON allocated to `gauge` for `tokenId` (vault contribution + agent delegation).
+    /// @dev Excludes MON already undelegated into a withdrawal.
+    function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
+
+    /// @notice Gauges that still hold vault, agent, or pending-withdrawal MON for `tokenId`.
+    function allocatedGauges(uint256 tokenId) external view returns (address[] memory);
+
+    /// @notice Portion of `amount` that `stake` can execute for `gauge` right now.
+    function executableStake(address gauge, uint256 amount) external view returns (uint256);
+
+    /// @notice Portion of `amount` that `unstake` can execute without over-withdrawing or reusing a busy slot.
+    function executableUnstake(uint256 tokenId, address gauge, uint256 amount) external view returns (uint256);
+
+    /// @notice Whether a matured or already-liquid withdrawal can be pulled for this gauge.
+    function withdrawalReady(uint256 tokenId, address gauge) external returns (bool);
+
     function setVoter(address voter_) external;
 
     function deployVault(

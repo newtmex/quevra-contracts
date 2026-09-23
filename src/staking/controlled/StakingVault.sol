@@ -20,6 +20,10 @@ contract StakingVault is StakeControlled {
     /// @notice Set after the request is successfully executed.
     uint64 public validatorId;
 
+    /// @notice True once this vault's validator stake has been undelegated, until it is fully withdrawn.
+    /// @dev While set, `balanceOf` is in-flight withdrawal principal, not realized allocation.
+    bool public exiting;
+
     error ValidatorAlreadyAdded();
     error ValidatorNotAdded();
     error InvalidRequest();
@@ -63,26 +67,30 @@ contract StakingVault is StakeControlled {
             );
             if (validatorId == 0) revert AddValidatorFailed();
         }
+        exiting = false;
     }
 
     /// @notice Begin withdrawing the vault's entire validator stake.
+    /// @dev All-or-nothing: Monad stake for this vault is one position, not a per-token slice.
     function undelegate() external onlyController {
+        if (validatorId == 0) revert ValidatorNotAdded();
         (uint256 stake,,,,,,) = STAKING.getDelegator(validatorId, address(this));
-        if (stake > 0 && !STAKING.undelegate(validatorId, stake, WITHDRAW_ID)) {
-            revert UndelegationFailed();
-        }
+        if (stake == 0) return;
+        if (!STAKING.undelegate(validatorId, stake, WITHDRAW_ID)) revert UndelegationFailed();
+        exiting = true;
     }
 
     function withdraw(uint256 tokenId) external onlyController returns (uint256 amount) {
         amount = balanceOf[tokenId];
-        if (amount == 0) revert InvalidAmount();
+        if (amount == 0) return 0;
 
         if (availableBalance() < amount) {
-            if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
+            if (validatorId == 0 || !STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
         }
 
         delete balanceOf[tokenId];
         totalBalance -= amount;
+        if (totalBalance == 0) exiting = false;
 
         (bool success,) = payable(controller).call{value: amount}("");
         if (!success) revert TransferFailed();

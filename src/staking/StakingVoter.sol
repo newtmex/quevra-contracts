@@ -143,6 +143,15 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         usedWeights[tokenId] = power;
         lastVotedCycle[tokenId] = cycle;
         emit Voted(_msgSender(), tokenId, power);
+        // Best-effort. Stake still in a Monad withdrawal stays pending and does not revert the vote.
+        _rebalance(tokenId);
+    }
+
+    /// @notice Permissionlessly settle matured withdrawals and move `tokenId` toward its latest vote.
+    /// @dev Surpluses are unstaked before deficits are funded. A deficit whose MON is still pending
+    ///      withdrawal is left unresolved so a later call can follow the vote that is current then.
+    function rebalance(uint256 tokenId) external override nonReentrant {
+        _rebalance(tokenId);
     }
 
     function _addVoteAllocations(
@@ -217,5 +226,110 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         returns (uint256)
     {
         return isLast ? total - allocated : total * requestedWeight / requested;
+    }
+
+    function _rebalance(uint256 tokenId) private {
+        _settle(tokenId);
+
+        address[] memory gauges = _reconcileGauges(tokenId);
+        uint256 count = gauges.length;
+        if (count == 0) return;
+
+        address[] memory unstakeGauges = new address[](count);
+        uint256[] memory unstakeAmounts = new uint256[](count);
+        uint256 unstakeCount;
+        for (uint256 i; i < count; ++i) {
+            uint256 current = controller.allocationOf(tokenId, gauges[i]);
+            uint256 target = votes[tokenId][gauges[i]].stakeAmount;
+            if (current <= target) continue;
+            uint256 executable = controller.executableUnstake(tokenId, gauges[i], current - target);
+            if (executable == 0) continue;
+            unstakeGauges[unstakeCount] = gauges[i];
+            unstakeAmounts[unstakeCount] = executable;
+            unchecked {
+                ++unstakeCount;
+            }
+        }
+        if (unstakeCount != 0) {
+            assembly {
+                mstore(unstakeGauges, unstakeCount)
+                mstore(unstakeAmounts, unstakeCount)
+            }
+            controller.unstake(tokenId, unstakeGauges, unstakeAmounts);
+        }
+
+        uint256 liquid = controller.balanceOf(tokenId);
+        if (liquid == 0) return;
+
+        address[] memory stakeGauges = new address[](count);
+        uint256[] memory stakeAmounts = new uint256[](count);
+        uint256 stakeCount;
+        for (uint256 i; i < count; ++i) {
+            if (liquid == 0) break;
+            uint256 current = controller.allocationOf(tokenId, gauges[i]);
+            uint256 target = votes[tokenId][gauges[i]].stakeAmount;
+            if (current >= target) continue;
+            uint256 desired = target - current;
+            if (desired > liquid) desired = liquid;
+            desired = controller.executableStake(gauges[i], desired);
+            if (desired == 0) continue;
+            stakeGauges[stakeCount] = gauges[i];
+            stakeAmounts[stakeCount] = desired;
+            liquid -= desired;
+            unchecked {
+                ++stakeCount;
+            }
+        }
+        if (stakeCount == 0) return;
+        assembly {
+            mstore(stakeGauges, stakeCount)
+            mstore(stakeAmounts, stakeCount)
+        }
+        controller.stake(tokenId, stakeGauges, stakeAmounts);
+    }
+
+    function _settle(uint256 tokenId) private {
+        address[] memory allocated = controller.allocatedGauges(tokenId);
+        uint256 length = allocated.length;
+        if (length == 0) return;
+        address[] memory ready = new address[](length);
+        uint256 count;
+        for (uint256 i; i < length; ++i) {
+            if (!controller.withdrawalReady(tokenId, allocated[i])) continue;
+            ready[count] = allocated[i];
+            unchecked {
+                ++count;
+            }
+        }
+        if (count == 0) return;
+        assembly {
+            mstore(ready, count)
+        }
+        controller.withdraw(tokenId, ready);
+    }
+
+    /// @dev Current votes plus gauges that still hold stake from a vote that has since been replaced.
+    function _reconcileGauges(uint256 tokenId) private view returns (address[] memory gauges) {
+        address[] memory voted = poolVote[tokenId];
+        address[] memory allocated = controller.allocatedGauges(tokenId);
+        gauges = new address[](voted.length + allocated.length);
+        uint256 count;
+        for (uint256 i; i < voted.length; ++i) {
+            gauges[count++] = voted[i];
+        }
+        for (uint256 i; i < allocated.length; ++i) {
+            if (_contains(voted, allocated[i])) continue;
+            gauges[count++] = allocated[i];
+        }
+        assembly {
+            mstore(gauges, count)
+        }
+    }
+
+    function _contains(address[] memory gauges, address gauge) private pure returns (bool) {
+        for (uint256 i; i < gauges.length; ++i) {
+            if (gauges[i] == gauge) return true;
+        }
+        return false;
     }
 }
