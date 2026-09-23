@@ -37,6 +37,7 @@ interface IStakingController {
     function vaultByGauge(address gauge) external view returns (address);
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
+    function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
 
     function setVoter(address voter_) external;
 

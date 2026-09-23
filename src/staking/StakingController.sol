@@ -135,6 +135,17 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         emit MONDeposited(tokenId, msg.value);
     }
 
+    function allocationOf(uint256 tokenId, address gauge) external view override returns (uint256 allocation) {
+        address vault = vaultByGauge[gauge];
+        if (vault == address(0)) return 0;
+        allocation = StakingVault(payable(vault)).balanceOf(tokenId);
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        address agent = agentByToken[tokenId];
+        if (agent != address(0) && validatorId != 0) {
+            allocation += StakingAgent(payable(agent)).balanceOf(validatorId);
+        }
+    }
+
     /// @dev Receives redeemed MON from a token's vault or agent.
     receive() external payable {
         if (!_isVault[msg.sender] && !_isAgent[msg.sender]) revert UnexpectedEtherSender();
@@ -205,16 +216,19 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         address agent = agentByToken[tokenId];
         uint64[] memory validatorIds = new uint64[](gauges.length);
         uint256[] memory delegated = new uint256[](gauges.length);
+        uint256[] memory vaultWithdrawals = new uint256[](gauges.length);
         uint256 delegatedCount;
         uint256 total;
 
         for (uint256 i; i < gauges.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
-            (uint64 validatorId, uint256 remainder) = _prepareUnstake(tokenId, gauges[i], amounts[i]);
-            if (remainder != 0) {
+            (uint64 validatorId, uint256 agentAmount, uint256 vaultAmount) =
+                _prepareUnstake(tokenId, gauges[i], amounts[i]);
+            vaultWithdrawals[i] = vaultAmount;
+            if (agentAmount != 0) {
                 if (agent == address(0)) revert InvalidUnstakeAmount();
                 validatorIds[delegatedCount] = validatorId;
-                delegated[delegatedCount] = remainder;
+                delegated[delegatedCount] = agentAmount;
                 ++delegatedCount;
             }
             total += amounts[i];
@@ -232,8 +246,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         // reject validator operations when the vault is undelegated first.
         for (uint256 i; i < gauges.length; ++i) {
             address vault = vaultByGauge[gauges[i]];
-            uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
-            if (vaultBalance != 0 && amounts[i] >= vaultBalance && StakingVault(payable(vault)).validatorId() != 0) {
+            if (vaultWithdrawals[i] != 0 && StakingVault(payable(vault)).validatorId() != 0) {
                 StakingVault(payable(vault)).undelegate();
             }
         }
@@ -243,16 +256,22 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     function _prepareUnstake(uint256 tokenId, address gauge, uint256 amount)
         private
         view
-        returns (uint64 validatorId, uint256 remainder)
+        returns (uint64 validatorId, uint256 agentAmount, uint256 vaultAmount)
     {
         address vault = vaultByGauge[gauge];
         if (vault == address(0)) revert InvalidVault();
         uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
-        uint256 fromVault = amount < vaultBalance ? amount : vaultBalance;
-        if (fromVault != 0 && fromVault != vaultBalance) revert InvalidUnstakeAmount();
-        remainder = amount - fromVault;
-        if (remainder != 0) {
+        address agent = agentByToken[tokenId];
+        uint256 agentBalance;
+        if (agent != address(0)) {
             validatorId = StakingVault(payable(vault)).validatorId();
+            if (validatorId != 0) agentBalance = StakingAgent(payable(agent)).balanceOf(validatorId);
+        }
+        agentAmount = amount < agentBalance ? amount : agentBalance;
+        uint256 remaining = amount - agentAmount;
+        if (remaining != 0) {
+            if (vaultBalance == 0 || remaining != vaultBalance) revert InvalidUnstakeAmount();
+            vaultAmount = vaultBalance;
             if (validatorId == 0) revert ValidatorNotActivated();
         }
     }
@@ -266,9 +285,11 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         for (uint256 i; i < gauges.length; ++i) {
             address vault = vaultByGauge[gauges[i]];
             if (vault == address(0)) revert InvalidVault();
-            uint256 beforeBalance = address(this).balance;
-            StakingVault(payable(vault)).withdraw(tokenId);
-            reclaimed += address(this).balance - beforeBalance;
+            if (StakingVault(payable(vault)).balanceOf(tokenId) != 0) {
+                uint256 beforeBalance = address(this).balance;
+                StakingVault(payable(vault)).withdraw(tokenId);
+                reclaimed += address(this).balance - beforeBalance;
+            }
         }
 
         address agent = agentByToken[tokenId];
