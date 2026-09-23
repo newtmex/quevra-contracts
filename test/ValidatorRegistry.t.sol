@@ -41,7 +41,5 @@ contract ValidatorRegistryTest is ValidatorRegistryFixture {
     function test_unknownSubmissionReverts() public {
         vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
         registry.getSubmission(1);
-
-        vm.expectRevert(IValidatorRegistry.UnknownSubmission.selector);
     }
 }

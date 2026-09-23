@@ -11,6 +11,9 @@ import {VotingRewardsFactory} from "../src/factories/VotingRewardsFactory.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
 import {IStakingController} from "../src/interfaces/IStakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
+import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
+import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
     function test_constructorSetsRegistryAndVaultImplementation() public view {
@@ -117,5 +120,39 @@ contract StakingControllerTest is StakingControllerFixture {
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         assertEq(address(controller).balance, validatorStake);
         assertEq(controller.balanceOf(1), validatorStake);
+    }
+}
+
+contract StakingControllerUnstakeTest is ValidatorsVoterFixture {
+    function test_stakeThenUnstakeAndWithdrawRestoresMONWithoutMocks() public {
+        (,, address gauge) = _createValidator();
+        uint256 amount = validatorStake;
+
+        vm.prank(operator);
+        veMON.createLock{value: amount}(amount, lockDuration);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = gauge;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+
+        vm.prank(address(validatorsVoter));
+        controller.stake(1, gauges, amounts);
+        assertEq(controller.balanceOf(1), 0);
+
+        // Validator activation/delegation becomes an active stake at the next epoch.
+        _setEpoch(1, false);
+        vm.prank(address(validatorsVoter));
+        controller.unstake(1, gauges, amounts);
+
+        // Read the actual maturity epoch instead of assuming a fixed delay.
+        address vault = controller.vaultByGauge(gauge);
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        vm.prank(address(validatorsVoter));
+        controller.withdraw(1, gauges);
+
+        assertEq(controller.balanceOf(1), amount);
     }
 }

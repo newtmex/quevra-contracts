@@ -22,8 +22,11 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     address public override voter;
     address public immutable override vaultImplementation;
     mapping(address gauge => address vault) public override vaultByGauge;
+    mapping(address => bool) private _isVault;
+    mapping(address => bool) private _isAgent;
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
+    mapping(uint256 tokenId => mapping(uint64 validatorId => bool)) private _pendingAgentWithdraw;
     uint256 private _commission;
     uint256 private _pendingCommission;
     uint64 private _pendingCommissionCycle;
@@ -77,6 +80,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         vault = Clones.cloneDeterministic(vaultImplementation, salt);
         StakingVault(payable(vault)).initialize(address(registry), requestId);
         vaultByGauge[gauge] = vault;
+        _isVault[vault] = true;
         emit VaultRegistered(requestId, vault, gauge, requester);
     }
 
@@ -132,6 +136,11 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         emit MONDeposited(tokenId, msg.value);
     }
 
+    /// @dev Receives redeemed MON from a token's vault or agent.
+    receive() external payable {
+        if (!_isVault[msg.sender] && !_isAgent[msg.sender]) revert UnexpectedEtherSender();
+    }
+
     /// @notice Allocate a token's available MON to validator requests selected by the voter.
     /// @dev A request's vault is topped up first. Any allocation left after activation is
     /// delegated by the token-bound agent, so changing allocations in a later cycle is safe.
@@ -156,6 +165,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         if (agent == address(0)) {
             agent = address(new StakingAgent(tokenId));
             agentByToken[tokenId] = agent;
+            _isAgent[agent] = true;
             emit AgentCreated(tokenId, agent);
         }
 
@@ -180,6 +190,105 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             StakingAgent(payable(agent)).delegate{value: delegatedTotal}(validatorIds, delegated);
         }
         emit Staked(tokenId, total);
+    }
+
+    /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
+    /// @dev Monad requires undelegation and withdrawal to happen in different epochs.
+    function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        if (msg.sender != voter) revert NotVoter();
+        if (gauges.length == 0) revert EmptyArray();
+        if (gauges.length != amounts.length) revert LengthMismatch();
+
+        address agent = agentByToken[tokenId];
+        uint64[] memory validatorIds = new uint64[](gauges.length);
+        uint256[] memory delegated = new uint256[](gauges.length);
+        uint256 delegatedCount;
+        uint256 total;
+
+        for (uint256 i; i < gauges.length; ++i) {
+            if (amounts[i] == 0) revert ZeroAmount();
+            (uint64 validatorId, uint256 remainder) = _prepareUnstake(tokenId, gauges[i], amounts[i]);
+            if (remainder != 0) {
+                if (agent == address(0)) revert InvalidUnstakeAmount();
+                validatorIds[delegatedCount] = validatorId;
+                delegated[delegatedCount] = remainder;
+                _pendingAgentWithdraw[tokenId][validatorId] = true;
+                ++delegatedCount;
+            }
+            total += amounts[i];
+        }
+
+        if (delegatedCount != 0) {
+            assembly {
+                mstore(validatorIds, delegatedCount)
+                mstore(delegated, delegatedCount)
+            }
+            StakingAgent(payable(agent)).undelegate(validatorIds, delegated);
+        }
+        emit Unstaked(tokenId, total);
+    }
+
+    function _prepareUnstake(uint256 tokenId, address gauge, uint256 amount)
+        private
+        returns (uint64 validatorId, uint256 remainder)
+    {
+        address vault = vaultByGauge[gauge];
+        if (vault == address(0)) revert InvalidVault();
+        uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
+        uint256 fromVault = amount < vaultBalance ? amount : vaultBalance;
+        if (fromVault != 0) {
+            if (fromVault != vaultBalance) revert InvalidUnstakeAmount();
+            if (StakingVault(payable(vault)).validatorId() != 0) StakingVault(payable(vault)).undelegate();
+        }
+        remainder = amount - fromVault;
+        if (remainder != 0) {
+            validatorId = StakingVault(payable(vault)).validatorId();
+            if (validatorId == 0) revert ValidatorNotActivated();
+        }
+    }
+
+    /// @notice Complete a prior `unstake` after Monad's withdrawal delay.
+    function withdraw(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
+        if (msg.sender != voter) revert NotVoter();
+        if (gauges.length == 0) revert EmptyArray();
+
+        uint256 reclaimed;
+        for (uint256 i; i < gauges.length; ++i) {
+            address vault = vaultByGauge[gauges[i]];
+            if (vault == address(0)) revert InvalidVault();
+            uint256 beforeBalance = address(this).balance;
+            StakingVault(payable(vault)).withdraw(tokenId);
+            reclaimed += address(this).balance - beforeBalance;
+        }
+
+        address agent = agentByToken[tokenId];
+        if (agent != address(0)) {
+            uint256 beforeBalance = address(this).balance;
+            uint64[] memory validatorIds = new uint64[](gauges.length);
+            uint256 validatorCount;
+            for (uint256 i; i < gauges.length; ++i) {
+                uint64 validatorId = StakingVault(payable(vaultByGauge[gauges[i]])).validatorId();
+                if (_pendingAgentWithdraw[tokenId][validatorId]) {
+                    validatorIds[validatorCount] = validatorId;
+                    delete _pendingAgentWithdraw[tokenId][validatorId];
+                    ++validatorCount;
+                }
+            }
+            if (validatorCount != 0) {
+                assembly {
+                    mstore(validatorIds, validatorCount)
+                }
+                StakingAgent(payable(agent)).withdraw(validatorIds);
+                reclaimed += address(this).balance - beforeBalance;
+            }
+        }
+        if (reclaimed == 0) revert InvalidUnstakeAmount();
+        balanceOf[tokenId] += reclaimed;
+        emit Withdrawn(tokenId, reclaimed);
     }
 
     function _allocate(uint256 tokenId, address gauge, uint256 amount)

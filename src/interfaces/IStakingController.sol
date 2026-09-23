@@ -18,6 +18,8 @@ interface IStakingController {
     error ZeroAmount();
     error InsufficientBalance();
     error ValidatorNotActivated();
+    error InvalidUnstakeAmount();
+    error UnexpectedEtherSender();
 
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -26,6 +28,8 @@ interface IStakingController {
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
     event AgentCreated(uint256 indexed tokenId, address indexed agent);
     event Staked(uint256 indexed tokenId, uint256 amount);
+    event Unstaked(uint256 indexed tokenId, uint256 amount);
+    event Withdrawn(uint256 indexed tokenId, uint256 amount);
 
     function voter() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
@@ -54,4 +58,6 @@ interface IStakingController {
 
     function deposit(uint256 tokenId) external payable;
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function withdraw(uint256 tokenId, address[] calldata gauges) external;
 }

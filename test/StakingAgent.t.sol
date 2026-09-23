@@ -124,6 +124,27 @@ contract StakingAgentTest is StakingAgentFixture {
         assertEq(address(agent).balance, 0);
     }
 
+    function test_unstakeFlowUndelegatesBeforeLaterWithdraw() public {
+        uint64[] memory ids = _ids(validatorA);
+        uint256[] memory amounts = _amounts(3 ether);
+
+        vm.mockCall(
+            address(staking), abi.encodeCall(IMonadStaking.undelegate, (validatorA, 3 ether, 0)), abi.encode(true)
+        );
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.withdraw, (validatorA, 0)), abi.encode(true));
+        vm.deal(address(agent), 3 ether);
+
+        // The controller first submits the undelegation. No MON is redeemed yet.
+        agent.undelegate(ids, amounts);
+        assertEq(address(agent).balance, 3 ether);
+
+        // Withdrawal is a separate later operation, after Monad's epoch delay.
+        uint256 beforeBalance = address(this).balance;
+        agent.withdraw(ids);
+        assertEq(address(this).balance, beforeBalance + 3 ether);
+        assertEq(address(agent).balance, 0);
+    }
+
     function test_withdrawRejectsEmptyArray() public {
         vm.expectRevert(StakingAgent.EmptyArray.selector);
         agent.withdraw(new uint64[](0));

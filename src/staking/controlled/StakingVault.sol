@@ -68,7 +68,7 @@ contract StakingVault is StakeControlled {
     /// @notice Begin withdrawing the vault's entire validator stake.
     function undelegate() external onlyController {
         (uint256 stake,,,,,,) = STAKING.getDelegator(validatorId, address(this));
-        if (stake == 0 || !STAKING.undelegate(validatorId, stake, WITHDRAW_ID)) {
+        if (stake > 0 && !STAKING.undelegate(validatorId, stake, WITHDRAW_ID)) {
             revert UndelegationFailed();
         }
     }
