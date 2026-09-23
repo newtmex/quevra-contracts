@@ -26,7 +26,6 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     mapping(address => bool) private _isAgent;
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
-    mapping(uint256 tokenId => mapping(uint64 validatorId => bool)) private _pendingAgentWithdraw;
     uint256 private _commission;
     uint256 private _pendingCommission;
     uint64 private _pendingCommissionCycle;
@@ -216,7 +215,6 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
                 if (agent == address(0)) revert InvalidUnstakeAmount();
                 validatorIds[delegatedCount] = validatorId;
                 delegated[delegatedCount] = remainder;
-                _pendingAgentWithdraw[tokenId][validatorId] = true;
                 ++delegatedCount;
             }
             total += amounts[i];
@@ -243,7 +241,8 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     function _prepareUnstake(uint256 tokenId, address gauge, uint256 amount)
-        private view
+        private
+        view
         returns (uint64 validatorId, uint256 remainder)
     {
         address vault = vaultByGauge[gauge];
@@ -279,9 +278,8 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             uint256 validatorCount;
             for (uint256 i; i < gauges.length; ++i) {
                 uint64 validatorId = StakingVault(payable(vaultByGauge[gauges[i]])).validatorId();
-                if (_pendingAgentWithdraw[tokenId][validatorId]) {
+                if (StakingAgent(payable(agent)).pendingWithdrawal(validatorId) != 0) {
                     validatorIds[validatorCount] = validatorId;
-                    delete _pendingAgentWithdraw[tokenId][validatorId];
                     ++validatorCount;
                 }
             }

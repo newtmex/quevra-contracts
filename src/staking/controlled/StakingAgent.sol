@@ -10,6 +10,7 @@ contract StakingAgent is StakeControlled {
     uint8 public constant WITHDRAW_ID = 0;
 
     mapping(uint64 validatorId => uint256 amount) public balanceOf;
+    mapping(uint64 validatorId => uint256 amount) public pendingWithdrawal;
 
     error EmptyArray();
     error LengthMismatch();
@@ -19,6 +20,7 @@ contract StakingAgent is StakeControlled {
     error TransferFailed();
     error UnexpectedEtherSender();
     error InsufficientBalance();
+    error WithdrawalPending(uint64 validatorId);
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
         _validateArrays(validatorIds.length, amounts.length);
@@ -36,10 +38,12 @@ contract StakingAgent is StakeControlled {
     function undelegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external onlyController {
         _validateArrays(validatorIds.length, amounts.length);
         for (uint256 i; i < amounts.length; ++i) {
+            if (pendingWithdrawal[validatorIds[i]] != 0) revert WithdrawalPending(validatorIds[i]);
             if (amounts[i] == 0) revert ZeroAmount();
             if (balanceOf[validatorIds[i]] < amounts[i]) revert InsufficientBalance();
             if (!STAKING.undelegate(validatorIds[i], amounts[i], WITHDRAW_ID)) revert StakingCallFailed();
             balanceOf[validatorIds[i]] -= amounts[i];
+            pendingWithdrawal[validatorIds[i]] = amounts[i];
         }
     }
 
@@ -47,6 +51,7 @@ contract StakingAgent is StakeControlled {
         if (validatorIds.length == 0) revert EmptyArray();
         for (uint256 i; i < validatorIds.length; ++i) {
             if (!STAKING.withdraw(validatorIds[i], WITHDRAW_ID)) revert StakingCallFailed();
+            delete pendingWithdrawal[validatorIds[i]];
         }
 
         uint256 balance = availableBalance();

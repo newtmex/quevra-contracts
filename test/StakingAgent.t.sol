@@ -73,9 +73,6 @@ contract StakingAgentTest is StakingAgentFixture {
         vm.expectRevert(StakingAgent.EmptyArray.selector);
         agent.undelegate(ids, amounts);
 
-        assertEq(agent.balanceOf(validatorA), 0);
-        assertEq(agent.balanceOf(validatorB), 0);
-
         ids = _ids(validatorA, validatorB);
         amounts = _amounts(1 ether);
         vm.expectRevert(StakingAgent.LengthMismatch.selector);
@@ -104,6 +101,10 @@ contract StakingAgentTest is StakingAgentFixture {
         vm.expectCall(address(staking), abi.encodeCall(IMonadStaking.undelegate, (validatorB, 4 ether, 0)));
 
         agent.undelegate(ids, amounts);
+        assertEq(agent.balanceOf(validatorA), 0);
+        assertEq(agent.balanceOf(validatorB), 0);
+        assertEq(agent.pendingWithdrawal(validatorA), 3 ether);
+        assertEq(agent.pendingWithdrawal(validatorB), 4 ether);
     }
 
     function test_undelegateReliesOnMonadToRejectAnOccupiedWithdrawalSlot() public {
@@ -135,6 +136,8 @@ contract StakingAgentTest is StakingAgentFixture {
         assertEq(address(agent).balance, 0);
         assertEq(agent.balanceOf(validatorA), 0);
         assertEq(agent.balanceOf(validatorB), 0);
+        assertEq(agent.pendingWithdrawal(validatorA), 0);
+        assertEq(agent.pendingWithdrawal(validatorB), 0);
     }
 
     function test_unstakeFlowUndelegatesBeforeLaterWithdraw() public {
@@ -153,12 +156,14 @@ contract StakingAgentTest is StakingAgentFixture {
         agent.undelegate(ids, amounts);
         assertEq(address(agent).balance, 3 ether);
         assertEq(agent.balanceOf(validatorA), 0);
+        assertEq(agent.pendingWithdrawal(validatorA), 3 ether);
 
         // Withdrawal is a separate later operation, after Monad's epoch delay.
         uint256 beforeBalance = address(this).balance;
         agent.withdraw(ids);
         assertEq(address(this).balance, beforeBalance + 3 ether);
         assertEq(address(agent).balance, 0);
+        assertEq(agent.pendingWithdrawal(validatorA), 0);
     }
 
     function test_withdrawRejectsEmptyArray() public {
