@@ -9,8 +9,7 @@ import {StakingAgentFixture} from "./fixtures/StakingAgentFixture.sol";
 contract StakingAgentTest is StakingAgentFixture {
     receive() external payable {}
 
-    function test_constructorSetsPermanentTokenAndController() public view {
-        assertEq(agent.tokenId(), tokenId);
+    function test_constructorSetsController() public view {
         assertEq(agent.controller(), address(this));
     }
 
@@ -64,6 +63,8 @@ contract StakingAgentTest is StakingAgentFixture {
         agent.delegate{value: 3 ether}(ids, amounts);
 
         assertEq(address(agent).balance, 0);
+        assertEq(agent.balanceOf(validatorA), 1 ether);
+        assertEq(agent.balanceOf(validatorB), 2 ether);
     }
 
     function test_undelegateValidatesArraysAndAmounts() public {
@@ -71,6 +72,9 @@ contract StakingAgentTest is StakingAgentFixture {
         uint256[] memory amounts = new uint256[](0);
         vm.expectRevert(StakingAgent.EmptyArray.selector);
         agent.undelegate(ids, amounts);
+
+        assertEq(agent.balanceOf(validatorA), 0);
+        assertEq(agent.balanceOf(validatorB), 0);
 
         ids = _ids(validatorA, validatorB);
         amounts = _amounts(1 ether);
@@ -86,6 +90,10 @@ contract StakingAgentTest is StakingAgentFixture {
     function test_undelegateMultipleValidatorsAlwaysUsesSlotZero() public {
         uint64[] memory ids = _ids(validatorA, validatorB);
         uint256[] memory amounts = _amounts(3 ether, 4 ether);
+        vm.deal(address(agent), 7 ether);
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.delegate, (validatorA)), abi.encode(true));
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.delegate, (validatorB)), abi.encode(true));
+        agent.delegate{value: 7 ether}(ids, amounts);
         vm.mockCall(
             address(staking), abi.encodeCall(IMonadStaking.undelegate, (validatorA, 3 ether, 0)), abi.encode(true)
         );
@@ -101,6 +109,9 @@ contract StakingAgentTest is StakingAgentFixture {
     function test_undelegateReliesOnMonadToRejectAnOccupiedWithdrawalSlot() public {
         uint64[] memory ids = _ids(validatorA);
         uint256[] memory amounts = _amounts(1 ether);
+        vm.deal(address(agent), 1 ether);
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.delegate, (validatorA)), abi.encode(true));
+        agent.delegate{value: 1 ether}(ids, amounts);
         vm.mockCall(
             address(staking), abi.encodeCall(IMonadStaking.undelegate, (validatorA, 1 ether, 0)), abi.encode(false)
         );
@@ -122,6 +133,8 @@ contract StakingAgentTest is StakingAgentFixture {
 
         assertEq(address(this).balance, beforeBalance + 5 ether);
         assertEq(address(agent).balance, 0);
+        assertEq(agent.balanceOf(validatorA), 0);
+        assertEq(agent.balanceOf(validatorB), 0);
     }
 
     function test_unstakeFlowUndelegatesBeforeLaterWithdraw() public {
@@ -131,12 +144,15 @@ contract StakingAgentTest is StakingAgentFixture {
         vm.mockCall(
             address(staking), abi.encodeCall(IMonadStaking.undelegate, (validatorA, 3 ether, 0)), abi.encode(true)
         );
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.delegate, (validatorA)), abi.encode(true));
+        agent.delegate{value: 3 ether}(ids, amounts);
         vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.withdraw, (validatorA, 0)), abi.encode(true));
         vm.deal(address(agent), 3 ether);
 
         // The controller first submits the undelegation. No MON is redeemed yet.
         agent.undelegate(ids, amounts);
         assertEq(address(agent).balance, 3 ether);
+        assertEq(agent.balanceOf(validatorA), 0);
 
         // Withdrawal is a separate later operation, after Monad's epoch delay.
         uint256 beforeBalance = address(this).balance;

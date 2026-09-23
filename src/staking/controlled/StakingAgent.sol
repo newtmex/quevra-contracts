@@ -9,7 +9,7 @@ import {StakeControlled} from "./StakeControlled.sol";
 contract StakingAgent is StakeControlled {
     uint8 public constant WITHDRAW_ID = 0;
 
-    uint256 public immutable tokenId;
+    mapping(uint64 validatorId => uint256 amount) public balanceOf;
 
     error EmptyArray();
     error LengthMismatch();
@@ -18,10 +18,7 @@ contract StakingAgent is StakeControlled {
     error StakingCallFailed();
     error TransferFailed();
     error UnexpectedEtherSender();
-
-    constructor(uint256 tokenId_) {
-        tokenId = tokenId_;
-    }
+    error InsufficientBalance();
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
         _validateArrays(validatorIds.length, amounts.length);
@@ -30,6 +27,7 @@ contract StakingAgent is StakeControlled {
             uint256 amount = amounts[i];
             if (amount == 0) revert ZeroAmount();
             if (!STAKING.delegate{value: amount}(validatorIds[i])) revert StakingCallFailed();
+            balanceOf[validatorIds[i]] += amount;
             total += amount;
         }
         if (total != msg.value) revert ValueMismatch();
@@ -39,7 +37,9 @@ contract StakingAgent is StakeControlled {
         _validateArrays(validatorIds.length, amounts.length);
         for (uint256 i; i < amounts.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
+            if (balanceOf[validatorIds[i]] < amounts[i]) revert InsufficientBalance();
             if (!STAKING.undelegate(validatorIds[i], amounts[i], WITHDRAW_ID)) revert StakingCallFailed();
+            balanceOf[validatorIds[i]] -= amounts[i];
         }
     }
 

@@ -163,7 +163,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
 
         address agent = agentByToken[tokenId];
         if (agent == address(0)) {
-            agent = address(new StakingAgent(tokenId));
+            agent = address(new StakingAgent());
             agentByToken[tokenId] = agent;
             _isAgent[agent] = true;
             emit AgentCreated(tokenId, agent);
@@ -229,21 +229,28 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             }
             StakingAgent(payable(agent)).undelegate(validatorIds, delegated);
         }
+
+        // Undelegate agent allocations before touching the vault. Monad may
+        // reject validator operations when the vault is undelegated first.
+        for (uint256 i; i < gauges.length; ++i) {
+            address vault = vaultByGauge[gauges[i]];
+            uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
+            if (vaultBalance != 0 && amounts[i] >= vaultBalance && StakingVault(payable(vault)).validatorId() != 0) {
+                StakingVault(payable(vault)).undelegate();
+            }
+        }
         emit Unstaked(tokenId, total);
     }
 
     function _prepareUnstake(uint256 tokenId, address gauge, uint256 amount)
-        private
+        private view
         returns (uint64 validatorId, uint256 remainder)
     {
         address vault = vaultByGauge[gauge];
         if (vault == address(0)) revert InvalidVault();
         uint256 vaultBalance = StakingVault(payable(vault)).balanceOf(tokenId);
         uint256 fromVault = amount < vaultBalance ? amount : vaultBalance;
-        if (fromVault != 0) {
-            if (fromVault != vaultBalance) revert InvalidUnstakeAmount();
-            if (StakingVault(payable(vault)).validatorId() != 0) StakingVault(payable(vault)).undelegate();
-        }
+        if (fromVault != 0 && fromVault != vaultBalance) revert InvalidUnstakeAmount();
         remainder = amount - fromVault;
         if (remainder != 0) {
             validatorId = StakingVault(payable(vault)).validatorId();
