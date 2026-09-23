@@ -39,6 +39,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
     // Voting records are shared across staking voter implementations.
     mapping(uint256 => address[]) public poolVote;
+    mapping(uint256 => address[]) private _allocationGauges;
     mapping(uint256 => uint256) public usedWeights;
     mapping(uint256 => mapping(address => VoteAllocation)) public votes;
     mapping(address => uint256) public weights;
@@ -138,11 +139,86 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         if (lockedAmount <= 0) revert InvalidVote();
         uint256 principal = uint256(uint128(lockedAmount));
 
+        _rememberCurrentGauges(tokenId);
+        _rememberGauges(tokenId, gauges);
         _reset(tokenId, cycle);
         _addVoteAllocations(tokenId, gauges, weights_, requested, power, principal, cycle);
         usedWeights[tokenId] = power;
         lastVotedCycle[tokenId] = cycle;
         emit Voted(_msgSender(), tokenId, power);
+    }
+
+    /// @notice Progress the token's physical allocation toward its latest vote.
+    /// @dev Settlement is intentionally best-effort; pending Monad withdrawals
+    ///      can leave a deficit for a later call.
+    function rebalance(uint256 tokenId) external nonReentrant {
+        address[] storage stored = _allocationGauges[tokenId];
+        if (stored.length == 0) return;
+
+        address[] memory gauges = new address[](stored.length);
+        for (uint256 i; i < stored.length; ++i) {
+            gauges[i] = stored[i];
+        }
+        try controller.withdraw(tokenId, gauges) {} catch {}
+
+        address[] memory surplusGauges = new address[](stored.length);
+        uint256[] memory surplus = new uint256[](stored.length);
+        address[] memory deficitGauges = new address[](stored.length);
+        uint256[] memory deficit = new uint256[](stored.length);
+        uint256 surplusCount;
+        uint256 deficitCount;
+        uint256 liquid = controller.balanceOf(tokenId);
+
+        for (uint256 i; i < stored.length; ++i) {
+            address gauge = stored[i];
+            uint256 current = controller.allocationOf(tokenId, gauge);
+            uint256 target = votes[tokenId][gauge].stakeAmount;
+            if (current > target) {
+                surplusGauges[surplusCount] = gauge;
+                surplus[surplusCount++] = current - target;
+            } else if (current < target) {
+                uint256 amount = target - current;
+                if (amount > liquid) amount = liquid;
+                if (amount != 0) {
+                    deficitGauges[deficitCount] = gauge;
+                    deficit[deficitCount++] = amount;
+                    liquid -= amount;
+                }
+            }
+        }
+        assembly {
+            mstore(surplusGauges, surplusCount)
+            mstore(surplus, surplusCount)
+            mstore(deficitGauges, deficitCount)
+            mstore(deficit, deficitCount)
+        }
+        if (surplusCount != 0) {
+            try controller.unstake(tokenId, surplusGauges, surplus) {} catch {}
+        }
+        if (deficitCount != 0) {
+            try controller.stake(tokenId, deficitGauges, deficit) {} catch {}
+        }
+    }
+
+    function _rememberGauge(uint256 tokenId, address gauge) private {
+        address[] storage gauges = _allocationGauges[tokenId];
+        for (uint256 i; i < gauges.length; ++i) {
+            if (gauges[i] == gauge) return;
+        }
+        gauges.push(gauge);
+    }
+
+    function _rememberCurrentGauges(uint256 tokenId) private {
+        address[] storage current = poolVote[tokenId];
+        for (uint256 i; i < current.length; ++i) {
+            _rememberGauge(tokenId, current[i]);
+        }
+    }
+
+    function _rememberGauges(uint256 tokenId, address[] calldata gauges) private {
+        for (uint256 i; i < gauges.length; ++i) {
+            _rememberGauge(tokenId, gauges[i]);
+        }
     }
 
     function _addVoteAllocations(
