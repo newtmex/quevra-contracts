@@ -12,6 +12,9 @@ contract StakingVault is StakeControlled {
 
     IValidatorRegistry public registry;
     mapping(uint256 tokenId => uint256 amount) public balanceOf;
+    mapping(uint256 tokenId => uint256 amount) public pendingWithdrawal;
+    uint256[] private _tokenIds;
+    mapping(uint256 tokenId => bool) private _knownToken;
     uint256 public totalBalance;
 
     /// @notice The only validator request this vault can execute.
@@ -39,7 +42,7 @@ contract StakingVault is StakeControlled {
     }
 
     function deficit() public view returns (uint256) {
-        return MIN_AUTH_ADDRESS_STAKE - totalBalance;
+        return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
     }
 
     /// @notice Accounts deposits and uses the registry to activate the validator.
@@ -48,6 +51,10 @@ contract StakingVault is StakeControlled {
     function deposit(uint256 tokenId) external payable onlyController {
         if (msg.value == 0 || deficit() < msg.value) revert InvalidAmount();
 
+        if (!_knownToken[tokenId]) {
+            _knownToken[tokenId] = true;
+            _tokenIds.push(tokenId);
+        }
         balanceOf[tokenId] += msg.value;
         totalBalance += msg.value;
 
@@ -62,27 +69,44 @@ contract StakingVault is StakeControlled {
                 submission.payload, submission.signedSecpMessage, submission.signedBlsMessage
             );
             if (validatorId == 0) revert AddValidatorFailed();
+            (bool success,) = controller.call(abi.encodeWithSignature("vaultActivated(address)", address(this)));
+            success;
         }
     }
 
-    /// @notice Begin withdrawing the vault's entire validator stake.
-    function undelegate() external onlyController {
-        (uint256 stake,,,,,,) = STAKING.getDelegator(validatorId, address(this));
-        if (stake > 0 && !STAKING.undelegate(validatorId, stake, WITHDRAW_ID)) {
+    function tokenIdsLength() external view returns (uint256) {
+        return _tokenIds.length;
+    }
+
+    function tokenIdAt(uint256 index) external view returns (uint256) {
+        return _tokenIds[index];
+    }
+
+    /// @notice Begin withdrawing part of a token's active allocation.
+    /// @dev The withdrawal slot is shared by the vault. A later token can be
+    ///      credited from the same redeemed balance once the first request is
+    ///      finalized; Monad does not need one precompile slot per token.
+    function undelegate(uint256 tokenId, uint256 amount) external onlyController {
+        if (validatorId == 0 || amount == 0 || balanceOf[tokenId] < amount) revert InvalidAmount();
+        if (pendingWithdrawal[tokenId] != 0) revert InvalidAmount();
+        if (availableBalance() != 0) revert InvalidAmount();
+        if (!STAKING.undelegate(validatorId, amount, WITHDRAW_ID)) {
             revert UndelegationFailed();
         }
+        balanceOf[tokenId] -= amount;
+        totalBalance -= amount;
+        pendingWithdrawal[tokenId] = amount;
     }
 
+    /// @notice Finalize a matured withdrawal and return this token's share.
     function withdraw(uint256 tokenId) external onlyController returns (uint256 amount) {
-        amount = balanceOf[tokenId];
+        amount = pendingWithdrawal[tokenId];
         if (amount == 0) revert InvalidAmount();
 
         if (availableBalance() < amount) {
             if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
         }
-
-        delete balanceOf[tokenId];
-        totalBalance -= amount;
+        delete pendingWithdrawal[tokenId];
 
         (bool success,) = payable(controller).call{value: amount}("");
         if (!success) revert TransferFailed();

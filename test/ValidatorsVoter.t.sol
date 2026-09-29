@@ -105,8 +105,10 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         vm.prank(operator);
         validatorsVoter.vote(tokenId, gauges, weights_);
 
-        _assertVoteAllocation(tokenId, gaugeA, 25 ether, 25 ether);
-        _assertVoteAllocation(tokenId, gaugeB, 75 ether, 75 ether);
+        _assertVoteAllocation(tokenId, gaugeA, 25 ether, 0);
+        _assertVoteAllocation(tokenId, gaugeB, 75 ether, 0);
+        assertEq(validatorsVoter.targetStakeAmount(tokenId, gaugeA), 25 ether);
+        assertEq(validatorsVoter.targetStakeAmount(tokenId, gaugeB), 75 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeA), 25 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeB), 75 ether);
         assertEq(IReward(validatorsVoter.gaugeToBribe(gaugeA)).balanceOf(tokenId), 25 ether);

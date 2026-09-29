@@ -42,6 +42,9 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     mapping(uint256 => address[]) private _allocationGauges;
     mapping(uint256 => uint256) public usedWeights;
     mapping(uint256 => mapping(address => VoteAllocation)) public votes;
+    /// @dev Desired physical allocation. `votes[tokenId][gauge].stakeAmount`
+    ///      is the observed active allocation and is updated by the controller.
+    mapping(uint256 => mapping(address => uint256)) public targetStakeAmount;
     mapping(address => uint256) public weights;
     uint256 public totalWeight;
     mapping(uint64 => mapping(address => uint256)) public cycleWeights;
@@ -55,6 +58,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     error InvalidVote();
     error VotingClosed();
     error AlreadyVoted();
+    error NotController();
 
     modifier onlyNewCycle(uint256 tokenId) {
         uint64 cycle = ProtocolTimeLibrary.currentCycleStart();
@@ -172,7 +176,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         for (uint256 i; i < stored.length; ++i) {
             address gauge = stored[i];
             uint256 current = controller.allocationOf(tokenId, gauge);
-            uint256 target = votes[tokenId][gauge].stakeAmount;
+            uint256 target = targetStakeAmount[tokenId][gauge];
             if (current > target) {
                 surplusGauges[surplusCount] = gauge;
                 surplus[surplusCount++] = current - target;
@@ -197,6 +201,19 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         }
         if (deficitCount != 0) {
             try controller.stake(tokenId, deficitGauges, deficit) {} catch {}
+        }
+    }
+
+    /// @notice Record a physical allocation change reported by the controller.
+    function updateStakingAmount(uint256 tokenId, address gauge, int256 delta) external {
+        if (msg.sender != address(controller)) revert NotController();
+        VoteAllocation storage allocation = votes[tokenId][gauge];
+        if (delta > 0) {
+            allocation.stakeAmount = _toUint128(uint256(allocation.stakeAmount) + uint256(delta));
+        } else {
+            uint256 decrease = uint256(-delta);
+            if (decrease > allocation.stakeAmount) revert InvalidVote();
+            allocation.stakeAmount = uint128(uint256(allocation.stakeAmount) - decrease);
         }
     }
 
@@ -265,6 +282,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
                 cycleTotalWeight[cycle] -= allocation.weight;
             }
             delete votes[tokenId][gauge];
+            delete targetStakeAmount[tokenId][gauge];
             IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
             emit Abstained(tokenId, allocation.weight);
         }
@@ -274,7 +292,8 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
     function _addVote(uint256 tokenId, address gauge, uint256 weight, uint256 stakeAmount, uint64 cycle) private {
         poolVote[tokenId].push(gauge);
-        votes[tokenId][gauge] = VoteAllocation(_toUint128(weight), _toUint128(stakeAmount));
+        votes[tokenId][gauge] = VoteAllocation(_toUint128(weight), 0);
+        targetStakeAmount[tokenId][gauge] = stakeAmount;
         weights[gauge] += weight;
         totalWeight += weight;
         cycleWeights[cycle][gauge] += weight;

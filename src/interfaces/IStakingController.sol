@@ -39,6 +39,7 @@ interface IStakingController {
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
+    function pendingOf(uint256 tokenId, address gauge) external view returns (uint256);
 
     function setVoter(address voter_) external;
 
