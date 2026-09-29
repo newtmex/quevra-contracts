@@ -5,10 +5,12 @@ import {MonadStdConstants} from "monad-std/MonadStdConstants.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 abstract contract StakeControlled is MonadStdConstants, Initializable {
+    uint8 internal constant WITHDRAW_ID = 0;
     address public immutable controller = msg.sender;
 
     error InvalidController();
     error OnlyController();
+    error ControlledStakingCallFailed();
 
     constructor() {
         _disableInitializers();
@@ -21,5 +23,13 @@ abstract contract StakeControlled is MonadStdConstants, Initializable {
 
     function availableBalance() public view returns (uint256) {
         return address(this).balance;
+    }
+
+    function _claimRewards(uint64 validatorId) internal {
+        if (!STAKING.claimRewards(validatorId)) revert ControlledStakingCallFailed();
+    }
+
+    function _compound(uint64 validatorId) internal {
+        if (!STAKING.compound(validatorId)) revert ControlledStakingCallFailed();
     }
 }

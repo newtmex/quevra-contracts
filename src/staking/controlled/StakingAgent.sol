@@ -7,8 +7,6 @@ import {StakeControlled} from "./StakeControlled.sol";
 /// @title StakingAgent
 /// @notice A token-bound agent that delegates MON to Monad validators.
 contract StakingAgent is StakeControlled {
-    uint8 public constant WITHDRAW_ID = 0;
-
     mapping(uint64 validatorId => uint256 amount) public balanceOf;
     mapping(uint64 validatorId => uint256 amount) public pendingWithdrawal;
 
@@ -21,6 +19,11 @@ contract StakingAgent is StakeControlled {
     error UnexpectedEtherSender();
     error InsufficientBalance();
     error WithdrawalPending(uint64 validatorId);
+
+    function _validateArrays(uint256 validatorCount, uint256 amountCount) private pure {
+        if (validatorCount == 0) revert EmptyArray();
+        if (validatorCount != amountCount) revert LengthMismatch();
+    }
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
         _validateArrays(validatorIds.length, amounts.length);
@@ -61,13 +64,22 @@ contract StakingAgent is StakeControlled {
         }
     }
 
+    function claimRewards(uint64[] calldata validatorIds) external onlyController {
+        if (validatorIds.length == 0) revert EmptyArray();
+        for (uint256 i; i < validatorIds.length; ++i) {
+            _claimRewards(validatorIds[i]);
+        }
+    }
+
+    function compound(uint64[] calldata validatorIds) external onlyController {
+        if (validatorIds.length == 0) revert EmptyArray();
+        for (uint256 i; i < validatorIds.length; ++i) {
+            _compound(validatorIds[i]);
+        }
+    }
+
     /// @dev Monad sends redeemed stake to the caller of `staking.withdraw`.
     receive() external payable {
         if (msg.sender != address(STAKING)) revert UnexpectedEtherSender();
-    }
-
-    function _validateArrays(uint256 validatorCount, uint256 amountCount) private pure {
-        if (validatorCount == 0) revert EmptyArray();
-        if (validatorCount != amountCount) revert LengthMismatch();
     }
 }

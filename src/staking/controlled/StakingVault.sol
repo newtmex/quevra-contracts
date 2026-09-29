@@ -27,8 +27,7 @@ contract StakingVault is StakeControlled {
     error UndelegationFailed();
     error TransferFailed();
     error InvalidAmount();
-
-    uint8 public constant WITHDRAW_ID = 0;
+    error StakingCallFailed();
 
     /// @notice Called by the controller immediately after cloning.
     function initialize(address registry_, uint256 requestId_) external onlyController initializer {
@@ -86,5 +85,15 @@ contract StakingVault is StakeControlled {
 
         (bool success,) = payable(controller).call{value: amount}("");
         if (!success) revert TransferFailed();
+    }
+
+    function claimRewards() external onlyController {
+        if (validatorId == 0) revert ValidatorNotAdded();
+        _claimRewards(validatorId);
+    }
+
+    function compound() external onlyController {
+        if (validatorId == 0) revert ValidatorNotAdded();
+        _compound(validatorId);
     }
 }

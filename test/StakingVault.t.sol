@@ -63,6 +63,13 @@ contract StakingVaultTest is StakingVaultFixture {
         vault.deposit{value: delegationAmount}(1);
     }
 
+    function test_compoundUsesRealStakingPrecompile() public {
+        _addVaultValidator();
+
+        vm.prank(owner);
+        vault.compound();
+    }
+
     function test_depositCanAccumulateBeforeActivation() public {
         vm.prank(owner);
         vault.deposit{value: delegationAmount}(1);
