@@ -38,6 +38,10 @@ interface IStakingController {
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
+    function economicBalanceOf(uint256 tokenId, address[] calldata gauges)
+        external
+        view
+        returns (uint256 available, uint256 active, uint256 pending);
 
     function setVoter(address voter_) external;
 

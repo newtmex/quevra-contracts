@@ -44,6 +44,10 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     mapping(uint256 => mapping(address => VoteAllocation)) public votes;
     mapping(address => uint256) public weights;
     uint256 public totalWeight;
+    /// @notice Actual MON actively backing validator allocations, independent
+    /// from the vote's requested weight and veMON voting power.
+    mapping(uint256 => mapping(address => uint256)) public stakingAmounts;
+    mapping(address => uint256) public totalStakingAmounts;
     mapping(uint64 => mapping(address => uint256)) public cycleWeights;
     mapping(uint64 => uint256) public cycleTotalWeight;
     mapping(uint256 => uint64) public lastVotedCycle;
@@ -55,6 +59,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     error InvalidVote();
     error VotingClosed();
     error AlreadyVoted();
+    error NotController();
 
     modifier onlyNewCycle(uint256 tokenId) {
         uint64 cycle = ProtocolTimeLibrary.currentCycleStart();
@@ -66,6 +71,19 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     event WhitelistToken(address indexed whitelister, address indexed token, bool indexed whitelisted);
     event Voted(address indexed voter, uint256 indexed tokenId, uint256 weight);
     event Abstained(uint256 indexed tokenId, uint256 weight);
+    event StakeAmountChanged(uint256 indexed tokenId, address indexed gauge, uint256 amount, bool increase);
+
+    function notifyStakeChange(uint256 tokenId, address gauge, uint256 amount, bool increase) external {
+        if (msg.sender != address(controller)) revert NotController();
+        if (increase) {
+            stakingAmounts[tokenId][gauge] += amount;
+            totalStakingAmounts[gauge] += amount;
+        } else {
+            stakingAmounts[tokenId][gauge] -= amount;
+            totalStakingAmounts[gauge] -= amount;
+        }
+        emit StakeAmountChanged(tokenId, gauge, amount, increase);
+    }
 
     constructor(address forwarder_) ERC2771Context(forwarder_) {
         if (forwarder_ == address(0)) revert ZeroAddress();

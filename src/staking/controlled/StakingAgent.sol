@@ -50,7 +50,10 @@ contract StakingAgent is StakeControlled {
     function withdraw(uint64[] calldata validatorIds) external onlyController {
         if (validatorIds.length == 0) revert EmptyArray();
         for (uint256 i; i < validatorIds.length; ++i) {
-            if (!STAKING.withdraw(validatorIds[i], WITHDRAW_ID)) revert StakingCallFailed();
+            // Monad returns false while the slot is still immature. Keeping
+            // the request recorded makes retries safe and lets the Controller
+            // share one finalization path with stake and unstake.
+            if (!STAKING.withdraw(validatorIds[i], WITHDRAW_ID)) continue;
             delete pendingWithdrawal[validatorIds[i]];
         }
 
