@@ -28,6 +28,7 @@ contract StakingVault is StakeControlled {
     error TransferFailed();
     error InvalidAmount();
     error StakingCallFailed();
+    error UnexpectedEtherSender();
 
     /// @notice Called by the controller immediately after cloning.
     function initialize(address registry_, uint256 requestId_) external onlyController initializer {
@@ -95,5 +96,9 @@ contract StakingVault is StakeControlled {
     function compound() external onlyController {
         if (validatorId == 0) revert ValidatorNotAdded();
         _compound(validatorId);
+    }
+
+    receive() external payable {
+        if (msg.sender != address(STAKING)) revert UnexpectedEtherSender();
     }
 }

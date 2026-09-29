@@ -20,6 +20,7 @@ interface IStakingController {
     error ValidatorNotActivated();
     error InvalidUnstakeAmount();
     error UnexpectedEtherSender();
+    error NotTokenOwner();
 
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -61,4 +62,5 @@ interface IStakingController {
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function withdraw(uint256 tokenId, address[] calldata gauges) external;
+    function claimRewards(uint256 tokenId, address[] calldata gauges) external;
 }

@@ -8,6 +8,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
+import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -315,6 +316,42 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         if (reclaimed == 0) revert InvalidUnstakeAmount();
         balanceOf[tokenId] += reclaimed;
         emit Withdrawn(tokenId, reclaimed);
+    }
+
+    /// @notice Claim staking rewards for a token's vault and agent allocations.
+    /// @dev Only the current owner of the veNFT can claim its rewards.
+    function claimRewards(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
+        address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
+        if (tokenOwner != msg.sender) revert NotTokenOwner();
+        if (gauges.length == 0) revert EmptyArray();
+        uint256 beforeBalance = address(this).balance;
+
+        address agent = agentByToken[tokenId];
+        uint64[] memory validatorIds = new uint64[](gauges.length);
+        uint256 validatorCount;
+        for (uint256 i; i < gauges.length; ++i) {
+            address vault = vaultByGauge[gauges[i]];
+            if (vault == address(0)) revert InvalidVault();
+
+            StakingVault(payable(vault)).claimRewards();
+            if (agent != address(0)) {
+                uint64 validatorId = StakingVault(payable(vault)).validatorId();
+                if (validatorId != 0) validatorIds[validatorCount++] = validatorId;
+            }
+        }
+
+        if (validatorCount != 0) {
+            assembly {
+                mstore(validatorIds, validatorCount)
+            }
+            StakingAgent(payable(agent)).claimRewards(validatorIds);
+        }
+
+        uint256 claimed = address(this).balance - beforeBalance;
+        if (claimed != 0) {
+            (bool success,) = payable(tokenOwner).call{value: claimed}("");
+            if (!success) revert UnexpectedEtherSender();
+        }
     }
 
     function _allocate(uint256 tokenId, address gauge, uint256 amount)

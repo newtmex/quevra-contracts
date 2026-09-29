@@ -11,6 +11,7 @@ abstract contract StakeControlled is MonadStdConstants, Initializable {
     error InvalidController();
     error OnlyController();
     error ControlledStakingCallFailed();
+    error ControlledTransferFailed();
 
     constructor() {
         _disableInitializers();
@@ -25,8 +26,14 @@ abstract contract StakeControlled is MonadStdConstants, Initializable {
         return address(this).balance;
     }
 
-    function _claimRewards(uint64 validatorId) internal {
+    function _claimRewards(uint64 validatorId) internal returns (uint256 claimed) {
+        uint256 beforeBalance = availableBalance();
         if (!STAKING.claimRewards(validatorId)) revert ControlledStakingCallFailed();
+        claimed = availableBalance() - beforeBalance;
+        if (claimed != 0) {
+            (bool success,) = payable(controller).call{value: claimed}("");
+            if (!success) revert ControlledTransferFailed();
+        }
     }
 
     function _compound(uint64 validatorId) internal {
