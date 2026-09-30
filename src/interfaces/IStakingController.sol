@@ -62,6 +62,7 @@ interface IStakingController {
     function deposit(uint256 tokenId) external payable;
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function unstakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function withdraw(uint256 tokenId, address[] calldata gauges) external;
     function claimRewards(uint256 tokenId, address[] calldata gauges) external;
 }

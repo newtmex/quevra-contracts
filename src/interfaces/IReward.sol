@@ -73,6 +73,9 @@ interface IReward {
     /// @param tokenId  Unique identifier of the veNFT
     function _withdraw(uint256 amount, uint256 tokenId) external;
 
+    /// @notice Adjust a deposited voting balance without a withdraw/deposit pair.
+    function _adjust(uint256 oldAmount, uint256 newAmount, uint256 tokenId) external;
+
     /// @notice Claim the rewards earned by a veNFT staker
     /// @param tokenId  Unique identifier of the veNFT
     /// @param tokens   Array of tokens to claim rewards of

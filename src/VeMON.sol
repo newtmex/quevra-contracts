@@ -25,6 +25,6 @@ contract VeMON is VotingEscrow {
     }
 
     function _isLockAmountUpdater(address account) internal view override returns (bool) {
-        return account == controller;
+        return account == controller || account == IStakingController(controller).voter();
     }
 }

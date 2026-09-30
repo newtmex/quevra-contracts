@@ -56,10 +56,12 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     {
         uint256 unlockEpoch = _unlockEpoch(_lockDuration);
         if (_value == 0) revert InvalidAmount();
+        if (_value > uint256(uint128(type(int128).max))) revert InvalidAmount();
 
         tokenId = nextId++;
         _deposit(_value, tokenId);
-        IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(0, unlockEpoch, false, 0);
+        IVotingEscrow.LockedBalance memory newLock =
+            IVotingEscrow.LockedBalance(int128(uint128(_value)), unlockEpoch, false, 0);
         _locked[tokenId] = newLock;
         _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
         emit LockCreated(tokenId, msg.sender, _value, unlockEpoch);

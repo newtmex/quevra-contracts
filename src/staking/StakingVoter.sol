@@ -45,9 +45,14 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     /// @dev Desired physical allocation. `votes[tokenId][gauge].stakeAmount`
     ///      is the observed active allocation and is updated by the controller.
     mapping(uint256 => mapping(address => uint256)) public targetStakeAmount;
+    mapping(uint256 => mapping(address => bool)) private _retainedVote;
     /// @notice Active MON supplied by an individual veNFT to a validator.
     /// @dev This excludes controller liquidity and pending undelegations.
     mapping(uint256 => mapping(address => uint256)) public activeStake;
+    /// @notice Total MON currently deployed by an individual veNFT.
+    mapping(uint256 => uint256) public activeStakeTotal;
+    /// @dev Distinguishes the initial lock principal from later restaking.
+    mapping(uint256 => bool) public hasStaked;
     /// @notice Sum of active tokenId allocations backing a validator gauge.
     mapping(address => uint256) public validatorStakingAmount;
     /// @notice Minimum active MON required before a validator can distribute rewards.
@@ -127,6 +132,19 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         nonReentrant
         onlyNewCycle(tokenId)
     {
+        _vote(tokenId, gauges, weights_);
+    }
+
+    function voteAndRebalance(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights_)
+        external
+        nonReentrant
+        onlyNewCycle(tokenId)
+    {
+        _vote(tokenId, gauges, weights_);
+        _rebalance(tokenId);
+    }
+
+    function _vote(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights_) internal {
         if (!IVotingEscrow(ve).isApprovedOrOwner(_msgSender(), tokenId)) revert VoteNotAuthorized();
         if (gauges.length == 0 || gauges.length != weights_.length) revert InvalidVote();
         (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
@@ -141,13 +159,24 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             }
             requested += weights_[i];
         }
-        (uint256 power, uint256 principal) = _votingInputs(tokenId);
-        if (requested == 0 || power == 0 || principal == 0) revert InvalidVote();
+        uint256 power = IVotingEscrow(ve).votingPowerOf(tokenId);
+        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
+        if (requested == 0 || power == 0 || lockedAmount <= 0) {
+            revert InvalidVote();
+        }
+        uint256 principal = uint256(uint128(lockedAmount));
+        uint256[] memory voteWeights = new uint256[](gauges.length);
+        uint256 allocatedWeight;
+        for (uint256 i; i < gauges.length; ++i) {
+            bool isLast = i + 1 == gauges.length;
+            voteWeights[i] = _distributed(power, weights_[i], requested, allocatedWeight, isLast);
+            allocatedWeight += voteWeights[i];
+        }
 
         _rememberCurrentGauges(tokenId);
         _rememberGauges(tokenId, gauges);
-        _reset(tokenId, cycle);
-        _addVoteAllocations(tokenId, gauges, weights_, requested, power, principal, cycle);
+        _reset(tokenId, cycle, gauges, voteWeights);
+        _addVoteAllocations(tokenId, gauges, weights_, requested, voteWeights, principal, cycle);
         usedWeights[tokenId] = power;
         lastVotedCycle[tokenId] = cycle;
         emit Voted(_msgSender(), tokenId, power);
@@ -157,6 +186,10 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     /// @dev Settlement is intentionally best-effort; pending Monad withdrawals
     ///      can leave a deficit for a later call.
     function rebalance(uint256 tokenId) external nonReentrant {
+        _rebalance(tokenId);
+    }
+
+    function _rebalance(uint256 tokenId) internal {
         address[] storage stored = _allocationGauges[tokenId];
         if (stored.length == 0) return;
 
@@ -198,7 +231,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             mstore(deficit, deficitCount)
         }
         if (surplusCount != 0) {
-            try controller.unstake(tokenId, surplusGauges, surplus) {} catch {}
+            try controller.unstakeFinalized(tokenId, surplusGauges, surplus) {} catch {}
         }
         if (deficitCount != 0) {
             try controller.stake(tokenId, deficitGauges, deficit) {} catch {}
@@ -207,12 +240,50 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
     /// @notice Record a physical allocation change reported by the controller.
     function updateStakingAmount(uint256 tokenId, address gauge, int256 delta) external {
-        if (msg.sender != address(controller)) revert NotController();
+        uint256[] memory tokenIds = new uint256[](1);
+        address[] memory gauges = new address[](1);
+        int256[] memory deltas = new int256[](1);
+        tokenIds[0] = tokenId;
+        gauges[0] = gauge;
+        deltas[0] = delta;
+        updateStakingAmounts(tokenIds, gauges, deltas);
+    }
 
-        // The veNFT represents MON that is actually deployed to a validator,
-        // not MON that is merely waiting in the controller. Update it before
-        // exposing the amount to the validator gauge.
-        IVotingEscrow(ve).adjustLockAmount(tokenId, delta);
+    function updateStakingAmounts(uint256[] memory tokenIds, address[] memory gauges, int256[] memory deltas) public {
+        if (msg.sender != address(controller)) revert NotController();
+        if (tokenIds.length != gauges.length || gauges.length != deltas.length) revert InvalidVote();
+
+        for (uint256 i; i < deltas.length; ++i) {
+            bool first = true;
+            for (uint256 j; j < i; ++j) {
+                if (tokenIds[j] == tokenIds[i]) {
+                    first = false;
+                    break;
+                }
+            }
+            if (!first) continue;
+
+            int256 net;
+            for (uint256 j = i; j < deltas.length; ++j) {
+                if (tokenIds[j] == tokenIds[i]) net += deltas[j];
+            }
+            // The initial lock principal is already reflected in veMON. Do not
+            // add it again when the validator is first activated. Subsequent
+            // restakes must restore principal previously removed by unstaking.
+            if (net != 0 && (net < 0 || hasStaked[tokenIds[i]])) {
+                IVotingEscrow(ve).adjustLockAmount(tokenIds[i], net);
+            }
+        }
+
+        for (uint256 i; i < deltas.length; ++i) {
+            _applyStakingAmount(tokenIds[i], gauges[i], deltas[i]);
+            if (deltas[i] > 0) hasStaked[tokenIds[i]] = true;
+        }
+    }
+
+    function _applyStakingAmount(uint256 tokenId, address gauge, int256 delta) internal {
+        if (delta == 0) return;
+
         VoteAllocation storage allocation = votes[tokenId][gauge];
         // A controller allocation may exist before a token has voted for this
         // gauge. Active-liquidity accounting must not depend on vote metadata.
@@ -231,11 +302,13 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         if (delta > 0) {
             next = previous + uint256(delta);
             validatorStakingAmount[gauge] += uint256(delta);
+            activeStakeTotal[tokenId] += uint256(delta);
         } else {
             uint256 decrease = uint256(-delta);
             if (decrease > previous) revert InvalidVote();
             next = previous - decrease;
             validatorStakingAmount[gauge] -= decrease;
+            activeStakeTotal[tokenId] -= decrease;
         }
         activeStake[tokenId][gauge] = next;
         // Monad's staking precompile is not re-entrant during validator
@@ -274,7 +347,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         address[] calldata gauges,
         uint256[] calldata weights_,
         uint256 requested,
-        uint256 power,
+        uint256[] memory voteWeights,
         uint256 principal,
         uint64 cycle
     ) private {
@@ -282,7 +355,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         uint256 allocatedStake;
         for (uint256 i; i < gauges.length; ++i) {
             bool isLast = i + 1 == gauges.length;
-            uint256 weight = _distributed(power, weights_[i], requested, allocatedWeight, isLast);
+            uint256 weight = voteWeights[i];
             uint256 stakeAmount = _distributed(principal, weights_[i], requested, allocatedStake, isLast);
             allocatedWeight += weight;
             allocatedStake += stakeAmount;
@@ -300,22 +373,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         }
     }
 
-    function _votingInputs(uint256 tokenId) private view returns (uint256 power, uint256 principal) {
-        power = IVotingEscrow(ve).votingPowerOf(tokenId);
-        (int128 lockedAmount, uint256 lockEnd,,) = IVotingEscrow(ve).locked(tokenId);
-        if (lockedAmount > 0) return (power, uint256(uint128(lockedAmount)));
-
-        // A freshly-created veNFT has MON waiting in the controller but no
-        // locked amount until that MON is deployed to a validator. Allow its
-        // owner to vote using the pending deposit so the vote can select the
-        // validator that will receive the deposit.
-        principal = controller.balanceOf(tokenId);
-        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpochView();
-        uint64 maxLockEpochs = IVotingEscrow(ve).maxLockEpochs();
-        power = lockEnd > currentEpoch ? principal * (lockEnd - currentEpoch) / maxLockEpochs : 0;
-    }
-
-    function _reset(uint256 tokenId, uint64 cycle) private {
+    function _reset(uint256 tokenId, uint64 cycle, address[] calldata newGauges, uint256[] memory newWeights) private {
         address[] storage oldGauges = poolVote[tokenId];
         for (uint256 i; i < oldGauges.length; ++i) {
             address gauge = oldGauges[i];
@@ -327,9 +385,15 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
                 cycleWeights[cycle][gauge] -= allocation.weight;
                 cycleTotalWeight[cycle] -= allocation.weight;
             }
+            (bool retained, uint256 newWeight) = _findGaugeWeight(gauge, newGauges, newWeights);
+            if (retained) {
+                IReward(gaugeToBribe[gauge])._adjust(allocation.weight, newWeight, tokenId);
+                _retainedVote[tokenId][gauge] = true;
+            } else {
+                IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
+            }
             delete votes[tokenId][gauge];
             delete targetStakeAmount[tokenId][gauge];
-            IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
             emit Abstained(tokenId, allocation.weight);
         }
         delete poolVote[tokenId];
@@ -344,7 +408,18 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         totalWeight += weight;
         cycleWeights[cycle][gauge] += weight;
         cycleTotalWeight[cycle] += weight;
-        IReward(gaugeToBribe[gauge])._deposit(weight, tokenId);
+        if (!_retainedVote[tokenId][gauge]) IReward(gaugeToBribe[gauge])._deposit(weight, tokenId);
+        delete _retainedVote[tokenId][gauge];
+    }
+
+    function _findGaugeWeight(address gauge, address[] calldata gauges, uint256[] memory weights_)
+        private
+        pure
+        returns (bool found, uint256 weight)
+    {
+        for (uint256 i; i < gauges.length; ++i) {
+            if (gauges[i] == gauge) return (true, weights_[i]);
+        }
     }
 
     function _toUint128(uint256 value) private pure returns (uint128) {

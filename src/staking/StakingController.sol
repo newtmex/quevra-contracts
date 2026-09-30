@@ -23,6 +23,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     address public override voter;
     address public immutable override vaultImplementation;
     mapping(address gauge => address vault) public override vaultByGauge;
+    mapping(address vault => address gauge) public gaugeByVault;
     address[] private _registeredGauges;
     mapping(address => bool) private _isVault;
     mapping(address => bool) private _isAgent;
@@ -81,6 +82,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         vault = Clones.cloneDeterministic(vaultImplementation, salt);
         StakingVault(payable(vault)).initialize(address(registry), requestId);
         vaultByGauge[gauge] = vault;
+        gaugeByVault[vault] = gauge;
         _registeredGauges.push(gauge);
         _isVault[vault] = true;
         emit VaultRegistered(requestId, vault, gauge, requester);
@@ -165,30 +167,48 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         if (!_isVault[msg.sender] && !_isAgent[msg.sender]) revert UnexpectedEtherSender();
     }
 
-    /// @notice Allocate a token's available MON to validator requests selected by the voter.
-    /// @dev A request's vault is topped up first. Any allocation left after activation is
-    /// delegated by the token-bound agent, so changing allocations in a later cycle is safe.
+    /// @notice Allocate a token's available MON to validator gauges.
+    /// @dev The veNFT owner may stake directly; the voter may also call this
+    ///      during rebalancing. A request's vault is topped up first. Any
+    ///      allocation left after activation is delegated by the token-bound
+    ///      agent, and the controller notifies the voter only after the stake
+    ///      becomes active.
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
         nonReentrant
     {
-        if (msg.sender != voter) revert NotVoter();
+        _requireTokenOwnerOrVoter(tokenId);
         if (gauges.length == 0) revert EmptyArray();
         if (gauges.length != amounts.length) revert LengthMismatch();
 
-        for (uint256 i; i < amounts.length; ++i) {
-            if (amounts[i] == 0) revert ZeroAmount();
-        }
+        int256[] memory deltas = new int256[](gauges.length);
         for (uint256 i; i < gauges.length; ++i) {
-            _stake(tokenId, gauges[i], amounts[i]);
+            if (amounts[i] == 0) revert ZeroAmount();
+            deltas[i] = _stake(tokenId, gauges[i], amounts[i]);
         }
+        _notifyBatch(tokenId, gauges, deltas);
         emit Staked(tokenId, _sum(amounts));
     }
 
     /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
-    /// @dev Monad requires undelegation and withdrawal to happen in different epochs.
+    /// @dev The veNFT owner may unstake directly; the voter may also call this
+    ///      during rebalancing. Monad requires undelegation and withdrawal to
+    ///      happen in different epochs.
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        _requireTokenOwnerOrVoter(tokenId);
+        if (gauges.length == 0) revert EmptyArray();
+        if (gauges.length != amounts.length) revert LengthMismatch();
+
+        _unstakeBatch(tokenId, gauges, amounts, true);
+        emit Unstaked(tokenId, _sum(amounts));
+    }
+
+    function unstakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
         nonReentrant
@@ -196,15 +216,22 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         if (msg.sender != voter) revert NotVoter();
         if (gauges.length == 0) revert EmptyArray();
         if (gauges.length != amounts.length) revert LengthMismatch();
-
-        for (uint256 i; i < gauges.length; ++i) {
-            if (amounts[i] == 0) revert ZeroAmount();
-            _unstake(tokenId, gauges[i], amounts[i]);
-        }
+        _unstakeBatch(tokenId, gauges, amounts, false);
         emit Unstaked(tokenId, _sum(amounts));
     }
 
-    function _stake(uint256 tokenId, address gauge, uint256 amount) internal {
+    function _unstakeBatch(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts, bool finalize)
+        internal
+    {
+        int256[] memory deltas = new int256[](gauges.length);
+        for (uint256 i; i < gauges.length; ++i) {
+            if (amounts[i] == 0) revert ZeroAmount();
+            deltas[i] = _unstake(tokenId, gauges[i], amounts[i], finalize);
+        }
+        _notifyBatch(tokenId, gauges, deltas);
+    }
+
+    function _stake(uint256 tokenId, address gauge, uint256 amount) internal returns (int256 delta) {
         address vault = vaultByGauge[gauge];
         if (vault == address(0)) revert InvalidVault();
         _finalize(tokenId, gauge);
@@ -219,62 +246,49 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             uint64 validatorId = StakingVault(payable(vault)).validatorId();
             if (validatorId == 0) revert ValidatorNotActivated();
             address agent = _agent(tokenId);
-            uint64[] memory ids = new uint64[](1);
-            uint256[] memory values = new uint256[](1);
-            ids[0] = validatorId;
-            values[0] = remainder;
-            StakingAgent(payable(agent)).delegate{value: remainder}(ids, values);
-            _notify(tokenId, gauge, int256(remainder));
+            StakingAgent(payable(agent)).delegate{value: remainder}(validatorId, remainder);
+            delta = int256(remainder);
         } else if (StakingVault(payable(vault)).validatorId() != 0 && wasActivated) {
-            _notify(tokenId, gauge, int256(toVault));
+            delta = int256(toVault);
         }
     }
 
     /// @dev Called by a vault exactly once when its validator is activated.
     function vaultActivated(address vault) external {
         if (!_isVault[msg.sender] || msg.sender != vault) revert InvalidVault();
-        address gauge;
-        // Gauges are the external key for vaults. There is intentionally no
-        // second vault->gauge mapping; scan is bounded by the number of
-        // registered validators and activation is a one-time operation.
-        // The callback is therefore only used for the vault's own token list.
-        for (uint256 i; i < _registeredGauges.length; ++i) {
-            if (vaultByGauge[_registeredGauges[i]] == vault) {
-                gauge = _registeredGauges[i];
-                break;
-            }
-        }
+        address gauge = gaugeByVault[vault];
         if (gauge == address(0)) revert InvalidVault();
         uint256 length = StakingVault(payable(vault)).tokenIdsLength();
+        uint256[] memory tokenIds = new uint256[](length);
+        address[] memory gauges = new address[](length);
+        int256[] memory deltas = new int256[](length);
         for (uint256 i; i < length; ++i) {
             uint256 tokenId = StakingVault(payable(vault)).tokenIdAt(i);
-            _notify(tokenId, gauge, int256(StakingVault(payable(vault)).balanceOf(tokenId)));
+            tokenIds[i] = tokenId;
+            gauges[i] = gauge;
+            deltas[i] = int256(StakingVault(payable(vault)).balanceOf(tokenId));
         }
+        _notifyBatch(tokenIds, gauges, deltas);
     }
 
-    function _unstake(uint256 tokenId, address gauge, uint256 amount) internal {
+    function _unstake(uint256 tokenId, address gauge, uint256 amount, bool finalize) internal returns (int256 delta) {
         address vault = vaultByGauge[gauge];
         if (vault == address(0)) revert InvalidVault();
-        _finalize(tokenId, gauge);
+        if (finalize) _finalize(tokenId, gauge);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         address agent = agentByToken[tokenId];
         uint256 agentAmount =
             agent == address(0) || validatorId == 0 ? 0 : StakingAgent(payable(agent)).balanceOf(validatorId);
         uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
         if (fromAgent != 0) {
-            uint64[] memory ids = new uint64[](1);
-            uint256[] memory values = new uint256[](1);
-            ids[0] = validatorId;
-            values[0] = fromAgent;
-            StakingAgent(payable(agent)).undelegate(ids, values);
+            StakingAgent(payable(agent)).undelegate(validatorId, fromAgent);
         }
         uint256 fromVault = amount - fromAgent;
         if (fromVault != 0) {
             if (StakingVault(payable(vault)).balanceOf(tokenId) < fromVault) revert InvalidUnstakeAmount();
             StakingVault(payable(vault)).undelegate(tokenId, fromVault);
         }
-
-        _notify(tokenId, gauge, -int256(fromVault + fromVault));
+        delta = -int256(amount);
     }
 
     function _finalize(uint256 tokenId, address gauge) internal {
@@ -287,9 +301,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         if (agent != address(0)) {
             uint64 validatorId = StakingVault(payable(vault)).validatorId();
             if (validatorId != 0 && StakingAgent(payable(agent)).pendingWithdrawal(validatorId) != 0) {
-                uint64[] memory ids = new uint64[](1);
-                ids[0] = validatorId;
-                try StakingAgent(payable(agent)).withdraw(ids) {} catch {}
+                try StakingAgent(payable(agent)).withdraw(validatorId) {} catch {}
             }
         }
         balanceOf[tokenId] += address(this).balance - beforeBalance;
@@ -306,12 +318,29 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     function _notify(uint256 tokenId, address gauge, int256 amount) internal {
-        if (amount != 0 && voter != address(0)) {
-            (bool ok,) = voter.call(
-                abi.encodeWithSignature("updateStakingAmount(uint256,address,int256)", tokenId, gauge, amount)
-            );
-            if (!ok) revert UnexpectedEtherSender();
+        uint256[] memory tokenIds = new uint256[](1);
+        address[] memory gauges = new address[](1);
+        int256[] memory amounts = new int256[](1);
+        tokenIds[0] = tokenId;
+        gauges[0] = gauge;
+        amounts[0] = amount;
+        _notifyBatch(tokenIds, gauges, amounts);
+    }
+
+    function _notifyBatch(uint256 tokenId, address[] calldata gauges, int256[] memory amounts) internal {
+        uint256[] memory tokenIds = new uint256[](gauges.length);
+        for (uint256 i; i < gauges.length; ++i) {
+            tokenIds[i] = tokenId;
         }
+        _notifyBatch(tokenIds, gauges, amounts);
+    }
+
+    function _notifyBatch(uint256[] memory tokenIds, address[] memory gauges, int256[] memory amounts) internal {
+        if (voter == address(0)) return;
+        (bool ok,) = voter.call(
+            abi.encodeWithSignature("updateStakingAmounts(uint256[],address[],int256[])", tokenIds, gauges, amounts)
+        );
+        if (!ok) revert UnexpectedEtherSender();
     }
 
     function _sum(uint256[] calldata values) private pure returns (uint256 total) {
@@ -376,5 +405,11 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
 
     function _ve() private view returns (address) {
         return IBaseVoter(voter).ve();
+    }
+
+    function _requireTokenOwnerOrVoter(uint256 tokenId) private view {
+        if (msg.sender != voter && msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
+            revert NotTokenOwner();
+        }
     }
 }

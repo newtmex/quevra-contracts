@@ -38,6 +38,12 @@ contract StakingAgent is StakeControlled {
         if (total != msg.value) revert ValueMismatch();
     }
 
+    function delegate(uint64 validatorId, uint256 amount) external payable onlyController {
+        if (amount == 0 || msg.value != amount) revert ValueMismatch();
+        if (!STAKING.delegate{value: amount}(validatorId)) revert StakingCallFailed();
+        balanceOf[validatorId] += amount;
+    }
+
     function undelegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external onlyController {
         _validateArrays(validatorIds.length, amounts.length);
         for (uint256 i; i < amounts.length; ++i) {
@@ -48,6 +54,15 @@ contract StakingAgent is StakeControlled {
             balanceOf[validatorIds[i]] -= amounts[i];
             pendingWithdrawal[validatorIds[i]] = amounts[i];
         }
+    }
+
+    function undelegate(uint64 validatorId, uint256 amount) external onlyController {
+        if (pendingWithdrawal[validatorId] != 0) revert WithdrawalPending(validatorId);
+        if (amount == 0) revert ZeroAmount();
+        if (balanceOf[validatorId] < amount) revert InsufficientBalance();
+        if (!STAKING.undelegate(validatorId, amount, WITHDRAW_ID)) revert StakingCallFailed();
+        balanceOf[validatorId] -= amount;
+        pendingWithdrawal[validatorId] = amount;
     }
 
     function withdraw(uint64[] calldata validatorIds) external onlyController {
@@ -64,10 +79,26 @@ contract StakingAgent is StakeControlled {
         }
     }
 
+    function withdraw(uint64 validatorId) external onlyController {
+        if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) revert StakingCallFailed();
+        delete pendingWithdrawal[validatorId];
+        uint256 balance = availableBalance();
+        if (balance != 0) {
+            (bool success,) = payable(controller).call{value: balance}("");
+            if (!success) revert TransferFailed();
+        }
+    }
+
     function claimRewards(uint64[] calldata validatorIds) external onlyController {
         if (validatorIds.length == 0) revert EmptyArray();
+        uint256 beforeBalance = availableBalance();
         for (uint256 i; i < validatorIds.length; ++i) {
-            _claimRewards(validatorIds[i]);
+            _claimRewardsRaw(validatorIds[i]);
+        }
+        uint256 claimed = availableBalance() - beforeBalance;
+        if (claimed != 0) {
+            (bool success,) = payable(controller).call{value: claimed}("");
+            if (!success) revert TransferFailed();
         }
     }
 

@@ -223,6 +223,17 @@ abstract contract Reward is IReward, ERC2771Context, ReentrancyGuard {
         emit Withdraw(sender, tokenId, amount);
     }
 
+    function _adjust(uint256 oldAmount, uint256 newAmount, uint256 tokenId) external {
+        address sender = _msgSender();
+        if (sender != authorized) revert NotAuthorized();
+        if (oldAmount == newAmount) return;
+
+        totalSupply = totalSupply - oldAmount + newAmount;
+        balanceOf[tokenId] = balanceOf[tokenId] - oldAmount + newAmount;
+        _writeCheckpoint(tokenId, balanceOf[tokenId]);
+        _writeSupplyCheckpoint();
+    }
+
     /// @inheritdoc IReward
     function getReward(uint256 tokenId, address[] memory tokens) external virtual nonReentrant {}
 
