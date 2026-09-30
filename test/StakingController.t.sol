@@ -2,16 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {ValidatorsVoter} from "../src/ValidatorsVoter.sol";
-import {FactoryRegistry} from "../src/factories/FactoryRegistry.sol";
-import {ValidatorGaugeFactory} from "../src/factories/ValidatorGaugeFactory.sol";
-import {VotingRewardsFactory} from "../src/factories/VotingRewardsFactory.sol";
 
 import {StakingController} from "../src/staking/StakingController.sol";
 import {IStakingController} from "../src/interfaces/IStakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
-import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
@@ -33,18 +27,18 @@ contract StakingControllerTest is StakingControllerFixture {
         new StakingController(address(registry), address(this), 1e18 + 1);
     }
 
-    function test_voterIsOwnerSetOnce() public {
-        address voter = makeAddr("voter");
-        address replacement = makeAddr("replacement-voter");
+    function test_veIsOwnerSetOnce() public {
+        StakingController configured = new StakingController(address(registry), address(this), 0);
+        address replacement = makeAddr("replacement-ve");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, operator));
         vm.prank(operator);
-        controller.setVoter(voter);
+        configured.setVe(address(veMON));
 
-        controller.setVoter(voter);
+        configured.setVe(address(veMON));
 
-        vm.expectRevert(IStakingController.VoterAlreadySet.selector);
-        controller.setVoter(replacement);
+        vm.expectRevert(IStakingController.VeAlreadySet.selector);
+        configured.setVe(replacement);
     }
 
     function test_onlyOwnerCanSetCommission() public {
@@ -81,7 +75,6 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_signingConfigForUsesFixedStakeAmount() public {
-        controller.setVoter(makeAddr("voter"));
         bytes32 saltSeed = keccak256("controller-test");
         (address authAddress, uint256 configuredCommission, uint256 amount) =
             controller.signingConfigFor(operator, saltSeed);
@@ -92,19 +85,6 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_depositOnlyAcceptsMONFromVeMONAndTracksTokenId() public {
-        FactoryRegistry factoryRegistry = new FactoryRegistry();
-        ValidatorGaugeFactory gaugeFactory = new ValidatorGaugeFactory();
-        VotingRewardsFactory rewardsFactory = new VotingRewardsFactory();
-        factoryRegistry.approveGaugeFactory(address(gaugeFactory), address(rewardsFactory));
-        address forwarder = makeAddr("controller-test-forwarder");
-        ValidatorsVoter implementation = new ValidatorsVoter(forwarder);
-        bytes memory init = abi.encodeCall(
-            ValidatorsVoter.initialize,
-            (address(veMON), address(factoryRegistry), address(registry), address(controller), address(gaugeFactory))
-        );
-        ValidatorsVoter voter = ValidatorsVoter(address(new ERC1967Proxy(address(implementation), init)));
-        controller.setVoter(address(voter));
-
         vm.prank(operator);
         (bool success,) = address(controller).call{value: validatorStake}("");
         assertFalse(success);
@@ -116,9 +96,18 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 }
 
-contract StakingControllerUnstakeTest is ValidatorsVoterFixture {
+contract StakingControllerUnstakeTest is StakingControllerFixture {
     function test_stakeThenUnstakeAndWithdrawRestoresMONWithoutMocks() public {
-        (,, address gauge) = _createValidator();
+        bytes32 saltSeed = keccak256("validator-0");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        vm.prank(operator);
+        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
+        address gauge = makeAddr("gauge-0");
+        vm.prank(operator);
+        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
         uint256 amount = validatorStake;
 
         vm.prank(operator);

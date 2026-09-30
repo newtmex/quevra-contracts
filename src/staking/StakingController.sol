@@ -6,7 +6,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
-import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
@@ -17,11 +16,11 @@ import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol"
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
-/// @dev Vote-derived allocations are intent; this contract only settles physical
-///      MON toward that intent and does not fan out vault activation callbacks.
+/// @dev User-selected allocations are intent; this contract only settles
+///      physical MON toward that intent.
 contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingController {
     IValidatorRegistry public immutable override registry;
-    address public override voter;
+    address public override ve;
     address public immutable override vaultImplementation;
     mapping(address gauge => address vault) public override vaultByGauge;
     mapping(address vault => address gauge) public gaugeByVault;
@@ -50,15 +49,15 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         vaultImplementation = address(new StakingVault());
     }
 
-    /// @notice Bind the voter once. The owner must set this after both contracts are deployed.
-    function setVoter(address voter_) external override onlyOwner {
-        if (voter != address(0)) revert VoterAlreadySet();
-        if (voter_ == address(0)) revert InvalidAddress();
-        voter = voter_;
-        emit VoterSet(voter_);
+    /// @notice Bind veMON once. The owner sets this after both contracts are deployed.
+    function setVe(address ve_) external override onlyOwner {
+        if (ve != address(0)) revert VeAlreadySet();
+        if (ve_ == address(0)) revert InvalidAddress();
+        ve = ve_;
+        emit VeSet(ve_);
     }
 
-    /// @notice Deploy, initialize, and register a vault with its gauge, only through the voter.
+    /// @notice Deploy, initialize, and register a vault for a validator request.
     function deployVault(
         uint256 requestId,
         address requester,
@@ -66,13 +65,13 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         address expectedAuthAddress,
         address gauge
     ) external override returns (address vault) {
-        if (msg.sender != voter) revert NotVoter();
+        if (msg.sender != requester) revert NotRequester();
         if (requester == address(0) || gauge == address(0) || vaultByGauge[gauge] != address(0)) {
             revert InvalidVault();
         }
 
         IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
-        if (submission.requester != voter || submission.status != IValidatorRegistry.Status.Submitted) {
+        if (submission.requester != requester || submission.status != IValidatorRegistry.Status.Submitted) {
             revert InvalidValidatorState();
         }
         if (ValidatorPayloadLibrary.authAddress(submission.payload) != expectedAuthAddress) {
@@ -116,7 +115,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
         override
         returns (address authAddress, uint256 commission_, uint256 amount)
     {
-        if (voter == address(0) || requester == address(0)) revert InvalidAddress();
+        if (ve == address(0) || requester == address(0)) revert InvalidAddress();
         authAddress = predictVaultAddress(requester, saltSeed);
         return (authAddress, _effectiveCommission(), VALIDATOR_STAKE_AMOUNT);
     }
@@ -137,7 +136,7 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     function deposit(uint256 tokenId) external payable override nonReentrant {
-        if (voter == address(0) || msg.sender != _ve()) revert NotVe();
+        if (ve == address(0) || msg.sender != ve) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
         balanceOf[tokenId] += msg.value;
         emit MONDeposited(tokenId, msg.value);
@@ -175,29 +174,15 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     /// @notice Allocate a token's available MON to validator gauges.
-    /// @dev The veNFT owner may stake directly; the voter may also call this
-    ///      during rebalancing. A request's vault is topped up first. Any
-    ///      allocation left after activation is delegated by the token-bound
-    ///      agent. Vote intent remains recorded in the voter.
+    /// @dev A request's vault is topped up first. Any allocation left after
+    ///      activation is delegated by the token-bound agent.
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
         nonReentrant
     {
-        _requireTokenOwnerOrVoter(tokenId);
+        _requireTokenOwner(tokenId);
         _stakeBatch(tokenId, gauges, amounts, true);
-        emit Staked(tokenId, _sum(amounts));
-    }
-
-    /// @notice Allocate MON after a caller has already finalized all pending withdrawals.
-    /// @dev Restricted to the voter so rebalance does not repeat finalization per gauge.
-    function stakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
-        external
-        override
-        nonReentrant
-    {
-        if (msg.sender != voter) revert NotVoter();
-        _stakeBatch(tokenId, gauges, amounts, false);
         emit Staked(tokenId, _sum(amounts));
     }
 
@@ -214,31 +199,18 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
-    /// @dev The veNFT owner may unstake directly; the voter may also call this
-    ///      during rebalancing. Monad requires undelegation and withdrawal to
-    ///      happen in different epochs.
+    /// @dev Monad requires undelegation and withdrawal to happen in different
+    ///      epochs.
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
         nonReentrant
     {
-        _requireTokenOwnerOrVoter(tokenId);
+        _requireTokenOwner(tokenId);
         if (gauges.length == 0) revert EmptyArray();
         if (gauges.length != amounts.length) revert LengthMismatch();
 
         _unstakeBatch(tokenId, gauges, amounts, true);
-        emit Unstaked(tokenId, _sum(amounts));
-    }
-
-    function unstakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
-        external
-        override
-        nonReentrant
-    {
-        if (msg.sender != voter) revert NotVoter();
-        if (gauges.length == 0) revert EmptyArray();
-        if (gauges.length != amounts.length) revert LengthMismatch();
-        _unstakeBatch(tokenId, gauges, amounts, false);
         emit Unstaked(tokenId, _sum(amounts));
     }
 
@@ -400,15 +372,14 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     /// @notice Complete prior undelegations after Monad's withdrawal delay.
-    /// @dev The token owner can finalize a direct unstake; the voter can do so
-    ///      during rebalance.
+    /// @dev The token owner can finalize a direct unstake.
     function withdraw(uint256 tokenId, address[] calldata gauges)
         external
         override
         nonReentrant
         returns (uint256 reclaimed)
     {
-        _requireTokenOwnerOrVoter(tokenId);
+        _requireTokenOwner(tokenId);
         if (gauges.length == 0) revert EmptyArray();
 
         for (uint256 i; i < gauges.length; ++i) {
@@ -423,9 +394,9 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     /// @notice Finalize every pending withdrawal tracked for a token.
-    /// @dev This is the single finalization pass used by rebalance and veMON exit.
+    /// @dev This is the single finalization pass used by veMON exit.
     function finalizeWithdrawals(uint256 tokenId) external override nonReentrant returns (uint256 reclaimed) {
-        if (msg.sender != voter && msg.sender != _ve() && msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
+        if (msg.sender != _ve() && msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
             revert NotTokenOwner();
         }
 
@@ -498,11 +469,11 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
     }
 
     function _ve() private view returns (address) {
-        return IBaseVoter(voter).ve();
+        return ve;
     }
 
-    function _requireTokenOwnerOrVoter(uint256 tokenId) private view {
-        if (msg.sender != voter && msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
+    function _requireTokenOwner(uint256 tokenId) private view {
+        if (msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
             revert NotTokenOwner();
         }
     }

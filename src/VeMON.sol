@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {VotingEscrow} from "./ve/VotingEscrow.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
-import {IVoter} from "./interfaces/IVoter.sol";
 
 /// @title veMON
 /// @notice Quevra voting escrow for MON routed into validator staking.
@@ -27,14 +26,12 @@ contract VeMON is VotingEscrow {
 
     /// @notice Release a fully unstaked position's MON and burn its veNFT.
     /// @dev Pending Monad withdrawals are finalized in the same transaction
-    ///      when they have matured. Vote intent is cleared before the veNFT is
-    ///      burned; the original lock principal remains an immutable record.
+    ///      when they have matured; the original lock principal remains an
+    ///      immutable record.
     function withdraw(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
 
         IStakingController stakingController = IStakingController(controller);
-        IVoter voter = IVoter(stakingController.voter());
-        voter.clearVoteFromEscrow(tokenId);
         stakingController.finalizeWithdrawals(tokenId);
         if (!stakingController.isFullyUnstaked(tokenId)) revert InvalidAmount();
 

@@ -13,6 +13,7 @@ abstract contract StakingControllerFixture is ValidatorRegistryFixture {
         super.setUp();
         controller = new StakingController(address(registry), address(this), 0);
         veMON = new VeMON(address(controller), 4);
+        controller.setVe(address(veMON));
     }
 
     function _setCommission() internal {
