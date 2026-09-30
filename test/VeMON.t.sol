@@ -23,7 +23,7 @@ contract VeMONTest is VeMONFixture {
 
         uint256 expectedEnd = lockDuration * ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
         (int128 amount, uint256 end, bool permanent, uint256 boost) = veMON.locked(1);
-        assertEq(amount, int128(int256(validatorStake)));
+        assertEq(amount, 0);
         assertEq(end, expectedEnd);
         assertFalse(permanent);
         assertEq(boost, 0);
@@ -39,7 +39,7 @@ contract VeMONTest is VeMONFixture {
         // future cycle boundary, epoch 30.
         (, uint256 end,,) = veMON.locked(1);
         assertEq(end, 30);
-        assertEq(veMON.votingPowerOfAt(1, 12), validatorStake * 18 / 20);
+        assertEq(veMON.votingPowerOfAt(1, 12), 0);
         assertEq(veMON.votingPowerOfAt(1, 30), 0);
     }
 
@@ -74,15 +74,15 @@ contract VeMONTest is VeMONFixture {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
-        assertEq(veMON.votingPowerOf(1), validatorStake);
-        assertEq(veMON.votingPowerOfAt(1, 10), validatorStake / 2);
+        assertEq(veMON.votingPowerOf(1), 0);
+        assertEq(veMON.votingPowerOfAt(1, 10), 0);
         assertEq(veMON.votingPowerOfAt(1, 20), 0);
-        assertEq(veMON.totalVotingPower(), validatorStake);
+        assertEq(veMON.totalVotingPower(), 0);
 
         _setEpoch(10, false);
         veMON.checkpoint();
-        assertEq(veMON.votingPowerOf(1), validatorStake / 2);
-        assertEq(veMON.totalVotingPower(), validatorStake / 2);
+        assertEq(veMON.votingPowerOf(1), 0);
+        assertEq(veMON.totalVotingPower(), 0);
     }
 
     function test_votingPowerCheckpointsPreserveHistoricalTotalVotingPower() public {
@@ -95,10 +95,10 @@ contract VeMONTest is VeMONFixture {
         vm.prank(stranger);
         veMON.createLock{value: 20 ether}(20 ether, lockDuration);
 
-        assertEq(veMON.totalVotingPowerAt(4), validatorStake * 16 / 20);
-        assertEq(veMON.totalVotingPowerAt(5), validatorStake * 15 / 20 + 20 ether);
-        assertEq(veMON.votingPowerOfAt(1, 5), validatorStake * 15 / 20);
-        assertEq(veMON.votingPowerOfAt(2, 5), 20 ether);
+        assertEq(veMON.totalVotingPowerAt(4), 0);
+        assertEq(veMON.totalVotingPowerAt(5), 0);
+        assertEq(veMON.votingPowerOfAt(1, 5), 0);
+        assertEq(veMON.votingPowerOfAt(2, 5), 0);
         assertEq(veMON.userPointEpoch(1), 1);
         assertEq(veMON.userPointEpoch(2), 1);
     }
@@ -114,8 +114,8 @@ contract VeMONTest is VeMONFixture {
         // ERC721 transfer protection is explicitly block-scoped, so this EVM block
         // advance isolates the subsequent read from same-block protection.
         vm.roll(block.number + 1);
-        assertEq(veMON.votingPowerOf(1), validatorStake);
-        assertEq(veMON.votingPowerOfAt(1, 0), validatorStake);
+        assertEq(veMON.votingPowerOf(1), 0);
+        assertEq(veMON.votingPowerOfAt(1, 0), 0);
     }
 
     function test_permanentLockIsConstantAndCanReturnToCycleLockedPosition() public {
@@ -126,14 +126,14 @@ contract VeMONTest is VeMONFixture {
         vm.prank(operator);
         veMON.lockPermanent(1);
         (int128 amount, uint256 end, bool permanent,) = veMON.locked(1);
-        assertEq(amount, int128(int256(validatorStake)));
+        assertEq(amount, 0);
         assertEq(end, 0);
         assertTrue(permanent);
-        assertEq(veMON.permanentLockBalance(), validatorStake);
-        assertEq(veMON.votingPowerOf(1), validatorStake);
-        assertEq(veMON.votingPowerOfAt(1, 20), validatorStake);
-        assertEq(veMON.totalVotingPowerAt(30), validatorStake);
-        assertEq(veMON.totalVotingPower(), validatorStake);
+        assertEq(veMON.permanentLockBalance(), 0);
+        assertEq(veMON.votingPowerOf(1), 0);
+        assertEq(veMON.votingPowerOfAt(1, 20), 0);
+        assertEq(veMON.totalVotingPowerAt(30), 0);
+        assertEq(veMON.totalVotingPower(), 0);
 
         vm.prank(operator);
         veMON.unlockPermanent(1);
@@ -141,7 +141,7 @@ contract VeMONTest is VeMONFixture {
         assertEq(end, 25);
         assertFalse(permanent);
         assertEq(veMON.permanentLockBalance(), 0);
-        assertEq(veMON.votingPowerOfAt(1, 5), validatorStake);
+        assertEq(veMON.votingPowerOfAt(1, 5), 0);
         assertEq(veMON.votingPowerOfAt(1, 25), 0);
     }
 

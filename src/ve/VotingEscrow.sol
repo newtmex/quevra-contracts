@@ -13,7 +13,7 @@ import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 ///      Time-limited locks are specified in Quevra cycles and expire on cycle boundaries.
 abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscrow {
     uint64 public immutable maxLockCycles;
-    uint64 public immutable maxLockEpochs;
+    uint64 public immutable override maxLockEpochs;
 
     struct Point {
         int128 bias;
@@ -33,6 +33,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     uint256 public override permanentLockBalance;
 
     error InvalidAmount();
+    error InvalidLockAmountChange();
     error NonexistentToken();
     error EpochOutOfRange();
     event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
@@ -58,8 +59,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
         tokenId = nextId++;
         _deposit(_value, tokenId);
-        IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(int128(int256(_value)), unlockEpoch, false, 0);
+        IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(0, unlockEpoch, false, 0);
         _locked[tokenId] = newLock;
         _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
         emit LockCreated(tokenId, msg.sender, _value, unlockEpoch);
@@ -70,6 +70,25 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     /// @dev Custody implementation supplied by the concrete escrow. The lock
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
     function _deposit(uint256 amount, uint256 tokenId) internal virtual;
+
+    function adjustLockAmount(uint256 tokenId, int256 delta) external override nonReentrant {
+        if (!_isLockAmountUpdater(msg.sender)) revert NotApprovedOrOwner();
+        if (_ownerOf(tokenId) == address(0) || delta == 0) revert InvalidLockAmountChange();
+
+        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        if (oldLock.isPermanent) revert PermanentLock();
+        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
+        if (oldLock.end <= currentEpoch) revert LockExpired();
+
+        int256 nextAmount = int256(oldLock.amount) + delta;
+        if (nextAmount < 0 || nextAmount > type(int128).max) revert InvalidLockAmountChange();
+        IVotingEscrow.LockedBalance memory newLock =
+            IVotingEscrow.LockedBalance(int128(nextAmount), oldLock.end, false, oldLock.boost);
+        _checkpointLock(tokenId, oldLock, newLock);
+        _locked[tokenId] = newLock;
+    }
+
+    function _isLockAmountUpdater(address account) internal view virtual returns (bool);
 
     function lockPermanent(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);

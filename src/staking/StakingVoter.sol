@@ -141,11 +141,8 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             }
             requested += weights_[i];
         }
-        uint256 power = IVotingEscrow(ve).votingPowerOf(tokenId);
-        if (requested == 0 || power == 0) revert InvalidVote();
-        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
-        if (lockedAmount <= 0) revert InvalidVote();
-        uint256 principal = uint256(uint128(lockedAmount));
+        (uint256 power, uint256 principal) = _votingInputs(tokenId);
+        if (requested == 0 || power == 0 || principal == 0) revert InvalidVote();
 
         _rememberCurrentGauges(tokenId);
         _rememberGauges(tokenId, gauges);
@@ -211,6 +208,11 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     /// @notice Record a physical allocation change reported by the controller.
     function updateStakingAmount(uint256 tokenId, address gauge, int256 delta) external {
         if (msg.sender != address(controller)) revert NotController();
+
+        // The veNFT represents MON that is actually deployed to a validator,
+        // not MON that is merely waiting in the controller. Update it before
+        // exposing the amount to the validator gauge.
+        IVotingEscrow(ve).adjustLockAmount(tokenId, delta);
         VoteAllocation storage allocation = votes[tokenId][gauge];
         // A controller allocation may exist before a token has voted for this
         // gauge. Active-liquidity accounting must not depend on vote metadata.
@@ -296,6 +298,21 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         if (epoch < ProtocolTimeLibrary.cycleVoteStart(epoch) || epoch >= ProtocolTimeLibrary.cycleVoteEnd(epoch)) {
             revert VotingClosed();
         }
+    }
+
+    function _votingInputs(uint256 tokenId) private view returns (uint256 power, uint256 principal) {
+        power = IVotingEscrow(ve).votingPowerOf(tokenId);
+        (int128 lockedAmount, uint256 lockEnd,,) = IVotingEscrow(ve).locked(tokenId);
+        if (lockedAmount > 0) return (power, uint256(uint128(lockedAmount)));
+
+        // A freshly-created veNFT has MON waiting in the controller but no
+        // locked amount until that MON is deployed to a validator. Allow its
+        // owner to vote using the pending deposit so the vote can select the
+        // validator that will receive the deposit.
+        principal = controller.balanceOf(tokenId);
+        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpochView();
+        uint64 maxLockEpochs = IVotingEscrow(ve).maxLockEpochs();
+        power = lockEnd > currentEpoch ? principal * (lockEnd - currentEpoch) / maxLockEpochs : 0;
     }
 
     function _reset(uint256 tokenId, uint64 cycle) private {

@@ -267,14 +267,14 @@ contract StakingController is Ownable2Step, ReentrancyGuardTransient, IStakingCo
             ids[0] = validatorId;
             values[0] = fromAgent;
             StakingAgent(payable(agent)).undelegate(ids, values);
-            _notify(tokenId, gauge, -int256(fromAgent));
         }
         uint256 fromVault = amount - fromAgent;
         if (fromVault != 0) {
             if (StakingVault(payable(vault)).balanceOf(tokenId) < fromVault) revert InvalidUnstakeAmount();
             StakingVault(payable(vault)).undelegate(tokenId, fromVault);
-            _notify(tokenId, gauge, -int256(fromVault));
         }
+
+        _notify(tokenId, gauge, -int256(fromVault + fromVault));
     }
 
     function _finalize(uint256 tokenId, address gauge) internal {
