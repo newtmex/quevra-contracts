@@ -43,7 +43,7 @@ contract StakingVault is StakeControlled {
     }
 
     function deficit() public view returns (uint256) {
-        return MIN_AUTH_ADDRESS_STAKE - totalBalance;
+        return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
     }
 
     /// @notice Accounts deposits and uses the registry to activate the validator.

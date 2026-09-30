@@ -14,11 +14,12 @@ import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {IReward} from "../interfaces/IReward.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {StakingController} from "./StakingController.sol";
+import {IStakingAllocationObserver} from "../interfaces/IStakingAllocationObserver.sol";
 
 /// @notice Gauge creation and lifecycle hooks shared by staking voters.
 /// @dev This carries the Tigris creation dependencies while leaving Quevra's
 ///      cycle voting and reward accounting in its existing voter contracts.
-abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, ReentrancyGuard {
+abstract contract StakingVoter is IBaseVoter, IVoter, IStakingAllocationObserver, ERC2771Context, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct VoteAllocation {
@@ -47,6 +48,12 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     mapping(uint64 => uint256) public cycleTotalWeight;
     mapping(uint256 => uint64) public lastVotedCycle;
 
+    /// @notice Actual active MON backing a token's validator allocation.
+    /// @dev `votes[tokenId][gauge].stakeAmount` remains the desired target used by
+    ///      rebalance. This mapping is updated by the controller as backing moves.
+    mapping(uint256 => mapping(address => uint256)) public activeStake;
+    mapping(address => uint256) public validatorStakingAmount;
+
     error ZeroAddress();
     error GaugeFactoryNotApproved();
     error NotGovernor();
@@ -54,6 +61,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     error InvalidVote();
     error VotingClosed();
     error AlreadyVoted();
+    error NotController();
 
     modifier onlyNewCycle(uint256 tokenId) {
         uint64 cycle = ProtocolTimeLibrary.currentCycleStart();
@@ -152,6 +160,18 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     ///      withdrawal is left unresolved so a later call can follow the vote that is current then.
     function rebalance(uint256 tokenId) external override nonReentrant {
         _rebalance(tokenId);
+    }
+
+    /// @inheritdoc IStakingAllocationObserver
+    function notifyActiveAllocation(uint256 tokenId, address gauge, uint256 activeAmount) external override {
+        if (msg.sender != address(controller)) revert NotController();
+        uint256 previous = activeStake[tokenId][gauge];
+        if (activeAmount > previous) {
+            validatorStakingAmount[gauge] += activeAmount - previous;
+        } else if (previous > activeAmount) {
+            validatorStakingAmount[gauge] -= previous - activeAmount;
+        }
+        activeStake[tokenId][gauge] = activeAmount;
     }
 
     function _addVoteAllocations(

@@ -139,11 +139,15 @@ contract StakingControllerUnstakeTest is ValidatorsVoterFixture {
         vm.prank(address(validatorsVoter));
         controller.stake(1, gauges, amounts);
         assertEq(controller.balanceOf(1), 0);
+        assertEq(validatorsVoter.activeStake(1, gauge), amount);
+        assertEq(validatorsVoter.validatorStakingAmount(gauge), amount);
 
         // Validator activation/delegation becomes an active stake at the next epoch.
         _setEpoch(1, false);
         vm.prank(address(validatorsVoter));
         controller.unstake(1, gauges, amounts);
+        assertEq(validatorsVoter.activeStake(1, gauge), 0);
+        assertEq(validatorsVoter.validatorStakingAmount(gauge), 0);
 
         // Read the actual maturity epoch instead of assuming a fixed delay.
         address vault = controller.vaultByGauge(gauge);
