@@ -13,8 +13,6 @@ contract StakingVault is StakeControlled {
     IValidatorRegistry public registry;
     mapping(uint256 tokenId => uint256 amount) public balanceOf;
     mapping(uint256 tokenId => uint256 amount) public pendingWithdrawal;
-    uint256[] private _tokenIds;
-    mapping(uint256 tokenId => bool) private _knownToken;
     uint256 public totalBalance;
 
     /// @notice The only validator request this vault can execute.
@@ -51,10 +49,6 @@ contract StakingVault is StakeControlled {
     function deposit(uint256 tokenId) external payable onlyController {
         if (msg.value == 0 || deficit() < msg.value) revert InvalidAmount();
 
-        if (!_knownToken[tokenId]) {
-            _knownToken[tokenId] = true;
-            _tokenIds.push(tokenId);
-        }
         balanceOf[tokenId] += msg.value;
         totalBalance += msg.value;
 
@@ -69,17 +63,7 @@ contract StakingVault is StakeControlled {
                 submission.payload, submission.signedSecpMessage, submission.signedBlsMessage
             );
             if (validatorId == 0) revert AddValidatorFailed();
-            (bool success,) = controller.call(abi.encodeWithSignature("vaultActivated(address)", address(this)));
-            success;
         }
-    }
-
-    function tokenIdsLength() external view returns (uint256) {
-        return _tokenIds.length;
-    }
-
-    function tokenIdAt(uint256 index) external view returns (uint256) {
-        return _tokenIds[index];
     }
 
     /// @notice Begin withdrawing part of a token's active allocation.

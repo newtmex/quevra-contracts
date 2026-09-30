@@ -33,7 +33,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     uint256 public override permanentLockBalance;
 
     error InvalidAmount();
-    error InvalidLockAmountChange();
     error NonexistentToken();
     error EpochOutOfRange();
     event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
@@ -73,25 +72,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
     function _deposit(uint256 amount, uint256 tokenId) internal virtual;
 
-    function adjustLockAmount(uint256 tokenId, int256 delta) external override nonReentrant {
-        if (!_isLockAmountUpdater(msg.sender)) revert NotApprovedOrOwner();
-        if (_ownerOf(tokenId) == address(0) || delta == 0) revert InvalidLockAmountChange();
-
-        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
-        if (oldLock.isPermanent) revert PermanentLock();
-        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
-        if (oldLock.end <= currentEpoch) revert LockExpired();
-
-        int256 nextAmount = int256(oldLock.amount) + delta;
-        if (nextAmount < 0 || nextAmount > type(int128).max) revert InvalidLockAmountChange();
-        IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(int128(nextAmount), oldLock.end, false, oldLock.boost);
-        _checkpointLock(tokenId, oldLock, newLock);
-        _locked[tokenId] = newLock;
-    }
-
-    function _isLockAmountUpdater(address account) internal view virtual returns (bool);
-
     function lockPermanent(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
         IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
@@ -128,6 +108,12 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         if (ownershipChange[tokenId] == block.number) return 0;
         // The staking epoch precompile is CALL-only, so view methods use the latest checkpoint.
         return _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
+    }
+
+    function votingPowerAndLockedAmount(uint256 tokenId) external view override returns (uint256 power, int128 amount) {
+        if (ownershipChange[tokenId] == block.number) return (0, _locked[tokenId].amount);
+        power = _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
+        amount = _locked[tokenId].amount;
     }
 
     function votingPowerOfAt(uint256 tokenId, uint256 targetEpoch) external view override returns (uint256) {
@@ -297,7 +283,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
     }
 
-    function _requireApprovedOrOwner(address account, uint256 tokenId) private view {
+    function _requireApprovedOrOwner(address account, uint256 tokenId) internal view {
         address tokenOwner = _ownerOf(tokenId);
         if (tokenOwner == address(0)) revert NonexistentToken();
         if (account != tokenOwner && account != getApproved(tokenId) && !isApprovedForAll(tokenOwner, account)) {

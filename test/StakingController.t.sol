@@ -143,9 +143,15 @@ contract StakingControllerUnstakeTest is ValidatorsVoterFixture {
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
         _setEpoch(withdrawEpoch + 1, false);
-        vm.prank(address(validatorsVoter));
+        vm.prank(operator);
         controller.withdraw(1, gauges);
 
         assertEq(controller.balanceOf(1), amount);
+
+        vm.prank(operator);
+        veMON.withdraw(1);
+
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(veMON.balanceOf(operator), 0);
     }
 }

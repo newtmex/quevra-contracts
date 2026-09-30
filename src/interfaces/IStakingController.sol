@@ -21,12 +21,14 @@ interface IStakingController {
     error InvalidUnstakeAmount();
     error UnexpectedEtherSender();
     error NotTokenOwner();
+    error TransferFailed();
 
     event VoterSet(address indexed voter);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
+    event MONReleased(uint256 indexed tokenId, address indexed recipient, uint256 amount);
     event AgentCreated(uint256 indexed tokenId, address indexed agent);
     event Staked(uint256 indexed tokenId, uint256 amount);
     event Unstaked(uint256 indexed tokenId, uint256 amount);
@@ -36,6 +38,7 @@ interface IStakingController {
     function registry() external view returns (IValidatorRegistry);
     function vaultImplementation() external view returns (address);
     function vaultByGauge(address gauge) external view returns (address);
+    function isValidatorActive(address gauge) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
@@ -61,8 +64,12 @@ interface IStakingController {
 
     function deposit(uint256 tokenId) external payable;
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function stakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function unstakeFinalized(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
-    function withdraw(uint256 tokenId, address[] calldata gauges) external;
+    function withdraw(uint256 tokenId, address[] calldata gauges) external returns (uint256 reclaimed);
+    function finalizeWithdrawals(uint256 tokenId) external returns (uint256 reclaimed);
+    function isFullyUnstaked(uint256 tokenId) external view returns (bool);
+    function release(uint256 tokenId, address payable recipient) external returns (uint256 amount);
     function claimRewards(uint256 tokenId, address[] calldata gauges) external;
 }

@@ -104,8 +104,8 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         vm.prank(operator);
         validatorsVoter.vote(tokenId, gauges, weights_);
 
-        _assertVoteAllocation(tokenId, gaugeA, 25 ether, 0);
-        _assertVoteAllocation(tokenId, gaugeB, 75 ether, 0);
+        _assertVoteAllocation(tokenId, gaugeA, 25 ether, 25 ether);
+        _assertVoteAllocation(tokenId, gaugeB, 75 ether, 75 ether);
         assertEq(validatorsVoter.targetStakeAmount(tokenId, gaugeA), 25 ether);
         assertEq(validatorsVoter.targetStakeAmount(tokenId, gaugeB), 75 ether);
         assertEq(validatorsVoter.cycleWeights(5, gaugeA), 25 ether);
@@ -116,6 +116,26 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         vm.prank(operator);
         vm.expectRevert(StakingVoter.AlreadyVoted.selector);
         validatorsVoter.vote(tokenId, gauges, weights_);
+    }
+
+    function test_voteAndRebalanceFinalizesOnceAndActivatesTargetStake() public {
+        (,, address gauge) = _createValidator();
+
+        vm.prank(operator);
+        uint256 tokenId = veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        _setEpoch(6, false);
+        address[] memory gauges = new address[](1);
+        gauges[0] = gauge;
+        uint256[] memory weights = new uint256[](1);
+        weights[0] = 1;
+
+        vm.prank(operator);
+        validatorsVoter.voteAndRebalance(tokenId, gauges, weights);
+
+        assertEq(controller.balanceOf(tokenId), 0);
+        assertEq(controller.allocationOf(tokenId, gauge), validatorStake);
+        assertEq(validatorsVoter.activeStake(tokenId, gauge), validatorStake);
     }
 
     function _assertVoteAllocation(uint256 tokenId, address gauge, uint256 expectedWeight, uint256 expectedStake)

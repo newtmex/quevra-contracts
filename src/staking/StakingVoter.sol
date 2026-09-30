@@ -42,18 +42,15 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     mapping(uint256 => address[]) private _allocationGauges;
     mapping(uint256 => uint256) public usedWeights;
     mapping(uint256 => mapping(address => VoteAllocation)) public votes;
-    /// @dev Desired physical allocation. `votes[tokenId][gauge].stakeAmount`
-    ///      is the observed active allocation and is updated by the controller.
+    /// @dev Desired MON allocation. The controller treats this as intent and
+    ///      moves physical MON toward it during rebalance.
     mapping(uint256 => mapping(address => uint256)) public targetStakeAmount;
     mapping(uint256 => mapping(address => bool)) private _retainedVote;
-    /// @notice Active MON supplied by an individual veNFT to a validator.
-    /// @dev This excludes controller liquidity and pending undelegations.
+    /// @notice Target MON allocation of an individual veNFT to a validator.
     mapping(uint256 => mapping(address => uint256)) public activeStake;
-    /// @notice Total MON currently deployed by an individual veNFT.
+    /// @notice Total MON target allocation of an individual veNFT.
     mapping(uint256 => uint256) public activeStakeTotal;
-    /// @dev Distinguishes the initial lock principal from later restaking.
-    mapping(uint256 => bool) public hasStaked;
-    /// @notice Sum of active tokenId allocations backing a validator gauge.
+    /// @notice Sum of target tokenId allocations backing a validator gauge.
     mapping(address => uint256) public validatorStakingAmount;
     /// @notice Minimum active MON required before a validator can distribute rewards.
     uint256 public constant MIN_ACTIVE_VALIDATOR_STAKE = 100_000 ether;
@@ -144,6 +141,38 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         _rebalance(tokenId);
     }
 
+    function clearVoteFromEscrow(uint256 tokenId) external override nonReentrant {
+        if (msg.sender != ve) revert NotController();
+
+        address[] storage stored = poolVote[tokenId];
+        uint64 cycle = ProtocolTimeLibrary.currentCycleStart();
+        for (uint256 i; i < stored.length; ++i) {
+            address gauge = stored[i];
+            VoteAllocation memory allocation = votes[tokenId][gauge];
+            if (allocation.weight == 0) continue;
+
+            weights[gauge] -= allocation.weight;
+            totalWeight -= allocation.weight;
+            if (lastVotedCycle[tokenId] == cycle) {
+                cycleWeights[cycle][gauge] -= allocation.weight;
+                cycleTotalWeight[cycle] -= allocation.weight;
+            }
+            IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
+
+            uint256 target = targetStakeAmount[tokenId][gauge];
+            if (target != 0) {
+                validatorStakingAmount[gauge] -= target;
+                activeStakeTotal[tokenId] -= target;
+                activeStake[tokenId][gauge] = 0;
+                IValidatorGauge(gauge).updateLiquidity(tokenId, 0);
+            }
+            delete votes[tokenId][gauge];
+            delete targetStakeAmount[tokenId][gauge];
+        }
+        delete poolVote[tokenId];
+        usedWeights[tokenId] = 0;
+    }
+
     function _vote(uint256 tokenId, address[] calldata gauges, uint256[] calldata weights_) internal {
         if (!IVotingEscrow(ve).isApprovedOrOwner(_msgSender(), tokenId)) revert VoteNotAuthorized();
         if (gauges.length == 0 || gauges.length != weights_.length) revert InvalidVote();
@@ -159,8 +188,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             }
             requested += weights_[i];
         }
-        uint256 power = IVotingEscrow(ve).votingPowerOf(tokenId);
-        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
+        (uint256 power, int128 lockedAmount) = IVotingEscrow(ve).votingPowerAndLockedAmount(tokenId);
         if (requested == 0 || power == 0 || lockedAmount <= 0) {
             revert InvalidVote();
         }
@@ -193,11 +221,7 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         address[] storage stored = _allocationGauges[tokenId];
         if (stored.length == 0) return;
 
-        address[] memory gauges = new address[](stored.length);
-        for (uint256 i; i < stored.length; ++i) {
-            gauges[i] = stored[i];
-        }
-        try controller.withdraw(tokenId, gauges) {} catch {}
+        controller.finalizeWithdrawals(tokenId);
 
         address[] memory surplusGauges = new address[](stored.length);
         uint256[] memory surplus = new uint256[](stored.length);
@@ -234,91 +258,32 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
             try controller.unstakeFinalized(tokenId, surplusGauges, surplus) {} catch {}
         }
         if (deficitCount != 0) {
-            try controller.stake(tokenId, deficitGauges, deficit) {} catch {}
-        }
-    }
-
-    /// @notice Record a physical allocation change reported by the controller.
-    function updateStakingAmount(uint256 tokenId, address gauge, int256 delta) external {
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory gauges = new address[](1);
-        int256[] memory deltas = new int256[](1);
-        tokenIds[0] = tokenId;
-        gauges[0] = gauge;
-        deltas[0] = delta;
-        updateStakingAmounts(tokenIds, gauges, deltas);
-    }
-
-    function updateStakingAmounts(uint256[] memory tokenIds, address[] memory gauges, int256[] memory deltas) public {
-        if (msg.sender != address(controller)) revert NotController();
-        if (tokenIds.length != gauges.length || gauges.length != deltas.length) revert InvalidVote();
-
-        for (uint256 i; i < deltas.length; ++i) {
-            bool first = true;
-            for (uint256 j; j < i; ++j) {
-                if (tokenIds[j] == tokenIds[i]) {
-                    first = false;
-                    break;
-                }
-            }
-            if (!first) continue;
-
-            int256 net;
-            for (uint256 j = i; j < deltas.length; ++j) {
-                if (tokenIds[j] == tokenIds[i]) net += deltas[j];
-            }
-            // The initial lock principal is already reflected in veMON. Do not
-            // add it again when the validator is first activated. Subsequent
-            // restakes must restore principal previously removed by unstaking.
-            if (net != 0 && (net < 0 || hasStaked[tokenIds[i]])) {
-                IVotingEscrow(ve).adjustLockAmount(tokenIds[i], net);
-            }
+            try controller.stakeFinalized(tokenId, deficitGauges, deficit) {} catch {}
         }
 
-        for (uint256 i; i < deltas.length; ++i) {
-            _applyStakingAmount(tokenIds[i], gauges[i], deltas[i]);
-            if (deltas[i] > 0) hasStaked[tokenIds[i]] = true;
-        }
+        _pruneAllocationGauges(tokenId);
     }
 
-    function _applyStakingAmount(uint256 tokenId, address gauge, int256 delta) internal {
-        if (delta == 0) return;
-
-        VoteAllocation storage allocation = votes[tokenId][gauge];
-        // A controller allocation may exist before a token has voted for this
-        // gauge. Active-liquidity accounting must not depend on vote metadata.
-        if (allocation.weight != 0) {
-            if (delta > 0) {
-                allocation.stakeAmount = _toUint128(uint256(allocation.stakeAmount) + uint256(delta));
+    function _pruneAllocationGauges(uint256 tokenId) private {
+        address[] storage stored = _allocationGauges[tokenId];
+        uint256 i;
+        while (i < stored.length) {
+            address gauge = stored[i];
+            if (
+                targetStakeAmount[tokenId][gauge] == 0 && controller.allocationOf(tokenId, gauge) == 0
+                    && controller.pendingOf(tokenId, gauge) == 0
+            ) {
+                stored[i] = stored[stored.length - 1];
+                stored.pop();
             } else {
-                uint256 decrease = uint256(-delta);
-                if (decrease > allocation.stakeAmount) revert InvalidVote();
-                allocation.stakeAmount = uint128(uint256(allocation.stakeAmount) - decrease);
+                ++i;
             }
         }
-
-        uint256 previous = activeStake[tokenId][gauge];
-        uint256 next;
-        if (delta > 0) {
-            next = previous + uint256(delta);
-            validatorStakingAmount[gauge] += uint256(delta);
-            activeStakeTotal[tokenId] += uint256(delta);
-        } else {
-            uint256 decrease = uint256(-delta);
-            if (decrease > previous) revert InvalidVote();
-            next = previous - decrease;
-            validatorStakingAmount[gauge] -= decrease;
-            activeStakeTotal[tokenId] -= decrease;
-        }
-        activeStake[tokenId][gauge] = next;
-        // Monad's staking precompile is not re-entrant during validator
-        // activation. The active accounting above is authoritative; a gauge
-        // checkpoint can be retried by the next lifecycle action if needed.
-        try IValidatorGauge(gauge).updateLiquidity(tokenId, next) {} catch {}
     }
 
     function isValidatorRewardEligible(address gauge) public view returns (bool) {
-        return isGauge[gauge] && validatorStakingAmount[gauge] >= MIN_ACTIVE_VALIDATOR_STAKE;
+        return isGauge[gauge] && controller.isValidatorActive(gauge)
+            && validatorStakingAmount[gauge] >= MIN_ACTIVE_VALIDATOR_STAKE;
     }
 
     function _rememberGauge(uint256 tokenId, address gauge) private {
@@ -351,13 +316,11 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         uint256 principal,
         uint64 cycle
     ) private {
-        uint256 allocatedWeight;
         uint256 allocatedStake;
         for (uint256 i; i < gauges.length; ++i) {
             bool isLast = i + 1 == gauges.length;
             uint256 weight = voteWeights[i];
             uint256 stakeAmount = _distributed(principal, weights_[i], requested, allocatedStake, isLast);
-            allocatedWeight += weight;
             allocatedStake += stakeAmount;
             _addVote(tokenId, gauges[i], weight, stakeAmount, cycle);
         }
@@ -385,12 +348,23 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
                 cycleWeights[cycle][gauge] -= allocation.weight;
                 cycleTotalWeight[cycle] -= allocation.weight;
             }
+            uint256 oldTarget = targetStakeAmount[tokenId][gauge];
+            if (oldTarget != 0) {
+                validatorStakingAmount[gauge] -= oldTarget;
+                activeStakeTotal[tokenId] -= oldTarget;
+                activeStake[tokenId][gauge] = 0;
+            }
             (bool retained, uint256 newWeight) = _findGaugeWeight(gauge, newGauges, newWeights);
             if (retained) {
-                IReward(gaugeToBribe[gauge])._adjust(allocation.weight, newWeight, tokenId);
+                if (allocation.weight != newWeight) {
+                    IReward(gaugeToBribe[gauge])._adjust(allocation.weight, newWeight, tokenId);
+                }
                 _retainedVote[tokenId][gauge] = true;
             } else {
                 IReward(gaugeToBribe[gauge])._withdraw(allocation.weight, tokenId);
+                if (oldTarget != 0) {
+                    IValidatorGauge(gauge).updateLiquidity(tokenId, 0);
+                }
             }
             delete votes[tokenId][gauge];
             delete targetStakeAmount[tokenId][gauge];
@@ -402,8 +376,12 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
 
     function _addVote(uint256 tokenId, address gauge, uint256 weight, uint256 stakeAmount, uint64 cycle) private {
         poolVote[tokenId].push(gauge);
-        votes[tokenId][gauge] = VoteAllocation(_toUint128(weight), 0);
+        votes[tokenId][gauge] = VoteAllocation(_toUint128(weight), _toUint128(stakeAmount));
         targetStakeAmount[tokenId][gauge] = stakeAmount;
+        activeStake[tokenId][gauge] = stakeAmount;
+        activeStakeTotal[tokenId] += stakeAmount;
+        validatorStakingAmount[gauge] += stakeAmount;
+        IValidatorGauge(gauge).updateLiquidity(tokenId, stakeAmount);
         weights[gauge] += weight;
         totalWeight += weight;
         cycleWeights[cycle][gauge] += weight;

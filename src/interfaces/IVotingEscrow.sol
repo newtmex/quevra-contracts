@@ -64,12 +64,6 @@ interface IVotingEscrow is IERC721Metadata {
     /// @return TokenId of the created veNFT.
     function createLock(uint256 _value, uint256 _lockDuration) external payable returns (uint256);
 
-    /// @notice Apply a physical validator allocation to a veNFT.
-    /// @dev Only the escrow's staking controller may call this function.
-    ///      Positive deltas are applied when MON is staked and negative deltas
-    ///      are applied when MON is removed from a validator.
-    function adjustLockAmount(uint256 tokenId, int256 delta) external;
-
     /// @notice Permanently lock a normal veNFT.
     function lockPermanent(uint256 _tokenId) external;
 
@@ -86,5 +80,9 @@ interface IVotingEscrow is IERC721Metadata {
     /// @notice Voting power in Quevra units for a veNFT at the latest checkpoint.
     function votingPowerOf(uint256 tokenId) external view returns (uint256);
 
+    function votingPowerAndLockedAmount(uint256 tokenId) external view returns (uint256 power, int128 amount);
+
     function votingPowerOfAt(uint256 tokenId, uint256 epoch) external view returns (uint256);
+
+    function withdraw(uint256 tokenId) external;
 }
