@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ValidatorsVoter} from "../src/ValidatorsVoter.sol";
 import {FactoryRegistry} from "../src/factories/FactoryRegistry.sol";
-import {GaugeFactory} from "../src/factories/GaugeFactory.sol";
+import {ValidatorGaugeFactory} from "../src/factories/ValidatorGaugeFactory.sol";
 import {VotingRewardsFactory} from "../src/factories/VotingRewardsFactory.sol";
 
 import {StakingController} from "../src/staking/StakingController.sol";
@@ -93,21 +93,14 @@ contract StakingControllerTest is StakingControllerFixture {
 
     function test_depositOnlyAcceptsMONFromVeMONAndTracksTokenId() public {
         FactoryRegistry factoryRegistry = new FactoryRegistry();
-        GaugeFactory gaugeFactory = new GaugeFactory();
+        ValidatorGaugeFactory gaugeFactory = new ValidatorGaugeFactory();
         VotingRewardsFactory rewardsFactory = new VotingRewardsFactory();
         factoryRegistry.approveGaugeFactory(address(gaugeFactory), address(rewardsFactory));
         address forwarder = makeAddr("controller-test-forwarder");
         ValidatorsVoter implementation = new ValidatorsVoter(forwarder);
         bytes memory init = abi.encodeCall(
             ValidatorsVoter.initialize,
-            (
-                address(veMON),
-                address(factoryRegistry),
-                address(0),
-                address(registry),
-                address(controller),
-                address(gaugeFactory)
-            )
+            (address(veMON), address(factoryRegistry), address(registry), address(controller), address(gaugeFactory))
         );
         ValidatorsVoter voter = ValidatorsVoter(address(new ERC1967Proxy(address(implementation), init)));
         controller.setVoter(address(voter));

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IFactoryRegistry} from "../interfaces/factories/IFactoryRegistry.sol";
-import {IGaugeFactory} from "../interfaces/factories/IGaugeFactory.sol";
+import {IValidatorGaugeFactory} from "../interfaces/factories/IValidatorGaugeFactory.sol";
 import {IVotingRewardsFactory} from "../interfaces/factories/IVotingRewardsFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,6 +14,7 @@ import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {IReward} from "../interfaces/IReward.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {StakingController} from "./StakingController.sol";
+import {IValidatorGauge} from "../interfaces/IValidatorGauge.sol";
 
 /// @notice Gauge creation and lifecycle hooks shared by staking voters.
 /// @dev This carries the Tigris creation dependencies while leaving Quevra's
@@ -29,7 +30,6 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     address public immutable forwarder;
     address public override ve;
     address public factoryRegistry;
-    address public rewardToken;
     StakingController public controller;
     address public governor;
     mapping(address => bool) public override isWhitelistedToken;
@@ -45,6 +45,13 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     /// @dev Desired physical allocation. `votes[tokenId][gauge].stakeAmount`
     ///      is the observed active allocation and is updated by the controller.
     mapping(uint256 => mapping(address => uint256)) public targetStakeAmount;
+    /// @notice Active MON supplied by an individual veNFT to a validator.
+    /// @dev This excludes controller liquidity and pending undelegations.
+    mapping(uint256 => mapping(address => uint256)) public activeStake;
+    /// @notice Sum of active tokenId allocations backing a validator gauge.
+    mapping(address => uint256) public validatorStakingAmount;
+    /// @notice Minimum active MON required before a validator can distribute rewards.
+    uint256 public constant MIN_ACTIVE_VALIDATOR_STAKE = 100_000 ether;
     mapping(address => uint256) public weights;
     uint256 public totalWeight;
     mapping(uint64 => mapping(address => uint256)) public cycleWeights;
@@ -76,13 +83,10 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         forwarder = forwarder_;
     }
 
-    function __StakingVoter_init(address ve_, address factoryRegistry_, address rewardToken_, address controller_)
-        internal
-    {
+    function __StakingVoter_init(address ve_, address factoryRegistry_, address controller_) internal {
         if (ve_ == address(0) || factoryRegistry_ == address(0) || controller_ == address(0)) revert ZeroAddress();
         ve = ve_;
         factoryRegistry = factoryRegistry_;
-        rewardToken = rewardToken_;
         controller = StakingController(payable(controller_));
         governor = _msgSender();
     }
@@ -103,12 +107,12 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
         emit WhitelistToken(_msgSender(), token, whitelisted);
     }
 
-    function _createGauge(address gaugeFactory, address rewardsBeneficiary) internal returns (address gauge) {
+    function _createGauge(address gaugeFactory) internal returns (address gauge) {
         IFactoryRegistry registry = IFactoryRegistry(factoryRegistry);
         if (!registry.isGaugeFactoryApproved(gaugeFactory)) revert GaugeFactoryNotApproved();
 
         address rewardsFactory = registry.gaugeFactoryToVotingRewardsFactory(gaugeFactory);
-        gauge = IGaugeFactory(gaugeFactory).createNonStakingGauge(forwarder, rewardToken, rewardsBeneficiary);
+        gauge = IValidatorGaugeFactory(gaugeFactory).createValidatorGauge(forwarder);
         address bribe = IVotingRewardsFactory(rewardsFactory).createBribeReward(forwarder, new address[](0));
 
         gaugeToBribe[gauge] = bribe;
@@ -208,13 +212,38 @@ abstract contract StakingVoter is IBaseVoter, IVoter, ERC2771Context, Reentrancy
     function updateStakingAmount(uint256 tokenId, address gauge, int256 delta) external {
         if (msg.sender != address(controller)) revert NotController();
         VoteAllocation storage allocation = votes[tokenId][gauge];
+        // A controller allocation may exist before a token has voted for this
+        // gauge. Active-liquidity accounting must not depend on vote metadata.
+        if (allocation.weight != 0) {
+            if (delta > 0) {
+                allocation.stakeAmount = _toUint128(uint256(allocation.stakeAmount) + uint256(delta));
+            } else {
+                uint256 decrease = uint256(-delta);
+                if (decrease > allocation.stakeAmount) revert InvalidVote();
+                allocation.stakeAmount = uint128(uint256(allocation.stakeAmount) - decrease);
+            }
+        }
+
+        uint256 previous = activeStake[tokenId][gauge];
+        uint256 next;
         if (delta > 0) {
-            allocation.stakeAmount = _toUint128(uint256(allocation.stakeAmount) + uint256(delta));
+            next = previous + uint256(delta);
+            validatorStakingAmount[gauge] += uint256(delta);
         } else {
             uint256 decrease = uint256(-delta);
-            if (decrease > allocation.stakeAmount) revert InvalidVote();
-            allocation.stakeAmount = uint128(uint256(allocation.stakeAmount) - decrease);
+            if (decrease > previous) revert InvalidVote();
+            next = previous - decrease;
+            validatorStakingAmount[gauge] -= decrease;
         }
+        activeStake[tokenId][gauge] = next;
+        // Monad's staking precompile is not re-entrant during validator
+        // activation. The active accounting above is authoritative; a gauge
+        // checkpoint can be retried by the next lifecycle action if needed.
+        try IValidatorGauge(gauge).updateLiquidity(tokenId, next) {} catch {}
+    }
+
+    function isValidatorRewardEligible(address gauge) public view returns (bool) {
+        return isGauge[gauge] && validatorStakingAmount[gauge] >= MIN_ACTIVE_VALIDATOR_STAKE;
     }
 
     function _rememberGauge(uint256 tokenId, address gauge) private {

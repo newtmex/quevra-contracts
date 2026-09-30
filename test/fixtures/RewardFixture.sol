@@ -10,7 +10,7 @@ import {StakingController} from "../../src/staking/StakingController.sol";
 import {ValidatorRegistry} from "../../src/validators/ValidatorRegistry.sol";
 import {ValidatorsVoter} from "../../src/ValidatorsVoter.sol";
 import {FactoryRegistry} from "../../src/factories/FactoryRegistry.sol";
-import {GaugeFactory} from "../../src/factories/GaugeFactory.sol";
+import {ValidatorGaugeFactory} from "../../src/factories/ValidatorGaugeFactory.sol";
 import {VotingRewardsFactory} from "../../src/factories/VotingRewardsFactory.sol";
 import {BaseTest} from "./BaseTest.sol";
 
@@ -27,7 +27,7 @@ abstract contract RewardFixture is BaseTest {
     VeMON internal veMON;
     ValidatorsVoter internal rewardVoter;
     FactoryRegistry internal factoryRegistry;
-    GaugeFactory internal gaugeFactory;
+    ValidatorGaugeFactory internal gaugeFactory;
     VotingRewardsFactory internal rewardsFactory;
     address internal bribe;
     RewardTestToken internal rewardToken;
@@ -42,20 +42,13 @@ abstract contract RewardFixture is BaseTest {
         rewardToken = new RewardTestToken();
         otherToken = new RewardTestToken();
         factoryRegistry = new FactoryRegistry();
-        gaugeFactory = new GaugeFactory();
+        gaugeFactory = new ValidatorGaugeFactory();
         rewardsFactory = new VotingRewardsFactory();
         factoryRegistry.approveGaugeFactory(address(gaugeFactory), address(rewardsFactory));
         address implementation = address(new ValidatorsVoter(forwarder));
         bytes memory init = abi.encodeCall(
             ValidatorsVoter.initialize,
-            (
-                address(veMON),
-                address(factoryRegistry),
-                address(0),
-                address(registry),
-                address(controller),
-                address(gaugeFactory)
-            )
+            (address(veMON), address(factoryRegistry), address(registry), address(controller), address(gaugeFactory))
         );
         rewardVoter = ValidatorsVoter(address(new ERC1967Proxy(implementation, init)));
         controller.setVoter(address(rewardVoter));

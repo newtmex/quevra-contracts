@@ -12,7 +12,7 @@ contract ValidatorsVoter is StakingVoter, Initializable {
     mapping(uint256 => address) public validatorToGauge;
     address public gaugeFactory;
 
-    event ValidatorGaugeCreated(address indexed operator, address indexed gauge, address indexed beneficiary);
+    event ValidatorGaugeCreated(address indexed operator, address indexed gauge);
 
     error GaugeExistsForValidator();
 
@@ -23,12 +23,11 @@ contract ValidatorsVoter is StakingVoter, Initializable {
     function initialize(
         address ve_,
         address factoryRegistry_,
-        address rewardToken_,
         address registry_,
         address controller_,
         address gaugeFactory_
     ) external initializer {
-        __StakingVoter_init(ve_, factoryRegistry_, rewardToken_, controller_);
+        __StakingVoter_init(ve_, factoryRegistry_, controller_);
         if (registry_ == address(0) || controller_ == address(0) || gaugeFactory_ == address(0)) revert ZeroAddress();
         registry = IValidatorRegistry(registry_);
         gaugeFactory = gaugeFactory_;
@@ -49,18 +48,15 @@ contract ValidatorsVoter is StakingVoter, Initializable {
         private
         returns (address vault, address gauge)
     {
-        gauge = _createValidatorGauge(requestId, operator, operator);
+        gauge = _createValidatorGauge(requestId, operator);
         vault = controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
     }
 
-    function _createValidatorGauge(uint256 requestId, address operator, address beneficiary)
-        internal
-        returns (address gauge)
-    {
+    function _createValidatorGauge(uint256 requestId, address operator) internal returns (address gauge) {
         if (validatorToGauge[requestId] != address(0)) revert GaugeExistsForValidator();
 
-        gauge = _createGauge(gaugeFactory, beneficiary);
+        gauge = _createGauge(gaugeFactory);
         validatorToGauge[requestId] = gauge;
-        emit ValidatorGaugeCreated(operator, gauge, beneficiary);
+        emit ValidatorGaugeCreated(operator, gauge);
     }
 }

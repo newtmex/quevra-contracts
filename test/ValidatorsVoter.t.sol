@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ValidatorsVoterFixture} from "./fixtures/ValidatorsVoterFixture.sol";
-import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
+import {ValidatorGauge} from "../src/gauges/ValidatorGauge.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IValidatorRegistry} from "../src/interfaces/IValidatorRegistry.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
@@ -16,9 +16,8 @@ contract ValidatorsVoterTest is ValidatorsVoterFixture {
         assertEq(controller.vaultByGauge(gauge), vault);
         assertEq(validatorsVoter.validatorToGauge(requestId), gauge);
         assertTrue(validatorsVoter.isGauge(gauge));
-        assertEq(NonStakingGauge(gauge).voter(), address(validatorsVoter));
-        assertEq(NonStakingGauge(gauge).ve(), address(veMON));
-        assertEq(NonStakingGauge(gauge).rewardsBeneficiary(), operator);
+        assertEq(ValidatorGauge(gauge).voter(), address(validatorsVoter));
+        assertEq(ValidatorGauge(gauge).ve(), address(veMON));
         assertTrue(validatorsVoter.gaugeToBribe(gauge) != address(0));
         IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
         assertEq(uint256(submission.status), uint256(IValidatorRegistry.Status.Submitted));
