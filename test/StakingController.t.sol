@@ -143,15 +143,12 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
         _setEpoch(withdrawEpoch + 1, false);
-        vm.prank(operator);
-        controller.withdraw(1, gauges);
-
-        assertEq(controller.balanceOf(1), amount);
-
+        uint256 beforeOwnerBalance = operator.balance;
         vm.prank(operator);
         veMON.withdraw(1);
 
         assertEq(controller.balanceOf(1), 0);
+        assertEq(operator.balance, beforeOwnerBalance + amount);
         assertEq(veMON.balanceOf(operator), 0);
     }
 
@@ -202,16 +199,73 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
 
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
         _setEpoch(withdrawEpoch + 1, false);
+        uint256 beforeOwnerBalance = operator.balance;
         vm.prank(operator);
-        controller.withdraw(2, gauges);
+        veMON.withdraw(2);
 
         assertEq(agent.pendingWithdrawal(validatorId), 0);
         assertEq(controller.pendingOf(2, gauge), 0);
-        assertEq(controller.balanceOf(2), agentAmount);
+        assertEq(controller.balanceOf(2), 0);
+        assertEq(operator.balance, beforeOwnerBalance + agentAmount);
+        assertEq(veMON.balanceOf(operator), 1);
+    }
+
+    function test_mixedStakeRepeatedUnstakeCreditsControllerAndOwner() public {
+        bytes32 saltSeed = keccak256("validator-mixed");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        vm.prank(operator);
+        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
+        address gauge = makeAddr("gauge-mixed");
+        vm.prank(operator);
+        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+
+        uint256 total = validatorStake + delegationAmount;
+        vm.prank(operator);
+        veMON.createLock{value: total}(total, lockDuration);
+        address[] memory gauges = new address[](1);
+        gauges[0] = gauge;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = total;
 
         vm.prank(operator);
-        veMON.withdraw(2);
-        assertEq(controller.balanceOf(2), 0);
-        assertEq(veMON.balanceOf(operator), 1);
+        controller.stake(1, gauges, amounts);
+
+        address vault = controller.vaultByGauge(gauge);
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        StakingAgent agent = StakingAgent(payable(controller.agentByToken(1)));
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(StakingVault(payable(vault)).balanceOf(1), validatorStake);
+        assertEq(agent.balanceOf(validatorId), delegationAmount);
+
+        _setEpoch(1, false);
+        amounts[0] = delegationAmount;
+        vm.prank(operator);
+        controller.unstake(1, gauges, amounts);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(agent.balanceOf(validatorId), 0);
+        assertEq(agent.pendingWithdrawal(validatorId), delegationAmount);
+
+        (,, uint64 agentWithdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
+        _setEpoch(agentWithdrawEpoch + 1, false);
+        amounts[0] = validatorStake;
+        vm.prank(operator);
+        controller.unstake(1, gauges, amounts);
+
+        assertEq(controller.balanceOf(1), delegationAmount);
+        assertEq(agent.pendingWithdrawal(validatorId), 0);
+        assertEq(StakingVault(payable(vault)).balanceOf(1), 0);
+        assertEq(StakingVault(payable(vault)).pendingWithdrawal(1), validatorStake);
+
+        (,, uint64 vaultWithdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
+        _setEpoch(vaultWithdrawEpoch + 1, false);
+        uint256 beforeOwnerBalance = operator.balance;
+        vm.prank(operator);
+        veMON.withdraw(1);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(operator.balance, beforeOwnerBalance + total);
+        assertEq(veMON.balanceOf(operator), 0);
     }
 }

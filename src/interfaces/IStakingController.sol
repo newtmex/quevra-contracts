@@ -28,7 +28,6 @@ interface IStakingController {
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
-    event MONReleased(uint256 indexed tokenId, address indexed recipient, uint256 amount);
     event AgentCreated(uint256 indexed tokenId, address indexed agent);
     event Staked(uint256 indexed tokenId, uint256 amount);
     event Unstaked(uint256 indexed tokenId, uint256 amount);
@@ -67,9 +66,7 @@ interface IStakingController {
     function deposit(uint256 tokenId) external payable;
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
-    function withdraw(uint256 tokenId, address[] calldata gauges) external returns (uint256 reclaimed);
-    function finalizeWithdrawals(uint256 tokenId) external returns (uint256 reclaimed);
+    function withdraw(uint256 tokenId) external returns (uint256 amount);
     function isFullyUnstaked(uint256 tokenId) external view returns (bool);
-    function release(uint256 tokenId, address payable recipient) external returns (uint256 amount);
     function claimRewards(uint256 tokenId, address[] calldata gauges) external;
 }

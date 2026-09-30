@@ -77,7 +77,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         for (uint256 i; i < gauges.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
             if (vaultByGauge[gauges[i]] == address(0)) revert InvalidVault();
-            if (_pendingGaugeIndex[tokenId][gauges[i]] != 0) _finalize(tokenId, gauges[i]);
+            if (_pendingGaugeIndex[tokenId][gauges[i]] != 0) _withdraw(tokenId, gauges[i]);
             _rememberTokenGauge(tokenId, gauges[i]);
             if (balanceOf[tokenId] < amounts[i]) revert InsufficientBalance();
             balanceOf[tokenId] -= amounts[i];
@@ -122,7 +122,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         for (uint256 i; i < gauges.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
             if (vaultByGauge[gauges[i]] == address(0)) revert InvalidVault();
-            if (_pendingGaugeIndex[tokenId][gauges[i]] != 0) _finalize(tokenId, gauges[i]);
+            if (_pendingGaugeIndex[tokenId][gauges[i]] != 0) _withdraw(tokenId, gauges[i]);
             _rememberTokenGauge(tokenId, gauges[i]);
 
             {
@@ -149,7 +149,9 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Unstaked(tokenId, _sum(amounts));
     }
 
-    function _finalize(uint256 tokenId, address gauge) internal {
+    /// @dev Withdraws matured validator proceeds and credits them to the token balance.
+    ///      The caller can later release that balance to the veNFT owner.
+    function _withdraw(uint256 tokenId, address gauge) internal returns (uint256 reclaimed) {
         address vault = vaultByGauge[gauge];
         uint256 beforeBalance = address(this).balance;
         uint256 vaultPending = StakingVault(payable(vault)).pendingWithdrawal(tokenId);
@@ -167,7 +169,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (agentPending != 0) {
             try StakingAgent(payable(agent)).withdraw(validatorId) {} catch {}
         }
-        balanceOf[tokenId] += address(this).balance - beforeBalance;
+        reclaimed = address(this).balance - beforeBalance;
+        balanceOf[tokenId] += reclaimed;
         if (hadPending) {
             if (_pendingOf(tokenId, gauge) == 0) _removePendingGauge(tokenId, gauge);
             if (_allocationOf(tokenId, gauge) == 0 && _pendingOf(tokenId, gauge) == 0) {
@@ -246,65 +249,29 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         delete _pendingGaugeIndex[tokenId][gauge];
     }
 
-    /// @notice Complete prior undelegations after Monad's withdrawal delay.
-    /// @dev The token owner can finalize a direct unstake.
-    function withdraw(uint256 tokenId, address[] calldata gauges)
-        external
-        override
-        nonReentrant
-        returns (uint256 reclaimed)
-    {
-        _requireTokenOwner(tokenId);
-        if (gauges.length == 0) revert EmptyArray();
-
-        for (uint256 i; i < gauges.length; ++i) {
-            address vault = vaultByGauge[gauges[i]];
-            if (vault == address(0)) revert InvalidVault();
-            uint256 beforeBalance = address(this).balance;
-            _finalize(tokenId, gauges[i]);
-            reclaimed += address(this).balance - beforeBalance;
-        }
-
-        if (reclaimed != 0) emit Withdrawn(tokenId, reclaimed);
-    }
-
-    /// @notice Finalize every pending withdrawal tracked for a token.
-    /// @dev This is the single finalization pass used by veMON exit.
-    function finalizeWithdrawals(uint256 tokenId) external override nonReentrant returns (uint256 reclaimed) {
-        if (msg.sender != _ve() && msg.sender != IVotingEscrow(_ve()).ownerOf(tokenId)) {
-            revert NotTokenOwner();
-        }
+    /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.
+    function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+        if (msg.sender != _ve()) revert NotVe();
+        address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
 
         uint256 i;
-        while (i < _pendingGauges[tokenId].length) {
-            address gauge = _pendingGauges[tokenId][i];
-            uint256 beforeBalance = address(this).balance;
-            _finalize(tokenId, gauge);
-            reclaimed += address(this).balance - beforeBalance;
-            if (_pendingGaugeIndex[tokenId][gauge] != 0) ++i;
+        while (i < _tokenGauges[tokenId].length) {
+            address gauge = _tokenGauges[tokenId][i];
+            if (vaultByGauge[gauge] == address(0)) revert InvalidVault();
+            _withdraw(tokenId, gauge);
+            if (_tokenGaugeIndex[tokenId][gauge] != 0) ++i;
         }
 
-        if (reclaimed != 0) emit Withdrawn(tokenId, reclaimed);
-    }
-
-    /// @notice Release liquid MON after a veNFT has no active or pending stake.
-    function release(uint256 tokenId, address payable recipient)
-        external
-        override
-        nonReentrant
-        returns (uint256 amount)
-    {
-        if (msg.sender != _ve()) revert NotVe();
-        if (recipient == address(0) || !_isFullyUnstaked(tokenId)) revert InvalidUnstakeAmount();
-
+        if (!_isFullyUnstaked(tokenId)) revert InvalidUnstakeAmount();
         amount = balanceOf[tokenId];
         if (amount == 0) revert InvalidUnstakeAmount();
+
         balanceOf[tokenId] = 0;
         delete _tokenGauges[tokenId];
         delete _pendingGauges[tokenId];
-        (bool success,) = recipient.call{value: amount}("");
+        (bool success,) = payable(tokenOwner).call{value: amount}("");
         if (!success) revert TransferFailed();
-        emit MONReleased(tokenId, recipient, amount);
+        emit Withdrawn(tokenId, amount);
     }
 
     /// @notice Claim staking rewards for a token's vault and agent allocations.
