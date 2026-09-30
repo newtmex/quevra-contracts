@@ -10,6 +10,7 @@ Use inheritance-based fixtures for all Solidity tests.
 - Fixture inheritance should mirror real contract dependencies (e.g. `StakingVaultFixture -> ValidatorRegistryFixture`) and remain shallow.
 - Cross-contract flows belong in `test/integration`; invariants in `test/invariant`; fork tests in `test/fork`.
 - Avoid duplicated deployments, hidden setup, circular inheritance, and helpers that perform the behavior under test.
+- Don't mock calls to staking precompile, always transition state in the precompile to meet the test's needs.
 
 Example:
 

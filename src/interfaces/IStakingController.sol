@@ -37,6 +37,7 @@ interface IStakingController {
     function ve() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
     function vaultImplementation() external view returns (address);
+    function agentImplementation() external view returns (address);
     function vaultByGauge(address gauge) external view returns (address);
     function isValidatorActive(address gauge) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
@@ -55,6 +56,7 @@ interface IStakingController {
     ) external returns (address vault);
 
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
+    function predictAgentAddress(uint256 tokenId) external view returns (address);
 
     function setCommission(uint256 commission_) external;
     function signingConfigFor(address requester, bytes32 saltSeed)

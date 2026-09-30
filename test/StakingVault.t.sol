@@ -79,6 +79,37 @@ contract StakingVaultTest is StakingVaultFixture {
         assertEq(vault.validatorId(), 0);
     }
 
+    function test_depositUndelegateWithdrawReturnsTokenValueToController() public {
+        uint256 tokenId = 7;
+        uint256 amount = validatorStake;
+
+        vm.prank(owner);
+        vault.deposit{value: amount}(tokenId);
+        uint64 validatorId = vault.validatorId();
+        assertGt(validatorId, 0);
+        assertEq(vault.balanceOf(tokenId), amount);
+        assertEq(vault.totalBalance(), amount);
+
+        _setEpoch(1, false);
+        vm.prank(owner);
+        vault.undelegate(tokenId, amount);
+
+        assertEq(vault.balanceOf(tokenId), 0);
+        assertEq(vault.totalBalance(), 0);
+        assertEq(vault.pendingWithdrawal(tokenId), amount);
+
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(vault), 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        uint256 beforeBalance = owner.balance;
+
+        vm.prank(owner);
+        uint256 withdrawn = vault.withdraw(tokenId);
+
+        assertEq(withdrawn, amount);
+        assertEq(vault.pendingWithdrawal(tokenId), 0);
+        assertEq(owner.balance, beforeBalance + amount);
+    }
+
     function _assertValidator(uint64 validatorId) internal {
         (address authAddress, uint256 storedCommission) = _validatorIdentity(validatorId);
         uint256 snapshotStake = _validatorStake(validatorId);

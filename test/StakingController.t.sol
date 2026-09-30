@@ -6,15 +6,26 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
 import {IStakingController} from "../src/interfaces/IStakingController.sol";
 import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol";
+import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
-    function test_constructorSetsRegistryAndVaultImplementation() public view {
+    function test_constructorSetsRegistryAndImplementations() public view {
         assertEq(address(controller.registry()), address(registry));
         assertEq(controller.owner(), address(this));
         assertTrue(address(veMON) != address(controller));
         assertTrue(controller.vaultImplementation() != address(0));
+        assertTrue(controller.agentImplementation() != address(0));
+    }
+
+    function test_predictAgentAddressIsDeterministicAndTokenBound() public view {
+        address first = controller.predictAgentAddress(1);
+        address second = controller.predictAgentAddress(2);
+
+        assertTrue(first != second);
+        assertEq(first, controller.predictAgentAddress(1));
+        assertEq(second, controller.predictAgentAddress(2));
     }
 
     function test_constructorSetsInitialCommissionImmediately() public {
@@ -142,5 +153,65 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
 
         assertEq(controller.balanceOf(1), 0);
         assertEq(veMON.balanceOf(operator), 0);
+    }
+
+    function test_agentLifecycleReturnsTokenValueThroughController() public {
+        bytes32 saltSeed = keccak256("validator-agent");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        vm.prank(operator);
+        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
+        address gauge = makeAddr("gauge-agent");
+        vm.prank(operator);
+        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        address[] memory gauges = new address[](1);
+        gauges[0] = gauge;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = validatorStake;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+
+        _setEpoch(1, false);
+        uint256 agentAmount = delegationAmount;
+        vm.prank(operator);
+        veMON.createLock{value: agentAmount}(agentAmount, lockDuration);
+        amounts[0] = agentAmount;
+        vm.prank(operator);
+        controller.stake(2, gauges, amounts);
+
+        address vault = controller.vaultByGauge(gauge);
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        StakingAgent agent = StakingAgent(payable(controller.agentByToken(2)));
+        assertEq(address(agent), controller.predictAgentAddress(2));
+        assertEq(controller.balanceOf(2), 0);
+        assertEq(agent.balanceOf(validatorId), agentAmount);
+        assertEq(controller.allocationOf(2, gauge), agentAmount);
+
+        // The agent delegation activates one epoch after the controller stakes it.
+        _setEpoch(2, false);
+        vm.prank(operator);
+        controller.unstake(2, gauges, amounts);
+        assertEq(agent.balanceOf(validatorId), 0);
+        assertEq(agent.pendingWithdrawal(validatorId), agentAmount);
+        assertEq(controller.pendingOf(2, gauge), agentAmount);
+
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        vm.prank(operator);
+        controller.withdraw(2, gauges);
+
+        assertEq(agent.pendingWithdrawal(validatorId), 0);
+        assertEq(controller.pendingOf(2, gauge), 0);
+        assertEq(controller.balanceOf(2), agentAmount);
+
+        vm.prank(operator);
+        veMON.withdraw(2);
+        assertEq(controller.balanceOf(2), 0);
+        assertEq(veMON.balanceOf(operator), 1);
     }
 }

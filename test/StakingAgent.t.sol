@@ -67,6 +67,35 @@ contract StakingAgentTest is StakingAgentFixture {
         assertEq(agent.balanceOf(validatorB), 2 ether);
     }
 
+    function test_singleValidatorLifecycleReturnsValueToController() public {
+        uint256 amount = 3 ether;
+        vm.deal(address(this), validatorStake + amount);
+        bytes memory payload =
+            bytes.concat(secpPubkey, blsPubkey, bytes20(address(agent)), bytes32(validatorStake), bytes32(commission));
+        uint64 validatorId = staking.addValidator{value: validatorStake}(payload, secpSig, blsSig);
+        _setEpoch(1, false);
+
+        agent.delegate{value: amount}(validatorId, amount);
+
+        assertEq(agent.balanceOf(validatorId), amount);
+        assertEq(address(agent).balance, 0);
+
+        _setEpoch(2, false);
+        agent.undelegate(validatorId, amount);
+
+        assertEq(agent.balanceOf(validatorId), 0);
+        assertEq(agent.pendingWithdrawal(validatorId), amount);
+
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        uint256 beforeBalance = address(this).balance;
+        agent.withdraw(validatorId);
+
+        assertEq(address(agent).balance, 0);
+        assertEq(agent.pendingWithdrawal(validatorId), 0);
+        assertEq(address(this).balance, beforeBalance + amount);
+    }
+
     function test_undelegateValidatesArraysAndAmounts() public {
         uint64[] memory ids = new uint64[](0);
         uint256[] memory amounts = new uint256[](0);
