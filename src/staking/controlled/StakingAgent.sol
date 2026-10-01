@@ -25,38 +25,12 @@ contract StakingAgent is StakeControlled {
         if (validatorCount != amountCount) revert LengthMismatch();
     }
 
-    function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
-        _validateArrays(validatorIds.length, amounts.length);
-        uint256 total;
-        for (uint256 i; i < amounts.length; ++i) {
-            uint256 amount = amounts[i];
-            if (amount == 0) revert ZeroAmount();
-            if (!STAKING.delegate{value: amount}(validatorIds[i])) revert StakingCallFailed();
-            balanceOf[validatorIds[i]] += amount;
-            total += amount;
-        }
-        if (total != msg.value) revert ValueMismatch();
-    }
-
-    function delegate(uint64 validatorId, uint256 amount) external payable onlyController {
-        if (amount == 0 || msg.value != amount) revert ValueMismatch();
+    function _delegate(uint64 validatorId, uint256 amount) internal {
         if (!STAKING.delegate{value: amount}(validatorId)) revert StakingCallFailed();
         balanceOf[validatorId] += amount;
     }
 
-    function undelegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external onlyController {
-        _validateArrays(validatorIds.length, amounts.length);
-        for (uint256 i; i < amounts.length; ++i) {
-            if (pendingWithdrawal[validatorIds[i]] != 0) revert WithdrawalPending(validatorIds[i]);
-            if (amounts[i] == 0) revert ZeroAmount();
-            if (balanceOf[validatorIds[i]] < amounts[i]) revert InsufficientBalance();
-            if (!STAKING.undelegate(validatorIds[i], amounts[i], WITHDRAW_ID)) revert StakingCallFailed();
-            balanceOf[validatorIds[i]] -= amounts[i];
-            pendingWithdrawal[validatorIds[i]] = amounts[i];
-        }
-    }
-
-    function undelegate(uint64 validatorId, uint256 amount) external onlyController {
+    function _undelegate(uint64 validatorId, uint256 amount) internal {
         if (pendingWithdrawal[validatorId] != 0) revert WithdrawalPending(validatorId);
         if (amount == 0) revert ZeroAmount();
         if (balanceOf[validatorId] < amount) revert InsufficientBalance();
@@ -65,11 +39,43 @@ contract StakingAgent is StakeControlled {
         pendingWithdrawal[validatorId] = amount;
     }
 
+    function _withdraw(uint64 validatorId) internal {
+        if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) revert StakingCallFailed();
+        delete pendingWithdrawal[validatorId];
+    }
+
+    function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
+        _validateArrays(validatorIds.length, amounts.length);
+        uint256 total;
+        for (uint256 i; i < amounts.length; ++i) {
+            uint256 amount = amounts[i];
+            if (amount == 0) revert ZeroAmount();
+            _delegate(validatorIds[i], amount);
+            total += amount;
+        }
+        if (total != msg.value) revert ValueMismatch();
+    }
+
+    function delegate(uint64 validatorId, uint256 amount) external payable onlyController {
+        if (amount == 0 || msg.value != amount) revert ValueMismatch();
+        _delegate(validatorId, amount);
+    }
+
+    function undelegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external onlyController {
+        _validateArrays(validatorIds.length, amounts.length);
+        for (uint256 i; i < amounts.length; ++i) {
+            _undelegate(validatorIds[i], amounts[i]);
+        }
+    }
+
+    function undelegate(uint64 validatorId, uint256 amount) external onlyController {
+        _undelegate(validatorId, amount);
+    }
+
     function withdraw(uint64[] calldata validatorIds) external onlyController {
         if (validatorIds.length == 0) revert EmptyArray();
         for (uint256 i; i < validatorIds.length; ++i) {
-            if (!STAKING.withdraw(validatorIds[i], WITHDRAW_ID)) revert StakingCallFailed();
-            delete pendingWithdrawal[validatorIds[i]];
+            _withdraw(validatorIds[i]);
         }
 
         uint256 balance = availableBalance();
@@ -80,8 +86,7 @@ contract StakingAgent is StakeControlled {
     }
 
     function withdraw(uint64 validatorId) external onlyController {
-        if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) revert StakingCallFailed();
-        delete pendingWithdrawal[validatorId];
+        _withdraw(validatorId);
         uint256 balance = availableBalance();
         if (balance != 0) {
             (bool success,) = payable(controller).call{value: balance}("");
