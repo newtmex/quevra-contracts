@@ -22,6 +22,7 @@ interface IStakingController {
     error UnexpectedEtherSender();
     error NotTokenOwner();
     error TransferFailed();
+    error StakingCycleNotAdvanced();
 
     event VeSet(address indexed ve);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -40,6 +41,7 @@ interface IStakingController {
     function vaultByGauge(address gauge) external view returns (address);
     function isValidatorActive(address gauge) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
+    function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function agentByToken(uint256 tokenId) external view returns (address);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
     function pendingOf(uint256 tokenId, address gauge) external view returns (uint256);

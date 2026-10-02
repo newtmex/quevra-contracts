@@ -8,6 +8,7 @@ import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
@@ -15,12 +16,22 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 ///      physical MON toward that intent.
 contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
+    mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
     mapping(uint256 tokenId => address[]) private _tokenGauges;
     mapping(uint256 tokenId => mapping(address gauge => uint256 indexPlusOne)) private _tokenGaugeIndex;
     constructor(address registry_, address owner_, uint256 initialCommission_)
         StakingAdmin(registry_, owner_, initialCommission_)
     {}
+
+    modifier onlyNewCycle(uint256 tokenId) {
+        uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
+        if (currentCycle <= stakingCycleOf[tokenId]) {
+            revert StakingCycleNotAdvanced();
+        }
+        stakingCycleOf[tokenId] = currentCycle;
+        _;
+    }
 
     function deposit(uint256 tokenId) external payable override nonReentrant {
         if (ve == address(0) || msg.sender != ve) revert NotVe();
@@ -65,6 +76,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
         external
         override
+        onlyNewCycle(tokenId)
         nonReentrant
     {
         _requireTokenOwner(tokenId);

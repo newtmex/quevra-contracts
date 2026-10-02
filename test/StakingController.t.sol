@@ -152,6 +152,47 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(veMON.balanceOf(operator), 0);
     }
 
+    function test_stakeOnlyOncePerTokenPerCycle() public {
+        bytes32 saltSeed = keccak256("validator-cycle");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        vm.prank(operator);
+        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
+        address gauge = makeAddr("gauge-cycle");
+        vm.prank(operator);
+        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+
+        uint256 total = validatorStake + delegationAmount;
+        vm.prank(operator);
+        veMON.createLock{value: total}(total, lockDuration);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = gauge;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = validatorStake;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        assertEq(controller.stakingCycleOf(1), 0);
+
+        amounts[0] = delegationAmount;
+        vm.expectRevert(IStakingController.StakingCycleNotAdvanced.selector);
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+
+        _setEpoch(5, false);
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+
+        address vault = controller.vaultByGauge(gauge);
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        StakingAgent agent = StakingAgent(payable(controller.agentByToken(1)));
+        assertEq(controller.stakingCycleOf(1), 1);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(agent.balanceOf(validatorId), delegationAmount);
+    }
+
     function test_agentLifecycleReturnsTokenValueThroughController() public {
         bytes32 saltSeed = keccak256("validator-agent");
         address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
