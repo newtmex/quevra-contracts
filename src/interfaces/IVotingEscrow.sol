@@ -22,6 +22,7 @@ interface IVotingEscrow is IERC721Metadata {
     error LockDurationNotInFuture();
     error LockDurationTooLong();
     error LockExpired();
+    error LockNotExpired();
     error NotApprovedOrOwner();
     error NotPermanentLock();
     error PermanentLock();

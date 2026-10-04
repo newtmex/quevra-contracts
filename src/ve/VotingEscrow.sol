@@ -24,7 +24,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
     uint256 public nextId = 1;
 
-    mapping(uint256 tokenId => IVotingEscrow.LockedBalance lock) private _locked;
+    mapping(uint256 tokenId => IVotingEscrow.LockedBalance lock) internal _locked;
     uint256 public override epoch;
     mapping(uint256 index => Point) public pointHistory;
     mapping(uint256 tokenId => Point[]) private _userPointHistory;

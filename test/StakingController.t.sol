@@ -148,7 +148,7 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         address vault = controller.vaultByGauge(gauge);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
-        _setEpoch(withdrawEpoch + 1, false);
+        _setEpochAfterLockExpiry(1, withdrawEpoch);
         uint256 beforeOwnerBalance = operator.balance;
         vm.prank(operator);
         veMON.withdraw(1);
@@ -259,7 +259,7 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(controller.pendingOf(2, gauge), agentAmount);
 
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
-        _setEpoch(withdrawEpoch + 1, false);
+        _setEpochAfterLockExpiry(2, withdrawEpoch);
         uint256 beforeOwnerBalance = operator.balance;
         vm.prank(operator);
         veMON.withdraw(2);
@@ -327,12 +327,19 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(StakingVault(payable(vault)).pendingWithdrawal(1), validatorStake);
 
         (,, uint64 vaultWithdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
-        _setEpoch(vaultWithdrawEpoch + 1, false);
+        _setEpochAfterLockExpiry(1, vaultWithdrawEpoch);
         uint256 beforeOwnerBalance = operator.balance;
         vm.prank(operator);
         veMON.withdraw(1);
         assertEq(controller.balanceOf(1), 0);
         assertEq(operator.balance, beforeOwnerBalance + total);
         assertEq(veMON.balanceOf(operator), 0);
+    }
+
+    function _setEpochAfterLockExpiry(uint256 tokenId, uint64 withdrawalEpoch) internal {
+        (, uint256 lockEnd,,) = veMON.locked(tokenId);
+        uint64 targetEpoch = withdrawalEpoch + 1;
+        if (lockEnd > targetEpoch) targetEpoch = uint64(lockEnd);
+        _setEpoch(targetEpoch, false);
     }
 }

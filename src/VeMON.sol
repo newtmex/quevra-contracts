@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {VotingEscrow} from "./ve/VotingEscrow.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
+import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
 
 /// @title veMON
 /// @notice Quevra voting escrow for MON routed into validator staking.
@@ -28,6 +29,11 @@ contract VeMON is VotingEscrow {
     /// @notice Withdraw a fully unstaked position's MON and burn its veNFT.
     function withdraw(uint256 tokenId) external override nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
+
+        if (_locked[tokenId].isPermanent) revert PermanentLock();
+
+        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
+        if (_locked[tokenId].end > currentEpoch) revert LockNotExpired();
 
         IStakingController(controller).withdraw(tokenId);
         _burn(tokenId);

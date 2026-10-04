@@ -179,4 +179,28 @@ contract VeMONTest is VeMONFixture {
         vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
         veMON.lockPermanent(1);
     }
+
+    function test_withdrawRejectsUnexpiredLockBeforeCallingController() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        vm.prank(operator);
+        vm.expectRevert(IVotingEscrow.LockNotExpired.selector);
+        veMON.withdraw(1);
+
+        assertEq(veMON.ownerOf(1), operator);
+    }
+
+    function test_withdrawRejectsPermanentLock() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(operator);
+        veMON.lockPermanent(1);
+
+        vm.prank(operator);
+        vm.expectRevert(IVotingEscrow.PermanentLock.selector);
+        veMON.withdraw(1);
+
+        assertEq(veMON.ownerOf(1), operator);
+    }
 }
