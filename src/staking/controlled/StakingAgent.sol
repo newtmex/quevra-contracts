@@ -112,10 +112,22 @@ contract StakingAgent is StakeControlled {
         }
     }
 
-    function compound(uint64[] calldata validatorIds) external onlyController {
+    function compound(uint64[] calldata validatorIds)
+        external
+        onlyController
+        returns (uint256[] memory compoundedAmounts)
+    {
         if (validatorIds.length == 0) revert EmptyArray();
+        compoundedAmounts = new uint256[](validatorIds.length);
         for (uint256 i; i < validatorIds.length; ++i) {
-            _compound(validatorIds[i]);
+            uint64 validatorId = validatorIds[i];
+            if (balanceOf[validatorId] == 0) continue;
+
+            uint256 delegatedBefore = _delegatedStake(validatorId, address(this));
+            _compound(validatorId);
+            uint256 compounded = _delegatedStake(validatorId, address(this)) - delegatedBefore;
+            balanceOf[validatorId] += compounded;
+            compoundedAmounts[i] = compounded;
         }
     }
 

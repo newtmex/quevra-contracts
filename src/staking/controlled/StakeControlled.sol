@@ -43,4 +43,11 @@ abstract contract StakeControlled is MonadStdConstants, Initializable {
     function _compound(uint64 validatorId) internal {
         if (!STAKING.compound(validatorId)) revert ControlledStakingCallFailed();
     }
+
+    function _delegatedStake(uint64 validatorId, address delegator) internal returns (uint256 stake) {
+        uint256 deltaStake;
+        uint256 nextDeltaStake;
+        (stake,,, deltaStake, nextDeltaStake,,) = STAKING.getDelegator(validatorId, delegator);
+        stake += deltaStake + nextDeltaStake;
+    }
 }

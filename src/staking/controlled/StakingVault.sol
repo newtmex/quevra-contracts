@@ -30,6 +30,7 @@ contract StakingVault is StakeControlled {
     error InvalidAmount();
     error StakingCallFailed();
     error UnexpectedEtherSender();
+    error InvalidCompoundDistribution();
 
     /// @notice Called by the controller immediately after cloning.
     function initialize(address registry_, uint256 requestId_) external onlyController initializer {
@@ -112,9 +113,45 @@ contract StakingVault is StakeControlled {
         _claimRewards(validatorId);
     }
 
-    function compound() external onlyController {
+    function compound(uint256[] calldata tokenIds)
+        external
+        onlyController
+        returns (uint256[] memory compoundedAmounts)
+    {
         if (validatorId == 0) revert ValidatorNotAdded();
+
+        uint256 stakeBefore = totalBalance;
+        uint256 delegatedBefore = _delegatedStake(validatorId, address(this));
         _compound(validatorId);
+        uint256 compounded = _delegatedStake(validatorId, address(this)) - delegatedBefore;
+
+        compoundedAmounts = new uint256[](tokenIds.length);
+        if (compounded == 0) return compoundedAmounts;
+        if (tokenIds.length == 0 || stakeBefore == 0 || delegatedBefore != stakeBefore) {
+            revert InvalidCompoundDistribution();
+        }
+
+        uint256 positionTotal;
+        for (uint256 i; i < tokenIds.length; ++i) {
+            positionTotal += balanceOf[tokenIds[i]];
+        }
+        if (positionTotal != stakeBefore) revert InvalidCompoundDistribution();
+
+        uint256 remainingStake = stakeBefore;
+        uint256 remainingReward = compounded;
+        for (uint256 i; i < tokenIds.length; ++i) {
+            uint256 position = balanceOf[tokenIds[i]];
+            if (position == 0) continue;
+
+            uint256 reward = position == remainingStake ? remainingReward : remainingReward * position / remainingStake;
+            balanceOf[tokenIds[i]] += reward;
+            compoundedAmounts[i] = reward;
+            remainingStake -= position;
+            remainingReward -= reward;
+        }
+
+        if (remainingStake != 0 || remainingReward != 0) revert InvalidCompoundDistribution();
+        totalBalance += compounded;
     }
 
     receive() external payable {

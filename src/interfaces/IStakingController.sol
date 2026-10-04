@@ -35,6 +35,7 @@ interface IStakingController {
     event StakingIntentSet(uint256 indexed tokenId, uint64 indexed cycle);
     event StakingPoked(uint256 indexed tokenId, uint64 indexed cycle, bool satisfied);
     event Unstaked(uint256 indexed tokenId, uint256 amount);
+    event Compounded(uint256 indexed tokenId, uint256 amount);
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
 
     function ve() external view returns (address);
@@ -73,6 +74,7 @@ interface IStakingController {
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function poke(uint256 tokenId) external returns (bool satisfied);
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function compound(uint256 tokenId) external returns (uint256 amount);
     function withdraw(uint256 tokenId) external returns (uint256 amount);
     function isFullyUnstaked(uint256 tokenId) external view returns (bool);
     function claimRewards(uint256 tokenId, address[] calldata gauges) external;

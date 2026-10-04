@@ -22,6 +22,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => address[]) private _tokenGauges;
     mapping(uint256 tokenId => mapping(address gauge => uint256 indexPlusOne)) private _tokenGaugeIndex;
     mapping(uint256 tokenId => address[]) private _intentGauges;
+    mapping(address gauge => uint256[]) private _gaugeTokenIds;
+    mapping(address gauge => mapping(uint256 tokenId => uint256 indexPlusOne)) private _gaugeTokenIndex;
 
     struct Position {
         address vault;
@@ -138,6 +140,63 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     function poke(uint256 tokenId) external override nonReentrant returns (bool satisfied) {
         satisfied = _poke(tokenId);
         emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
+    }
+
+    /// @notice Compound rewards across every validator currently backing a token.
+    /// @dev Vault rewards are distributed pro rata across veMONs sharing that vault.
+    function compound(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+        _requireTokenOwner(tokenId);
+        address[] storage gauges = _tokenGauges[tokenId];
+        if (gauges.length == 0) revert EmptyArray();
+
+        address agent = agentByToken[tokenId];
+        uint64[] memory agentValidators = new uint64[](gauges.length);
+        address[] memory agentGauges = new address[](gauges.length);
+        uint256 agentValidatorCount;
+
+        for (uint256 i; i < gauges.length; ++i) {
+            address gauge = gauges[i];
+            address vaultAddress = vaultByGauge[gauge];
+            if (vaultAddress == address(0)) revert InvalidVault();
+
+            StakingVault vault = StakingVault(payable(vaultAddress));
+            uint64 validatorId = vault.validatorId();
+            if (validatorId == 0) continue;
+
+            if (vault.totalBalance() != 0) {
+                uint256[] memory tokenIds = _gaugeTokenIds[gauge];
+                uint256[] memory vaultRewards = vault.compound(tokenIds);
+                for (uint256 j; j < tokenIds.length; ++j) {
+                    uint256 reward = vaultRewards[j];
+                    if (reward == 0) continue;
+                    IVotingEscrow(ve).increaseAmountFromController(tokenIds[j], reward);
+                    intentOf[tokenIds[j]][gauge] += reward;
+                    if (tokenIds[j] == tokenId) amount += reward;
+                }
+            }
+
+            if (agent != address(0) && StakingAgent(payable(agent)).balanceOf(validatorId) != 0) {
+                agentValidators[agentValidatorCount] = validatorId;
+                agentGauges[agentValidatorCount] = gauge;
+                ++agentValidatorCount;
+            }
+        }
+
+        if (agentValidatorCount != 0) {
+            assembly ("memory-safe") {
+                mstore(agentValidators, agentValidatorCount)
+            }
+            uint256[] memory agentRewards = StakingAgent(payable(agent)).compound(agentValidators);
+            for (uint256 i; i < agentRewards.length; ++i) {
+                uint256 reward = agentRewards[i];
+                if (reward == 0) continue;
+                IVotingEscrow(ve).increaseAmountFromController(tokenId, reward);
+                intentOf[tokenId][agentGauges[i]] += reward;
+                amount += reward;
+            }
+        }
+
+        emit Compounded(tokenId, amount);
     }
 
     /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
@@ -439,9 +498,14 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     function _rememberTokenGauge(uint256 tokenId, address gauge) internal {
-        if (_tokenGaugeIndex[tokenId][gauge] != 0) return;
-        _tokenGauges[tokenId].push(gauge);
-        _tokenGaugeIndex[tokenId][gauge] = _tokenGauges[tokenId].length;
+        if (_tokenGaugeIndex[tokenId][gauge] == 0) {
+            _tokenGauges[tokenId].push(gauge);
+            _tokenGaugeIndex[tokenId][gauge] = _tokenGauges[tokenId].length;
+        }
+        if (_gaugeTokenIndex[gauge][tokenId] == 0) {
+            _gaugeTokenIds[gauge].push(tokenId);
+            _gaugeTokenIndex[gauge][tokenId] = _gaugeTokenIds[gauge].length;
+        }
     }
 
     function _removeTokenGauge(uint256 tokenId, address gauge) internal {
@@ -457,6 +521,20 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         }
         gauges.pop();
         delete _tokenGaugeIndex[tokenId][gauge];
+
+        uint256 gaugeIndexPlusOne = _gaugeTokenIndex[gauge][tokenId];
+        if (gaugeIndexPlusOne != 0) {
+            uint256[] storage tokenIds = _gaugeTokenIds[gauge];
+            uint256 gaugeIndex = gaugeIndexPlusOne - 1;
+            uint256 gaugeLast = tokenIds.length - 1;
+            if (gaugeIndex != gaugeLast) {
+                uint256 replacementTokenId = tokenIds[gaugeLast];
+                tokenIds[gaugeIndex] = replacementTokenId;
+                _gaugeTokenIndex[gauge][replacementTokenId] = gaugeIndex + 1;
+            }
+            tokenIds.pop();
+            delete _gaugeTokenIndex[gauge][tokenId];
+        }
     }
 
     /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.

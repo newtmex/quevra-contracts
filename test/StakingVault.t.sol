@@ -65,9 +65,11 @@ contract StakingVaultTest is StakingVaultFixture {
 
     function test_compoundUsesRealStakingPrecompile() public {
         _addVaultValidator();
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = 0;
 
         vm.prank(owner);
-        vault.compound();
+        vault.compound(tokenIds);
     }
 
     function test_depositCanAccumulateBeforeActivation() public {

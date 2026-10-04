@@ -12,6 +12,7 @@ contract VeMON is VotingEscrow {
 
     error InvalidAddress();
     error InvalidValue();
+    error NotController();
 
     constructor(address controller_, uint64 maxLockCycles_) VotingEscrow(maxLockCycles_, "Locked MON", "veMON") {
         if (controller_ == address(0)) revert InvalidAddress();
@@ -30,5 +31,9 @@ contract VeMON is VotingEscrow {
 
         IStakingController(controller).withdraw(tokenId);
         _burn(tokenId);
+    }
+
+    function _requireController() internal view override {
+        if (msg.sender != controller) revert NotController();
     }
 }

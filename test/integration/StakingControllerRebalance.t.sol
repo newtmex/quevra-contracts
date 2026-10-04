@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {StakingAgent} from "../../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
+import {ProtocolTimeLibrary} from "../../src/libraries/ProtocolTimeLibrary.sol";
 import {StakingControllerFixture} from "../fixtures/StakingControllerFixture.sol";
 
 contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
@@ -34,6 +35,61 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         _initialStake();
         _releaseReductions();
         _stakeReallocation();
+    }
+
+    function test_stakeRestakeAndCompoundKeepVeMONEqualToBackingAcrossEpochs() public {
+        gaugeA = makeAddr("compound-gauge-a");
+        gaugeB = makeAddr("compound-gauge-b");
+        vaultA = _deployValidator(keccak256("compound-validator-a"), gaugeA, 1);
+        vaultB = _deployValidator(keccak256("compound-validator-b"), gaugeB, 2);
+
+        uint256 initialPerValidator = 10_100_000 ether;
+        uint256 lockedAmount = 2 * initialPerValidator;
+        vm.deal(operator, lockedAmount + 100 ether);
+        vm.prank(operator);
+        veMON.createLock{value: lockedAmount}(lockedAmount, lockDuration);
+
+        address[] memory gauges = new address[](2);
+        gauges[0] = gaugeA;
+        gauges[1] = gaugeB;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = initialPerValidator;
+        amounts[1] = initialPerValidator;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        validatorIdA = StakingVault(payable(vaultA)).validatorId();
+        validatorIdB = StakingVault(payable(vaultB)).validatorId();
+        StakingAgent tokenAgent = StakingAgent(payable(controller.agentByToken(1)));
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(6, false);
+        amounts[0] -= 100_000 ether;
+        amounts[1] += 100_000 ether;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        (int128 amountAfterRestake,,,) = veMON.locked(1);
+        assertEq(int256(amountAfterRestake), int256(lockedAmount));
+
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorIdA, address(tokenAgent), 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 1);
+        vm.prank(makeAddr("compound-keeper"));
+        assertTrue(controller.poke(1));
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(9, false);
+        _setEpoch(10, false);
+        _setEpoch(11, false);
+
+        (int128 amountBeforeCompound,,,) = veMON.locked(1);
+        assertEq(int256(amountBeforeCompound), int256(lockedAmount));
+        vm.prank(operator);
+        uint256 compounded = controller.compound(1);
+
+        assertEq(compounded, 0);
+        _assertTwoGaugeBacking(lockedAmount);
+        (int128 amountAfterCompound,,,) = veMON.locked(1);
+        assertEq(int256(amountAfterCompound), int256(lockedAmount));
     }
 
     function _setupValidators() internal {
@@ -197,6 +253,31 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     function _allocationSum(uint256 tokenId) internal view returns (uint256) {
         return controller.allocationOf(tokenId, gaugeA) + controller.allocationOf(tokenId, gaugeB)
             + controller.allocationOf(tokenId, gaugeC) + controller.allocationOf(tokenId, gaugeD);
+    }
+
+    function _assertVeMONMatchesBacking(uint256 expectedAmount) internal view {
+        (int128 lockedAmount,,,) = veMON.locked(1);
+        assertEq(int256(lockedAmount), int256(expectedAmount));
+        assertEq(controller.balanceOf(1) + _allocationSum(1), expectedAmount);
+    }
+
+    function _assertTwoGaugeBacking(uint256 expectedAmount) internal {
+        (int128 lockedAmount,,,) = veMON.locked(1);
+        assertEq(int256(lockedAmount), int256(expectedAmount));
+        assertEq(
+            controller.balanceOf(1) + controller.allocationOf(1, gaugeA) + controller.allocationOf(1, gaugeB),
+            expectedAmount
+        );
+
+        address tokenAgent = controller.agentByToken(1);
+        uint256 totalDelegated = _delegatedStake(validatorIdA, vaultA) + _delegatedStake(validatorIdA, tokenAgent)
+            + _delegatedStake(validatorIdB, vaultB) + _delegatedStake(validatorIdB, tokenAgent);
+        assertEq(totalDelegated, expectedAmount);
+    }
+
+    function _delegatedStake(uint64 validatorId, address delegator) internal returns (uint256 total) {
+        (uint256 stake,,, uint256 deltaStake, uint256 nextDeltaStake,,) = staking.getDelegator(validatorId, delegator);
+        total = stake + deltaStake + nextDeltaStake;
     }
 
     function _maxWithdrawalEpoch() internal returns (uint64 withdrawalEpoch) {

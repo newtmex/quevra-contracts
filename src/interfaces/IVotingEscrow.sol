@@ -64,6 +64,10 @@ interface IVotingEscrow is IERC721Metadata {
     /// @return TokenId of the created veNFT.
     function createLock(uint256 _value, uint256 _lockDuration) external payable returns (uint256);
 
+    /// @notice Increase a lock by rewards compounded from its staking position.
+    /// @dev Callable only by the configured staking controller.
+    function increaseAmountFromController(uint256 tokenId, uint256 amount) external;
+
     /// @notice Permanently lock a normal veNFT.
     function lockPermanent(uint256 _tokenId) external;
 

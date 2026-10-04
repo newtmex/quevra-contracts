@@ -53,6 +53,32 @@ contract VeMONTest is VeMONFixture {
         assertEq(end, 35);
     }
 
+    function test_controllerCreditsCompoundedRewardsToLockedAmount() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        _setEpoch(5, false);
+        (int128 amountBefore,,,) = veMON.locked(1);
+        assertEq(int256(amountBefore), int256(validatorStake));
+
+        uint256 compoundedRewards = 20 ether;
+        vm.prank(address(controller));
+        veMON.increaseAmountFromController(1, compoundedRewards);
+
+        (int128 amountAfter,,,) = veMON.locked(1);
+        assertEq(int256(amountAfter), int256(validatorStake + compoundedRewards));
+        assertEq(veMON.votingPowerOfAt(1, 4), 80_000 ether);
+    }
+
+    function test_onlyControllerCanCreditCompoundedRewards() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        vm.prank(stranger);
+        vm.expectRevert(VeMON.NotController.selector);
+        veMON.increaseAmountFromController(1, 1 ether);
+    }
+
     function test_createLockRejectsZeroOrMismatchedValue() public {
         vm.expectRevert(VotingEscrow.InvalidAmount.selector);
         veMON.createLock(0, lockDuration);

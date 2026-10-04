@@ -36,6 +36,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     error NonexistentToken();
     error EpochOutOfRange();
     event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
+    event LockAmountIncreased(uint256 indexed tokenId, uint256 amount, uint256 newAmount);
     event Checkpoint(uint64 indexed epoch, uint256 indexed pointIndex);
     event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
     event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
@@ -67,6 +68,27 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
         _safeMint(msg.sender, tokenId);
     }
+
+    /// @notice Credit compounded staking rewards to a veNFT's locked amount.
+    /// @dev The controller accounts for the corresponding stake before calling.
+    function increaseAmountFromController(uint256 tokenId, uint256 amount) external override nonReentrant {
+        _requireController();
+        if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
+        if (amount == 0) revert InvalidAmount();
+
+        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        uint256 oldAmount = uint256(uint128(oldLock.amount));
+        uint256 maxAmount = uint256(uint128(type(int128).max));
+        if (amount > maxAmount - oldAmount) revert InvalidAmount();
+
+        IVotingEscrow.LockedBalance memory newLock = oldLock;
+        newLock.amount = int128(uint128(oldAmount + amount));
+        _checkpointLock(tokenId, oldLock, newLock);
+        _locked[tokenId] = newLock;
+        emit LockAmountIncreased(tokenId, amount, oldAmount + amount);
+    }
+
+    function _requireController() internal view virtual;
 
     /// @dev Custody implementation supplied by the concrete escrow. The lock
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
