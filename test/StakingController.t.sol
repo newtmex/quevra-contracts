@@ -9,6 +9,7 @@ import {StakingControllerFixture} from "./fixtures/StakingControllerFixture.sol"
 import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
+import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
     function test_constructorSetsRegistryAndImplementations() public view {
@@ -135,6 +136,11 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
 
         // Validator activation/delegation becomes an active stake at the next epoch.
         _setEpoch(1, false);
+        vm.expectRevert(IStakingController.StakingCycleNotAdvanced.selector);
+        vm.prank(operator);
+        controller.unstake(1, gauges, amounts);
+
+        _setEpoch(5, false);
         vm.prank(operator);
         controller.unstake(1, gauges, amounts);
 
@@ -200,6 +206,10 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(controller.stakingCycleOf(1), 1);
         assertEq(controller.balanceOf(1), 0);
         assertEq(agent.balanceOf(validatorId), delegationAmount);
+
+        vm.expectRevert(IStakingController.StakingCycleNotAdvanced.selector);
+        vm.prank(operator);
+        controller.unstake(1, gauges, amounts);
     }
 
     function test_agentLifecycleReturnsTokenValueThroughController() public {
@@ -240,7 +250,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(controller.allocationOf(2, gauge), agentAmount);
 
         // The agent delegation activates one epoch after the controller stakes it.
-        _setEpoch(2, false);
+        // Unstaking is only available in a later Quevra cycle.
+        _setEpoch(5, false);
         vm.prank(operator);
         controller.unstake(2, gauges, amounts);
         assertEq(agent.balanceOf(validatorId), 0);
@@ -291,6 +302,11 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         assertEq(agent.balanceOf(validatorId), delegationAmount);
 
         _setEpoch(1, false);
+        vm.expectRevert(IStakingController.StakingCycleNotAdvanced.selector);
+        vm.prank(operator);
+        controller.unstake(1, gauges, amounts);
+
+        _setEpoch(5, false);
         amounts[0] = delegationAmount;
         vm.prank(operator);
         controller.unstake(1, gauges, amounts);
@@ -300,6 +316,7 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
 
         (,, uint64 agentWithdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
         _setEpoch(agentWithdrawEpoch + 1, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 1);
         amounts[0] = validatorStake;
         vm.prank(operator);
         controller.unstake(1, gauges, amounts);

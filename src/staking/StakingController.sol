@@ -140,6 +140,35 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
     }
 
+    /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
+    /// @dev Monad requires undelegation and withdrawal to happen in different
+    ///      epochs.
+    function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
+        if (_intentGauges[tokenId].length != 0 && currentCycle <= stakingCycleOf[tokenId]) {
+            revert StakingCycleNotAdvanced();
+        }
+
+        _requireTokenOwner(tokenId);
+        if (gauges.length == 0) revert EmptyArray();
+        if (gauges.length != amounts.length) revert LengthMismatch();
+
+        for (uint256 i; i < gauges.length; ++i) {
+            address gauge = gauges[i];
+            if (amounts[i] == 0) revert ZeroAmount();
+            if (vaultByGauge[gauge] == address(0)) revert InvalidVault();
+            if (_pendingOf(tokenId, gauge) != 0) _withdraw(tokenId, gauge);
+            _rememberTokenGauge(tokenId, gauge);
+            _undelegate(tokenId, gauge, amounts[i]);
+            _reduceIntent(tokenId, gauge, amounts[i]);
+        }
+        emit Unstaked(tokenId, _sum(amounts));
+    }
+
     function _poke(uint256 tokenId) internal returns (bool satisfied) {
         if (_intentGauges[tokenId].length == 0) return true;
 
@@ -312,30 +341,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             emit AgentCreated(tokenId, agent);
         }
         return (agent, validatorId, remainder);
-    }
-
-    /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
-    /// @dev Monad requires undelegation and withdrawal to happen in different
-    ///      epochs.
-    function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts)
-        external
-        override
-        nonReentrant
-    {
-        _requireTokenOwner(tokenId);
-        if (gauges.length == 0) revert EmptyArray();
-        if (gauges.length != amounts.length) revert LengthMismatch();
-
-        for (uint256 i; i < gauges.length; ++i) {
-            address gauge = gauges[i];
-            if (amounts[i] == 0) revert ZeroAmount();
-            if (vaultByGauge[gauge] == address(0)) revert InvalidVault();
-            if (_pendingOf(tokenId, gauge) != 0) _withdraw(tokenId, gauge);
-            _rememberTokenGauge(tokenId, gauge);
-            _undelegate(tokenId, gauge, amounts[i]);
-            _reduceIntent(tokenId, gauge, amounts[i]);
-        }
-        emit Unstaked(tokenId, _sum(amounts));
     }
 
     function _reduceIntent(uint256 tokenId, address gauge, uint256 amount) internal {
