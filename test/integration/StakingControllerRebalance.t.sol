@@ -92,6 +92,108 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(int256(amountAfterCompound), int256(lockedAmount));
     }
 
+    function test_claimRewardsEveryCycleAfterMultipleCyclesAndAlternatingWithCompound() public {
+        // The fork harness does not snapshot test-created validators into its
+        // consensus set, so their native reward balance stays empty here.
+        gaugeA = makeAddr("claim-gauge-a");
+        gaugeB = makeAddr("claim-gauge-b");
+        vaultA = _deployValidator(keccak256("claim-validator-a"), gaugeA, 1);
+        vaultB = _deployValidator(keccak256("claim-validator-b"), gaugeB, 2);
+
+        uint256 initialPerValidator = 10_100_000 ether;
+        uint256 lockedAmount = 2 * initialPerValidator;
+        vm.deal(operator, lockedAmount + 100 ether);
+        vm.prank(operator);
+        veMON.createLock{value: lockedAmount}(lockedAmount, lockDuration);
+
+        address[] memory gauges = new address[](2);
+        gauges[0] = gaugeA;
+        gauges[1] = gaugeB;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = initialPerValidator;
+        amounts[1] = initialPerValidator;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        validatorIdA = StakingVault(payable(vaultA)).validatorId();
+        validatorIdB = StakingVault(payable(vaultB)).validatorId();
+
+        // Restake in the next cycle, then claim after the withdrawal matures.
+        _setEpoch(6, false);
+        amounts[0] -= 100_000 ether;
+        amounts[1] += 100_000 ether;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorIdA, controller.agentByToken(1), 0);
+        _setEpoch(withdrawEpoch + 1, false);
+        vm.prank(makeAddr("claim-keeper"));
+        assertTrue(controller.poke(1));
+        _assertTwoGaugeBacking(lockedAmount);
+
+        // Claim after each of two consecutive cycles.
+        _setEpoch(10, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 2);
+        uint256 ownerBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        uint256 firstCycleClaim = operator.balance - ownerBalance;
+        assertEq(firstCycleClaim, 0);
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(15, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 3);
+        ownerBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        uint256 secondCycleClaim = operator.balance - ownerBalance;
+        assertEq(secondCycleClaim, 0);
+        _assertTwoGaugeBacking(lockedAmount);
+
+        // Leave two cycles without a claim, then claim once after both rollovers.
+        _setEpoch(20, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 4);
+        _setEpoch(25, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 5);
+        ownerBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        uint256 multiCycleClaim = operator.balance - ownerBalance;
+        assertEq(multiCycleClaim, firstCycleClaim + secondCycleClaim);
+        _assertTwoGaugeBacking(lockedAmount);
+
+        // Alternate compounding and liquid claims across successive cycles.
+        _setEpoch(30, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 6);
+        vm.prank(operator);
+        uint256 firstCompound = controller.compound(1);
+        assertEq(firstCompound, 0);
+        lockedAmount += firstCompound;
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(35, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 7);
+        ownerBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        assertEq(operator.balance, ownerBalance);
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(40, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 8);
+        vm.prank(operator);
+        uint256 secondCompound = controller.compound(1);
+        assertEq(secondCompound, 0);
+        lockedAmount += secondCompound;
+        _assertTwoGaugeBacking(lockedAmount);
+
+        _setEpoch(45, false);
+        assertEq(ProtocolTimeLibrary.currentCycle(), 9);
+        ownerBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        assertEq(operator.balance, ownerBalance);
+        _assertTwoGaugeBacking(lockedAmount);
+    }
+
     function _setupValidators() internal {
         gaugeA = makeAddr("gauge-a");
         gaugeB = makeAddr("gauge-b");
