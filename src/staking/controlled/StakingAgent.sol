@@ -9,6 +9,7 @@ import {StakeControlled} from "./StakeControlled.sol";
 contract StakingAgent is StakeControlled {
     mapping(uint64 validatorId => uint256 amount) public balanceOf;
     mapping(uint64 validatorId => uint256 amount) public pendingWithdrawal;
+    mapping(uint64 validatorId => bool usedValidator) public usedValidator;
 
     error EmptyArray();
     error LengthMismatch();
@@ -33,6 +34,7 @@ contract StakingAgent is StakeControlled {
     function _delegate(uint64 validatorId, uint256 amount) internal {
         if (!STAKING.delegate{value: amount}(validatorId)) revert StakingCallFailed();
         balanceOf[validatorId] += amount;
+        usedValidator[validatorId] = true;
     }
 
     function _undelegate(uint64 validatorId, uint256 amount) internal {
@@ -99,35 +101,21 @@ contract StakingAgent is StakeControlled {
         }
     }
 
-    function claimRewards(uint64[] calldata validatorIds) external onlyController {
+    function claimRewards(uint64[] calldata validatorIds)
+        external
+        onlyController
+        returns (uint256[] memory claimedAmounts)
+    {
         if (validatorIds.length == 0) revert EmptyArray();
         uint256 beforeBalance = availableBalance();
+        claimedAmounts = new uint256[](validatorIds.length);
         for (uint256 i; i < validatorIds.length; ++i) {
-            _claimRewardsRaw(validatorIds[i]);
+            claimedAmounts[i] = _claimRewardsRaw(validatorIds[i]);
         }
         uint256 claimed = availableBalance() - beforeBalance;
         if (claimed != 0) {
             (bool success,) = payable(controller).call{value: claimed}("");
             if (!success) revert TransferFailed();
-        }
-    }
-
-    function compound(uint64[] calldata validatorIds)
-        external
-        onlyController
-        returns (uint256[] memory compoundedAmounts)
-    {
-        if (validatorIds.length == 0) revert EmptyArray();
-        compoundedAmounts = new uint256[](validatorIds.length);
-        for (uint256 i; i < validatorIds.length; ++i) {
-            uint64 validatorId = validatorIds[i];
-            if (balanceOf[validatorId] == 0) continue;
-
-            uint256 delegatedBefore = _delegatedStake(validatorId, address(this));
-            _compound(validatorId);
-            uint256 compounded = _delegatedStake(validatorId, address(this)) - delegatedBefore;
-            balanceOf[validatorId] += compounded;
-            compoundedAmounts[i] = compounded;
         }
     }
 

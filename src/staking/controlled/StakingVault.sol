@@ -9,11 +9,16 @@ import {IValidatorRegistry} from "../../interfaces/IValidatorRegistry.sol";
 /// @notice MON vault bound to exactly one validator.
 contract StakingVault is StakeControlled {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
+    uint256 public constant REWARD_PRECISION = 1e27;
 
     IValidatorRegistry public registry;
     mapping(uint256 tokenId => uint256 amount) public balanceOf;
     mapping(uint256 tokenId => uint256 amount) public pendingWithdrawal;
     uint256 public totalBalance;
+    uint256 public rewardPerShareStored;
+    uint256 public accountedUnclaimedRewards;
+    mapping(uint256 tokenId => uint256 rewardPerShare) public userRewardPerSharePaid;
+    mapping(uint256 tokenId => uint256 amount) public rewards;
 
     /// @notice The only validator request this vault can execute.
     uint256 public requestId;
@@ -30,7 +35,12 @@ contract StakingVault is StakeControlled {
     error InvalidAmount();
     error StakingCallFailed();
     error UnexpectedEtherSender();
-    error InvalidCompoundDistribution();
+    error InvalidRecipient();
+    error RewardTransferFailed();
+    error InsufficientRewardLiquidity();
+
+    event RewardsSynced(uint256 newlyAccrued, uint256 rewardPerShare);
+    event RewardPaid(uint256 indexed tokenId, address indexed recipient, uint256 amount);
 
     /// @notice Called by the controller immediately after cloning.
     function initialize(address registry_, uint256 requestId_) external onlyController initializer {
@@ -42,6 +52,15 @@ contract StakingVault is StakeControlled {
 
     function deficit() public view returns (uint256) {
         return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
+    }
+
+    /// @notice Stored and checkpointed MON rewards for one vault position.
+    function earned(uint256 tokenId) public view returns (uint256) {
+        uint256 rewardPerShare = rewardPerShareStored;
+        uint256 paid = userRewardPerSharePaid[tokenId];
+        uint256 stored = rewards[tokenId];
+        if (rewardPerShare > paid) stored += balanceOf[tokenId] * (rewardPerShare - paid) / REWARD_PRECISION;
+        return stored;
     }
 
     function positionOf(uint256 tokenId)
@@ -58,19 +77,20 @@ contract StakingVault is StakeControlled {
     /// @dev The controller caps the value forwarded here. The vault itself also
     ///      enforces the cap so it can never overfund validator creation.
     function deposit(uint256 tokenId) external payable onlyController returns (uint64 currentValidatorId) {
-        if (msg.value == 0 || deficit() < msg.value) revert InvalidAmount();
+        if (msg.value == 0 || (validatorId == 0 && deficit() < msg.value)) revert InvalidAmount();
+
+        _updateReward(tokenId);
 
         balanceOf[tokenId] += msg.value;
         totalBalance += msg.value;
 
         if (deficit() != 0) return validatorId;
 
-        uint256 balance = availableBalance();
         if (validatorId != 0) {
-            STAKING.delegate{value: balance}(validatorId);
+            STAKING.delegate{value: msg.value}(validatorId);
         } else {
             IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
-            validatorId = STAKING.addValidator{value: balance}(
+            validatorId = STAKING.addValidator{value: availableBalance()}(
                 submission.payload, submission.signedSecpMessage, submission.signedBlsMessage
             );
             if (validatorId == 0) revert AddValidatorFailed();
@@ -86,6 +106,7 @@ contract StakingVault is StakeControlled {
         if (validatorId == 0 || amount == 0 || balanceOf[tokenId] < amount) revert InvalidAmount();
         if (pendingWithdrawal[tokenId] != 0) revert InvalidAmount();
         if (availableBalance() != 0) revert InvalidAmount();
+        _updateReward(tokenId);
         if (!STAKING.undelegate(validatorId, amount, WITHDRAW_ID)) {
             revert UndelegationFailed();
         }
@@ -108,50 +129,51 @@ contract StakingVault is StakeControlled {
         if (!success) revert TransferFailed();
     }
 
-    function claimRewards() external onlyController returns (uint256 claimed) {
+    /// @notice Claim a single veMON position's accrued MON rewards.
+    function claimReward(uint256 tokenId, address recipient) external onlyController returns (uint256 amount) {
         if (validatorId == 0) revert ValidatorNotAdded();
-        claimed = _claimRewards(validatorId);
+        if (recipient == address(0)) revert InvalidRecipient();
+
+        _updateReward(tokenId);
+        _claimRewardsRaw(validatorId);
+        accountedUnclaimedRewards = 0;
+
+        amount = rewards[tokenId];
+        if (amount == 0) return 0;
+        if (availableBalance() < amount) revert InsufficientRewardLiquidity();
+        delete rewards[tokenId];
+
+        (bool success,) = payable(recipient).call{value: amount}("");
+        if (!success) revert RewardTransferFailed();
+        emit RewardPaid(tokenId, recipient, amount);
     }
 
-    function compound(uint256[] calldata tokenIds)
-        external
-        onlyController
-        returns (uint256[] memory compoundedAmounts)
-    {
-        if (validatorId == 0) revert ValidatorNotAdded();
-
-        uint256 stakeBefore = totalBalance;
-        uint256 delegatedBefore = _delegatedStake(validatorId, address(this));
-        _compound(validatorId);
-        uint256 compounded = _delegatedStake(validatorId, address(this)) - delegatedBefore;
-
-        compoundedAmounts = new uint256[](tokenIds.length);
-        if (compounded == 0) return compoundedAmounts;
-        if (tokenIds.length == 0 || stakeBefore == 0 || delegatedBefore != stakeBefore) {
-            revert InvalidCompoundDistribution();
+    function _updateReward(uint256 tokenId) internal {
+        _syncRewards();
+        uint256 rewardPerShare = rewardPerShareStored;
+        uint256 paid = userRewardPerSharePaid[tokenId];
+        if (rewardPerShare > paid) {
+            rewards[tokenId] += balanceOf[tokenId] * (rewardPerShare - paid) / REWARD_PRECISION;
         }
+        userRewardPerSharePaid[tokenId] = rewardPerShare;
+    }
 
-        uint256 positionTotal;
-        for (uint256 i; i < tokenIds.length; ++i) {
-            positionTotal += balanceOf[tokenIds[i]];
+    /// @dev Reads the vault delegator's precompile reward state and accounts
+    ///      only the increase since the previous synchronization.
+    function _syncRewards() internal {
+        if (validatorId == 0 || totalBalance == 0) return;
+        (,, uint256 unclaimedRewards,,,,) = STAKING.getDelegator(validatorId, address(this));
+
+        uint256 newlyAccrued;
+        if (unclaimedRewards > accountedUnclaimedRewards) {
+            newlyAccrued = unclaimedRewards - accountedUnclaimedRewards;
         }
-        if (positionTotal != stakeBefore) revert InvalidCompoundDistribution();
+        accountedUnclaimedRewards = unclaimedRewards;
 
-        uint256 remainingStake = stakeBefore;
-        uint256 remainingReward = compounded;
-        for (uint256 i; i < tokenIds.length; ++i) {
-            uint256 position = balanceOf[tokenIds[i]];
-            if (position == 0) continue;
-
-            uint256 reward = position == remainingStake ? remainingReward : remainingReward * position / remainingStake;
-            balanceOf[tokenIds[i]] += reward;
-            compoundedAmounts[i] = reward;
-            remainingStake -= position;
-            remainingReward -= reward;
+        if (newlyAccrued != 0) {
+            rewardPerShareStored += newlyAccrued * REWARD_PRECISION / totalBalance;
+            emit RewardsSynced(newlyAccrued, rewardPerShareStored);
         }
-
-        if (remainingStake != 0 || remainingReward != 0) revert InvalidCompoundDistribution();
-        totalBalance += compounded;
     }
 
     receive() external payable {

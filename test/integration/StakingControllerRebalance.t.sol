@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {StakingAgent} from "../../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {IStakingController} from "../../src/interfaces/IStakingController.sol";
 import {ProtocolTimeLibrary} from "../../src/libraries/ProtocolTimeLibrary.sol";
 import {StakingControllerFixture} from "../fixtures/StakingControllerFixture.sol";
@@ -195,7 +196,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         _assertTwoGaugeBacking(lockedAmount);
     }
 
-    function test_sharedVaultRewardsAreCreditedProRataAndClaimsRequireParticipation() public {
+    function test_sharedVaultRewardsAreAccountedPerTokenAndCompoundIndependently() public {
         gaugeA = makeAddr("shared-reward-gauge");
         vaultA = _deployValidator(keccak256("shared-reward-validator"), gaugeA, 1);
 
@@ -231,23 +232,131 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         controller.claimRewards(2, _singleGauge(gaugeB));
 
         uint256 reward = 100 ether;
-        // Local validators do not receive fork rewards, so model the vault's
-        // successful harvest and its matching transfer to the controller.
-        vm.deal(address(controller), reward);
-        vm.mockCall(vaultA, abi.encodeWithSelector(StakingVault.claimRewards.selector), abi.encode(reward));
+        vm.deal(vaultA, reward);
+        _mockVaultRewards(vaultA, StakingVault(payable(vaultA)).validatorId(), reward);
+        vm.mockCall(
+            address(staking),
+            abi.encodeCall(IMonadStaking.claimRewards, (StakingVault(payable(vaultA)).validatorId())),
+            abi.encode(true)
+        );
 
-        uint256 operatorBalanceBefore = operator.balance;
+        (int128 firstLockedBefore,,,) = veMON.locked(1);
+        (int128 secondLockedBefore,,,) = veMON.locked(2);
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
-        assertEq(operator.balance - operatorBalanceBefore, 80 ether);
-        assertEq(controller.claimableRewards(2), 20 ether);
+        assertEq(controller.compound(1), 80 ether);
+        (int128 firstLockedAfter,,,) = veMON.locked(1);
+        (int128 secondLockedAfter,,,) = veMON.locked(2);
+        assertEq(int256(firstLockedAfter), int256(firstLockedBefore) + 80 ether);
+        assertEq(int256(secondLockedAfter), int256(secondLockedBefore));
+        assertEq(StakingVault(payable(vaultA)).balanceOf(2), secondShare);
+        assertEq(controller.allocationOf(1, gaugeA), firstShare + 80 ether);
+        assertEq(controller.allocationOf(2, gaugeA), secondShare);
 
-        vm.mockCall(vaultA, abi.encodeWithSelector(StakingVault.claimRewards.selector), abi.encode(uint256(0)));
+        _mockVaultRewards(vaultA, StakingVault(payable(vaultA)).validatorId(), 0);
         uint256 strangerBalanceBefore = stranger.balance;
         vm.prank(stranger);
-        controller.claimRewards(2, gauges);
+        controller.claimRewards(2, _singleGauge(gaugeA));
         assertEq(stranger.balance - strangerBalanceBefore, 20 ether);
-        assertEq(controller.claimableRewards(2), 0);
+    }
+
+    function test_lateVaultDepositDoesNotSharePreviouslyAccruedRewards() public {
+        gaugeA = makeAddr("late-deposit-reward-gauge");
+        vaultA = _deployValidator(keccak256("late-deposit-reward-validator"), gaugeA, 1);
+
+        vm.deal(operator, validatorStake + 1 ether);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(operator);
+        controller.stake(1, _singleGauge(gaugeA), _singleAmount(validatorStake));
+
+        uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
+        uint256 reward = 50 ether;
+        vm.deal(vaultA, reward);
+        _mockVaultRewards(vaultA, validatorId, reward);
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.claimRewards, (validatorId)), abi.encode(true));
+
+        vm.deal(stranger, 25_000 ether + 1 ether);
+        vm.prank(stranger);
+        veMON.createLock{value: 25_000 ether}(25_000 ether, lockDuration);
+        vm.prank(stranger);
+        controller.stake(2, _singleGauge(gaugeA), _singleAmount(25_000 ether));
+
+        uint256 operatorBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, _singleGauge(gaugeA));
+        assertEq(operator.balance - operatorBalance, reward);
+
+        _mockVaultRewards(vaultA, validatorId, 0);
+        uint256 strangerBalance = stranger.balance;
+        vm.prank(stranger);
+        controller.claimRewards(2, _singleGauge(gaugeA));
+        assertEq(stranger.balance - strangerBalance, 0);
+    }
+
+    function test_rewardSharesSurvivePartialAndFullExit() public {
+        gaugeA = makeAddr("exit-reward-gauge");
+        vaultA = _deployValidator(keccak256("exit-reward-validator"), gaugeA, 1);
+
+        uint256 firstShare = 80_000 ether;
+        uint256 secondShare = 20_000 ether;
+        vm.deal(operator, firstShare + 1 ether);
+        vm.prank(operator);
+        veMON.createLock{value: firstShare}(firstShare, lockDuration);
+        vm.deal(stranger, secondShare + 1 ether);
+        vm.prank(stranger);
+        veMON.createLock{value: secondShare}(secondShare, lockDuration);
+
+        vm.prank(operator);
+        controller.stake(1, _singleGauge(gaugeA), _singleAmount(firstShare));
+        vm.prank(stranger);
+        controller.stake(2, _singleGauge(gaugeA), _singleAmount(secondShare));
+
+        uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
+        uint256 reward = 100 ether;
+        _mockVaultRewards(vaultA, validatorId, reward);
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.claimRewards, (validatorId)), abi.encode(true));
+
+        _setEpoch(6, false);
+        vm.prank(operator);
+        controller.unstake(1, _singleGauge(gaugeA), _singleAmount(40_000 ether));
+
+        (,, uint64 firstExitEpoch) = staking.getWithdrawalRequest(validatorId, address(vaultA), 0);
+        _setEpoch(firstExitEpoch + 1, false);
+        vm.prank(makeAddr("partial-exit-keeper"));
+        controller.poke(1);
+
+        vm.prank(stranger);
+        controller.unstake(2, _singleGauge(gaugeA), _singleAmount(secondShare));
+
+        _mockVaultRewards(vaultA, validatorId, 0);
+        vm.deal(vaultA, reward);
+
+        uint256 operatorBalance = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, _singleGauge(gaugeA));
+        assertEq(operator.balance - operatorBalance, 80 ether);
+        assertEq(StakingVault(payable(vaultA)).balanceOf(1), 40_000 ether);
+
+        _setEpoch(20, false);
+        uint256 strangerBalance = stranger.balance;
+        vm.prank(stranger);
+        veMON.withdraw(2);
+        assertEq(stranger.balance - strangerBalance, secondShare + 20 ether);
+        assertEq(veMON.balanceOf(stranger), 0);
+        assertEq(controller.balanceOf(2), 0);
+    }
+
+    function _mockVaultRewards(address vault, uint64 validatorId, uint256 unclaimed) internal {
+        vm.mockCall(
+            address(staking),
+            abi.encodeCall(IMonadStaking.getDelegator, (validatorId, vault)),
+            abi.encode(uint256(0), uint256(0), unclaimed, uint256(0), uint256(0), uint64(0), uint64(0))
+        );
+    }
+
+    function _singleAmount(uint256 amount) internal pure returns (uint256[] memory amounts) {
+        amounts = new uint256[](1);
+        amounts[0] = amount;
     }
 
     function _singleGauge(address gauge) internal pure returns (address[] memory gauges) {

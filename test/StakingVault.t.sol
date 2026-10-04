@@ -43,33 +43,22 @@ contract StakingVaultTest is StakingVaultFixture {
         _assertValidator(validatorId);
     }
 
-    function test_depositIsControllerOnlyAndRejectsOverfundingAfterActivation() public {
+    function test_depositIsControllerOnly() public {
         vm.prank(stranger);
         vm.expectRevert(StakeControlled.OnlyController.selector);
         vault.deposit{value: validatorStake}(0);
-
-        _addVaultValidator();
-
-        vm.prank(owner);
-        vm.expectRevert(StakingVault.InvalidAmount.selector);
-        vault.deposit{value: 1}(0);
     }
 
-    function test_depositAfterActivationIsRejected() public {
-        _addVaultValidator();
+    function test_depositAfterActivationDelegatesAndTracksNewToken() public {
+        uint64 validatorId = _addVaultValidator();
 
         vm.prank(owner);
-        vm.expectRevert(StakingVault.InvalidAmount.selector);
-        vault.deposit{value: delegationAmount}(1);
-    }
+        uint64 returnedValidatorId = vault.deposit{value: delegationAmount}(1);
 
-    function test_compoundUsesRealStakingPrecompile() public {
-        _addVaultValidator();
-        uint256[] memory tokenIds = new uint256[](1);
-        tokenIds[0] = 0;
-
-        vm.prank(owner);
-        vault.compound(tokenIds);
+        assertEq(returnedValidatorId, validatorId);
+        assertEq(vault.balanceOf(1), delegationAmount);
+        assertEq(vault.totalBalance(), validatorStake + delegationAmount);
+        _assertDelegation(validatorId);
     }
 
     function test_depositCanAccumulateBeforeActivation() public {
