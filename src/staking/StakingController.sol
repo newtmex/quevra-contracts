@@ -16,6 +16,7 @@ import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 ///      physical MON toward that intent.
 contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
+    mapping(uint256 tokenId => uint256 amount) public override claimableRewards;
     mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
     mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public override intentOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
@@ -273,7 +274,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (position.validatorId == 0) {
                 position.validatorId = StakingVault(payable(position.vault)).validatorId();
             }
-            _tryUndelegate(tokenId, position, current - target);
+            _tryUndelegate(tokenId, gauge, position, current - target);
             return false;
         }
 
@@ -346,7 +347,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit StakingIntentSet(tokenId, stakingCycleOf[tokenId]);
     }
 
-    function _tryUndelegate(uint256 tokenId, Position memory position, uint256 amount) internal returns (bool success) {
+    function _tryUndelegate(uint256 tokenId, address gauge, Position memory position, uint256 amount)
+        internal
+        returns (bool success)
+    {
         if (amount == 0) return true;
 
         uint256 agentAmount = position.agent == address(0) || position.validatorId == 0 ? 0 : position.agentAllocation;
@@ -362,6 +366,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 fromVault = amount - fromAgent;
         if (fromVault == 0) return true;
         if (position.vaultAllocation < fromVault) return false;
+        _harvestVaultRewards(gauge);
         try StakingVault(payable(position.vault)).undelegate(tokenId, fromVault) {}
         catch {
             return false;
@@ -428,6 +433,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 fromVault = amount - fromAgent;
         if (fromVault != 0) {
             if (StakingVault(payable(vault)).balanceOf(tokenId) < fromVault) revert InvalidUnstakeAmount();
+            _harvestVaultRewards(gauge);
             StakingVault(payable(vault)).undelegate(tokenId, fromVault);
         }
     }
@@ -556,30 +562,41 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         balanceOf[tokenId] = 0;
         delete _tokenGauges[tokenId];
+        amount += claimableRewards[tokenId];
+        delete claimableRewards[tokenId];
         (bool success,) = payable(tokenOwner).call{value: amount}("");
         if (!success) revert TransferFailed();
         emit Withdrawn(tokenId, amount);
     }
 
-    /// @notice Claim staking rewards for a token's vault and agent allocations.
-    /// @dev Only the current owner of the veNFT can claim its rewards.
+    /// @notice Claim only rewards earned by the token's own staking positions.
+    /// @dev Shared-vault rewards are credited pro rata to every tokenId in the
+    ///      vault. Token-specific agent rewards are credited to their veMON.
+    ///      Pass an empty gauge list to collect previously credited rewards.
     function claimRewards(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
         address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
         if (tokenOwner != msg.sender) revert NotTokenOwner();
-        if (gauges.length == 0) revert EmptyArray();
-        uint256 beforeBalance = address(this).balance;
-
         address agent = agentByToken[tokenId];
         uint64[] memory validatorIds = new uint64[](gauges.length);
         uint256 validatorCount;
         for (uint256 i; i < gauges.length; ++i) {
-            address vault = vaultByGauge[gauges[i]];
+            address gauge = gauges[i];
+            address vault = vaultByGauge[gauge];
             if (vault == address(0)) revert InvalidVault();
+            for (uint256 j; j < i; ++j) {
+                if (gauges[j] == gauge) revert DuplicateGauge();
+            }
 
-            StakingVault(payable(vault)).claimRewards();
-            if (agent != address(0)) {
-                uint64 validatorId = StakingVault(payable(vault)).validatorId();
-                if (validatorId != 0) validatorIds[validatorCount++] = validatorId;
+            Position memory position = _positionOf(tokenId, gauge, agent);
+            if (
+                position.vaultAllocation + position.agentAllocation + position.vaultPending + position.agentPending == 0
+            ) revert NotGaugeParticipant();
+
+            if (position.validatorId != 0 && position.vaultAllocation != 0) {
+                _harvestVaultRewards(gauge);
+            }
+            if (agent != address(0) && position.agentAllocation + position.agentPending != 0) {
+                validatorIds[validatorCount++] = position.validatorId;
             }
         }
 
@@ -587,14 +604,42 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             assembly {
                 mstore(validatorIds, validatorCount)
             }
+            uint256 beforeBalance = address(this).balance;
             StakingAgent(payable(agent)).claimRewards(validatorIds);
+            claimableRewards[tokenId] += address(this).balance - beforeBalance;
         }
 
-        uint256 claimed = address(this).balance - beforeBalance;
-        if (claimed != 0) {
-            (bool success,) = payable(tokenOwner).call{value: claimed}("");
-            if (!success) revert UnexpectedEtherSender();
+        uint256 amount = claimableRewards[tokenId];
+        if (amount != 0) {
+            delete claimableRewards[tokenId];
+            (bool success,) = payable(tokenOwner).call{value: amount}("");
+            if (!success) revert TransferFailed();
         }
+        emit RewardsClaimed(tokenId, amount);
+    }
+
+    /// @dev Harvest shared-vault rewards while its current ownership shares are
+    ///      still intact, then credit each position by its vault balance.
+    function _harvestVaultRewards(address gauge) internal {
+        StakingVault vault = StakingVault(payable(vaultByGauge[gauge]));
+        uint256 totalStake = vault.totalBalance();
+        if (totalStake == 0) return;
+
+        uint256 claimed = vault.claimRewards();
+        if (claimed == 0) return;
+
+        uint256[] storage tokenIds = _gaugeTokenIds[gauge];
+        uint256 remainingStake = totalStake;
+        uint256 remainingReward = claimed;
+        for (uint256 i; i < tokenIds.length; ++i) {
+            uint256 position = vault.balanceOf(tokenIds[i]);
+            if (position == 0) continue;
+            uint256 reward = position == remainingStake ? remainingReward : remainingReward * position / remainingStake;
+            claimableRewards[tokenIds[i]] += reward;
+            remainingStake -= position;
+            remainingReward -= reward;
+        }
+        if (remainingStake != 0 || remainingReward != 0) revert InvalidRewardDistribution();
     }
 
     function _ve() private view returns (address) {

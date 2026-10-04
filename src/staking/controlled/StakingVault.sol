@@ -108,9 +108,9 @@ contract StakingVault is StakeControlled {
         if (!success) revert TransferFailed();
     }
 
-    function claimRewards() external onlyController {
+    function claimRewards() external onlyController returns (uint256 claimed) {
         if (validatorId == 0) revert ValidatorNotAdded();
-        _claimRewards(validatorId);
+        claimed = _claimRewards(validatorId);
     }
 
     function compound(uint256[] calldata tokenIds)

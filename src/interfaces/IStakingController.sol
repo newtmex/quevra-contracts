@@ -21,6 +21,8 @@ interface IStakingController {
     error InvalidUnstakeAmount();
     error UnexpectedEtherSender();
     error NotTokenOwner();
+    error NotGaugeParticipant();
+    error InvalidRewardDistribution();
     error TransferFailed();
     error StakingCycleNotAdvanced();
     error DuplicateGauge();
@@ -37,6 +39,7 @@ interface IStakingController {
     event Unstaked(uint256 indexed tokenId, uint256 amount);
     event Compounded(uint256 indexed tokenId, uint256 amount);
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
+    event RewardsClaimed(uint256 indexed tokenId, uint256 amount);
 
     function ve() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
@@ -45,6 +48,7 @@ interface IStakingController {
     function vaultByGauge(address gauge) external view returns (address);
     function isValidatorActive(address gauge) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
+    function claimableRewards(uint256 tokenId) external view returns (uint256);
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function intentOf(uint256 tokenId, address gauge) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);

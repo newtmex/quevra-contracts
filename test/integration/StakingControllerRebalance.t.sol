@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {StakingAgent} from "../../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
+import {IStakingController} from "../../src/interfaces/IStakingController.sol";
 import {ProtocolTimeLibrary} from "../../src/libraries/ProtocolTimeLibrary.sol";
 import {StakingControllerFixture} from "../fixtures/StakingControllerFixture.sol";
 
@@ -192,6 +193,66 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         controller.claimRewards(1, gauges);
         assertEq(operator.balance, ownerBalance);
         _assertTwoGaugeBacking(lockedAmount);
+    }
+
+    function test_sharedVaultRewardsAreCreditedProRataAndClaimsRequireParticipation() public {
+        gaugeA = makeAddr("shared-reward-gauge");
+        vaultA = _deployValidator(keccak256("shared-reward-validator"), gaugeA, 1);
+
+        uint256 firstShare = 80_000 ether;
+        uint256 secondShare = 20_000 ether;
+        vm.deal(operator, firstShare + 1 ether);
+        vm.prank(operator);
+        veMON.createLock{value: firstShare}(firstShare, lockDuration);
+        vm.deal(stranger, secondShare + 1 ether);
+        vm.prank(stranger);
+        veMON.createLock{value: secondShare}(secondShare, lockDuration);
+
+        address[] memory gauges = new address[](1);
+        gauges[0] = gaugeA;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = firstShare;
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+        amounts[0] = secondShare;
+        vm.prank(stranger);
+        controller.stake(2, gauges, amounts);
+
+        gaugeB = makeAddr("other-reward-gauge");
+        vaultB = _deployValidator(keccak256("other-reward-validator"), gaugeB, 2);
+        vm.prank(owner);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        amounts[0] = validatorStake;
+        vm.prank(owner);
+        controller.stake(3, _singleGauge(gaugeB), amounts);
+
+        vm.prank(stranger);
+        vm.expectRevert(IStakingController.NotGaugeParticipant.selector);
+        controller.claimRewards(2, _singleGauge(gaugeB));
+
+        uint256 reward = 100 ether;
+        // Local validators do not receive fork rewards, so model the vault's
+        // successful harvest and its matching transfer to the controller.
+        vm.deal(address(controller), reward);
+        vm.mockCall(vaultA, abi.encodeWithSelector(StakingVault.claimRewards.selector), abi.encode(reward));
+
+        uint256 operatorBalanceBefore = operator.balance;
+        vm.prank(operator);
+        controller.claimRewards(1, gauges);
+        assertEq(operator.balance - operatorBalanceBefore, 80 ether);
+        assertEq(controller.claimableRewards(2), 20 ether);
+
+        vm.mockCall(vaultA, abi.encodeWithSelector(StakingVault.claimRewards.selector), abi.encode(uint256(0)));
+        uint256 strangerBalanceBefore = stranger.balance;
+        vm.prank(stranger);
+        controller.claimRewards(2, gauges);
+        assertEq(stranger.balance - strangerBalanceBefore, 20 ether);
+        assertEq(controller.claimableRewards(2), 0);
+    }
+
+    function _singleGauge(address gauge) internal pure returns (address[] memory gauges) {
+        gauges = new address[](1);
+        gauges[0] = gauge;
     }
 
     function _setupValidators() internal {
