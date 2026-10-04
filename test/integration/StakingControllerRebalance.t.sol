@@ -293,6 +293,36 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(stranger.balance - strangerBalance, 0);
     }
 
+    function test_restoresActivatedVaultDeficitBeforeDelegatingRemainderToAgent() public {
+        gaugeA = makeAddr("vault-deficit-gauge");
+        vaultA = _deployValidator(keccak256("vault-deficit-validator"), gaugeA, 1);
+
+        vm.deal(operator, validatorStake + 1 ether);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(operator);
+        controller.stake(1, _singleGauge(gaugeA), _singleAmount(validatorStake));
+
+        uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
+        _setEpoch(6, false);
+        vm.prank(operator);
+        controller.unstake(1, _singleGauge(gaugeA), _singleAmount(40_000 ether));
+        assertEq(StakingVault(payable(vaultA)).deficit(), 40_000 ether);
+
+        vm.deal(stranger, validatorStake + 1 ether);
+        vm.prank(stranger);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(stranger);
+        controller.stake(2, _singleGauge(gaugeA), _singleAmount(validatorStake));
+
+        StakingVault vault = StakingVault(payable(vaultA));
+        StakingAgent tokenAgent = StakingAgent(payable(controller.agentByToken(2)));
+        assertEq(vault.balanceOf(2), 40_000 ether);
+        assertEq(vault.totalBalance(), validatorStake);
+        assertEq(tokenAgent.balanceOf(validatorId), 60_000 ether);
+        assertEq(controller.allocationOf(2, gaugeA), validatorStake);
+    }
+
     function test_rewardSharesSurvivePartialAndFullExit() public {
         gaugeA = makeAddr("exit-reward-gauge");
         vaultA = _deployValidator(keccak256("exit-reward-validator"), gaugeA, 1);
@@ -328,7 +358,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(stranger);
         controller.unstake(2, _singleGauge(gaugeA), _singleAmount(secondShare));
 
-        _mockVaultRewards(vaultA, validatorId, 0);
+        _mockVaultRewards(vaultA, validatorId, reward);
         vm.deal(vaultA, reward);
 
         uint256 operatorBalance = operator.balance;
@@ -337,6 +367,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(operator.balance - operatorBalance, 80 ether);
         assertEq(StakingVault(payable(vaultA)).balanceOf(1), 40_000 ether);
 
+        _mockVaultRewards(vaultA, validatorId, 0);
         _setEpoch(20, false);
         uint256 strangerBalance = stranger.balance;
         vm.prank(stranger);

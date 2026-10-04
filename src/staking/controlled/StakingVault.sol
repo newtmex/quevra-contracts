@@ -17,6 +17,7 @@ contract StakingVault is StakeControlled {
     uint256 public totalBalance;
     uint256 public rewardPerShareStored;
     uint256 public accountedUnclaimedRewards;
+    uint256 public rewardReserve;
     mapping(uint256 tokenId => uint256 rewardPerShare) public userRewardPerSharePaid;
     mapping(uint256 tokenId => uint256 amount) public rewards;
 
@@ -105,7 +106,7 @@ contract StakingVault is StakeControlled {
     function undelegate(uint256 tokenId, uint256 amount) external onlyController {
         if (validatorId == 0 || amount == 0 || balanceOf[tokenId] < amount) revert InvalidAmount();
         if (pendingWithdrawal[tokenId] != 0) revert InvalidAmount();
-        if (availableBalance() != 0) revert InvalidAmount();
+        if (availableBalance() != rewardReserve) revert InvalidAmount();
         _updateReward(tokenId);
         if (!STAKING.undelegate(validatorId, amount, WITHDRAW_ID)) {
             revert UndelegationFailed();
@@ -120,7 +121,7 @@ contract StakingVault is StakeControlled {
         amount = pendingWithdrawal[tokenId];
         if (amount == 0) revert InvalidAmount();
 
-        if (availableBalance() < amount) {
+        if (availableBalance() - rewardReserve < amount) {
             if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
         }
         delete pendingWithdrawal[tokenId];
@@ -135,13 +136,16 @@ contract StakingVault is StakeControlled {
         if (recipient == address(0)) revert InvalidRecipient();
 
         _updateReward(tokenId);
-        _claimRewardsRaw(validatorId);
+        uint256 trackedRewards = accountedUnclaimedRewards;
+        uint256 claimedRewards = _claimRewardsRaw(validatorId);
+        rewardReserve += claimedRewards > trackedRewards ? claimedRewards : trackedRewards;
         accountedUnclaimedRewards = 0;
 
         amount = rewards[tokenId];
         if (amount == 0) return 0;
-        if (availableBalance() < amount) revert InsufficientRewardLiquidity();
+        if (amount > rewardReserve || availableBalance() < amount) revert InsufficientRewardLiquidity();
         delete rewards[tokenId];
+        rewardReserve -= amount;
 
         (bool success,) = payable(recipient).call{value: amount}("");
         if (!success) revert RewardTransferFailed();
