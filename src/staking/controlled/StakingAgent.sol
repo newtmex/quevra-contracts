@@ -20,6 +20,11 @@ contract StakingAgent is StakeControlled {
     error InsufficientBalance();
     error WithdrawalPending(uint64 validatorId);
 
+    function positionOf(uint64 validatorId) external view returns (uint256 allocation, uint256 pending) {
+        allocation = balanceOf[validatorId];
+        pending = pendingWithdrawal[validatorId];
+    }
+
     function _validateArrays(uint256 validatorCount, uint256 amountCount) private pure {
         if (validatorCount == 0) revert EmptyArray();
         if (validatorCount != amountCount) revert LengthMismatch();

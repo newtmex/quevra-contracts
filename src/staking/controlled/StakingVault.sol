@@ -43,16 +43,26 @@ contract StakingVault is StakeControlled {
         return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
     }
 
+    function positionOf(uint256 tokenId)
+        external
+        view
+        returns (uint256 allocation, uint256 pending, uint64 currentValidatorId)
+    {
+        allocation = balanceOf[tokenId];
+        pending = pendingWithdrawal[tokenId];
+        currentValidatorId = validatorId;
+    }
+
     /// @notice Accounts deposits and uses the registry to activate the validator.
     /// @dev The controller caps the value forwarded here. The vault itself also
     ///      enforces the cap so it can never overfund validator creation.
-    function deposit(uint256 tokenId) external payable onlyController {
+    function deposit(uint256 tokenId) external payable onlyController returns (uint64 currentValidatorId) {
         if (msg.value == 0 || deficit() < msg.value) revert InvalidAmount();
 
         balanceOf[tokenId] += msg.value;
         totalBalance += msg.value;
 
-        if (deficit() != 0) return;
+        if (deficit() != 0) return validatorId;
 
         uint256 balance = availableBalance();
         if (validatorId != 0) {
@@ -64,6 +74,7 @@ contract StakingVault is StakeControlled {
             );
             if (validatorId == 0) revert AddValidatorFailed();
         }
+        return validatorId;
     }
 
     /// @notice Begin withdrawing part of a token's active allocation.

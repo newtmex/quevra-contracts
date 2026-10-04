@@ -23,6 +23,7 @@ interface IStakingController {
     error NotTokenOwner();
     error TransferFailed();
     error StakingCycleNotAdvanced();
+    error DuplicateGauge();
 
     event VeSet(address indexed ve);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -31,6 +32,8 @@ interface IStakingController {
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
     event AgentCreated(uint256 indexed tokenId, address indexed agent);
     event Staked(uint256 indexed tokenId, uint256 amount);
+    event StakingIntentSet(uint256 indexed tokenId, uint64 indexed cycle);
+    event StakingPoked(uint256 indexed tokenId, uint64 indexed cycle, bool satisfied);
     event Unstaked(uint256 indexed tokenId, uint256 amount);
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
 
@@ -42,6 +45,7 @@ interface IStakingController {
     function isValidatorActive(address gauge) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
+    function intentOf(uint256 tokenId, address gauge) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
     function pendingOf(uint256 tokenId, address gauge) external view returns (uint256);
@@ -67,6 +71,7 @@ interface IStakingController {
 
     function deposit(uint256 tokenId) external payable;
     function stake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
+    function poke(uint256 tokenId) external returns (bool satisfied);
     function unstake(uint256 tokenId, address[] calldata gauges, uint256[] calldata amounts) external;
     function withdraw(uint256 tokenId) external returns (uint256 amount);
     function isFullyUnstaked(uint256 tokenId) external view returns (bool);

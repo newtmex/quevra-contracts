@@ -172,11 +172,20 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         gauges[0] = gauge;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = validatorStake;
+
+        // As with ValidatorsVoter.vote, an invalid request must not consume
+        // the token's action for the current cycle.
+        amounts[0] = 0;
+        vm.expectRevert(IStakingController.ZeroAmount.selector);
+        vm.prank(operator);
+        controller.stake(1, gauges, amounts);
+
+        amounts[0] = validatorStake;
         vm.prank(operator);
         controller.stake(1, gauges, amounts);
         assertEq(controller.stakingCycleOf(1), 0);
 
-        amounts[0] = delegationAmount;
+        amounts[0] = validatorStake + delegationAmount;
         vm.expectRevert(IStakingController.StakingCycleNotAdvanced.selector);
         vm.prank(operator);
         controller.stake(1, gauges, amounts);
