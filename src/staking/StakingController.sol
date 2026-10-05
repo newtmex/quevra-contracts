@@ -8,7 +8,9 @@ import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
+import {ValidatorGauge} from "../voting/ValidatorGauge.sol";
 
 /// @title StakingController
 /// @notice Owns validator vaults and routes MON deposits through the bound vault.
@@ -19,6 +21,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
     mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public override intentOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
+    mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public attributedStakeOf;
     mapping(uint256 tokenId => address[]) private _tokenGauges;
     mapping(uint256 tokenId => mapping(address gauge => uint256 indexPlusOne)) private _tokenGaugeIndex;
     mapping(uint256 tokenId => address[]) private _tokenRewardGauges;
@@ -244,6 +247,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (_pendingOf(tokenId, gauge) != 0) _withdraw(tokenId, gauge);
             _rememberTokenGauge(tokenId, gauge);
             _undelegate(tokenId, gauge, amounts[i]);
+            _removeGaugeStake(tokenId, gauge, amounts[i]);
             _reduceIntent(tokenId, gauge, amounts[i]);
         }
         emit Unstaked(tokenId, _sum(amounts));
@@ -270,7 +274,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (_tokenGaugeIndex[tokenId][gauge] != 0) ++i;
         }
 
-        _executeDelegateBatch(batch);
+        _executeDelegateBatch(tokenId, batch);
 
         balanceOf[tokenId] = batch.liquid;
     }
@@ -295,6 +299,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 position.validatorId = StakingVault(payable(position.vault)).validatorId();
             }
             _tryUndelegate(tokenId, position, current - target);
+            uint256 currentAfterUndelegate = _allocationOf(tokenId, gauge);
+            if (current > currentAfterUndelegate) {
+                _removeGaugeStake(tokenId, gauge, current - currentAfterUndelegate);
+            }
             return false;
         }
 
@@ -320,7 +328,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (current != target) satisfied = false;
     }
 
-    function _executeDelegateBatch(PokeBatch memory batch) internal {
+    function _executeDelegateBatch(uint256 tokenId, PokeBatch memory batch) internal {
         if (batch.delegateCount == 0) return;
         if (batch.delegateCount == 1) {
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(
@@ -335,6 +343,9 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 mstore(amounts, count)
             }
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(validators, amounts);
+        }
+        for (uint256 i; i < batch.delegateCount; ++i) {
+            _attributeGaugeStake(tokenId, gaugeForValidatorId[batch.delegateValidators[i]], batch.delegateAmounts[i]);
         }
     }
 
@@ -396,8 +407,9 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         remainder = amount - toVault;
         if (validatorId == 0) validatorId = StakingVault(payable(position.vault)).validatorId();
         address validatorGauge = gaugeByVault[position.vault];
-        if (validatorId != 0 && isValidatorGauge[validatorGauge]) {
-            _bindValidatorGauge(validatorGauge, validatorId);
+        if (isValidatorGauge[validatorGauge]) {
+            if (toVault != 0) _attributeGaugeStake(tokenId, validatorGauge, toVault);
+            if (validatorId != 0) _bindValidatorGauge(validatorGauge, validatorId);
         }
         if (remainder == 0) return (agent, 0, 0);
 
@@ -516,6 +528,34 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             _tokenRewardGauges[tokenId].push(gauge);
             _tokenRewardGaugeIndex[tokenId][gauge] = _tokenRewardGauges[tokenId].length;
         }
+    }
+
+    /// @dev Capture this delegation's veMON power proportionally to the locked
+    ///      MON. The stored attribution does not change as ve power decays later.
+    function _attributeGaugeStake(uint256 tokenId, address gauge, uint256 amount) internal {
+        if (amount == 0) return;
+        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+
+        (uint256 votingPower, int128 lockedAmount) = IVotingEscrow(ve).votingPowerAndLockedAmount(tokenId);
+        if (lockedAmount <= 0) revert InvalidStakeAttribution();
+        uint256 weight = Math.mulDiv(amount, votingPower, uint256(uint128(lockedAmount)));
+
+        attributedStakeOf[tokenId][gauge] += amount;
+        _increaseValidatorGaugeWeight(gauge, tokenId, weight);
+    }
+
+    /// @dev Remove the same pro-rata share of previously attributed weight when
+    ///      MON is undelegated, including while its withdrawal is still pending.
+    function _removeGaugeStake(uint256 tokenId, address gauge, uint256 amount) internal {
+        if (amount == 0) return;
+        uint256 previousStake = attributedStakeOf[tokenId][gauge];
+        if (amount > previousStake) revert InvalidUnstakeAmount();
+
+        uint256 previousWeight = ValidatorGauge(gauge).weightOf(tokenId);
+        uint256 remainingStake = previousStake - amount;
+        uint256 remainingWeight = remainingStake == 0 ? 0 : Math.mulDiv(previousWeight, remainingStake, previousStake);
+        attributedStakeOf[tokenId][gauge] = remainingStake;
+        _decreaseValidatorGaugeWeight(gauge, tokenId, previousWeight - remainingWeight);
     }
 
     function _increaseIntent(uint256 tokenId, address gauge, uint256 amount) internal {

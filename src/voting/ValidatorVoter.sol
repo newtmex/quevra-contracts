@@ -7,7 +7,8 @@ import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 /// @title ValidatorVoter
 /// @notice Validator-to-gauge lifecycle and canonical voting-target registry.
 /// @dev StakingController inherits this layer so validator admission, vault
-///      setup, and gauge registration are atomic. Voting is added in a later stage.
+///      setup, gauge registration, and stake-backed gauge weight share one lifecycle.
+///      veMON vote selection is added in a later stage.
 abstract contract ValidatorVoter {
     IValidatorRegistry private immutable _validatorRegistry;
 
@@ -102,5 +103,15 @@ abstract contract ValidatorVoter {
         validatorIdForGauge[gauge] = validatorId;
         gaugeForValidatorId[validatorId] = gauge;
         emit ValidatorGaugeBound(requestForValidatorGauge[gauge], validatorId, gauge);
+    }
+
+    function _increaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
+        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+        ValidatorGauge(gauge).increaseWeight(tokenId, amount);
+    }
+
+    function _decreaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
+        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+        ValidatorGauge(gauge).decreaseWeight(tokenId, amount);
     }
 }

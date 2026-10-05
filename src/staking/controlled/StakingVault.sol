@@ -24,6 +24,10 @@ contract StakingVault is StakeControlled {
     /// @notice The only validator request this vault can execute.
     uint256 public requestId;
 
+    /// @notice Whether this vault is building the minimum auth-address stake
+    ///         required before a new validator can be created.
+    bool public requiresMinimumStake;
+
     /// @notice Set after the request is successfully executed.
     uint64 public validatorId;
 
@@ -49,6 +53,7 @@ contract StakingVault is StakeControlled {
 
         registry = IValidatorRegistry(registry_);
         requestId = requestId_;
+        requiresMinimumStake = true;
     }
 
     /// @notice Bind this vault to a Monad validator that already exists.
@@ -64,10 +69,11 @@ contract StakingVault is StakeControlled {
         registry = IValidatorRegistry(registry_);
         requestId = requestId_;
         validatorId = validatorId_;
+        requiresMinimumStake = false;
     }
 
     function deficit() public view returns (uint256) {
-        if (validatorId != 0) return 0;
+        if (!requiresMinimumStake) return 0;
         return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
     }
 

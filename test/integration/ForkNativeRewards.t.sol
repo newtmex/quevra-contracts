@@ -16,11 +16,15 @@ contract ConsensusBoundVault is StakingVault {
 contract ConsensusBoundController is StakingController {
     constructor(address registry_, address owner_) StakingController(registry_, owner_, 0) {}
 
-    function attachConsensusValidator(address gauge, uint64 validatorId) external onlyOwner returns (address vault) {
+    function attachConsensusValidator(uint64 validatorId) external onlyOwner returns (address vault, address gauge) {
+        uint256 requestId = registry.requestExistingValidator(validatorId);
+
         ConsensusBoundVault implementation = new ConsensusBoundVault();
         vault = Clones.clone(address(implementation));
-        ConsensusBoundVault(payable(vault)).initialize(address(registry), 1);
+        ConsensusBoundVault(payable(vault)).initialize(address(registry), requestId);
         ConsensusBoundVault(payable(vault)).bindValidator(validatorId);
+
+        gauge = _registerValidatorGauge(requestId, address(this), vault, validatorId);
         vaultByGauge[gauge] = vault;
         gaugeByVault[vault] = gauge;
         _isVault[vault] = true;
@@ -57,8 +61,7 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         forkController = new ConsensusBoundController(address(registry), address(this));
         forkVe = new VeMON(address(forkController), 4);
         forkController.setVe(address(forkVe));
-        gauge = makeAddr("fork-consensus-gauge");
-        vaultAddress = forkController.attachConsensusValidator(gauge, validatorId);
+        (vaultAddress, gauge) = forkController.attachConsensusValidator(validatorId);
         forkVault = StakingVault(payable(vaultAddress));
 
         vm.deal(operator, FIRST_STAKE + 1 ether);

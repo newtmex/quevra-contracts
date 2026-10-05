@@ -142,7 +142,6 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         _setEpoch(5, false);
         vm.prank(operator);
         controller.unstake(1, gauges, amounts);
-
         // Read the actual maturity epoch instead of assuming a fixed delay.
         address vault = controller.vaultByGauge(gauge);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();

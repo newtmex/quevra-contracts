@@ -19,6 +19,7 @@ interface IStakingController {
     error InsufficientBalance();
     error ValidatorNotActivated();
     error InvalidUnstakeAmount();
+    error InvalidStakeAttribution();
     error UnexpectedEtherSender();
     error NotTokenOwner();
     error NotGaugeParticipant();
