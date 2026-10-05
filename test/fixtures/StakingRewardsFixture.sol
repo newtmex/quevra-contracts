@@ -3,4 +3,4 @@ pragma solidity ^0.8.24;
 
 import {StakingControllerFixture} from "./StakingControllerFixture.sol";
 
-abstract contract ValidatorGaugeFixture is StakingControllerFixture {}
+abstract contract StakingRewardsFixture is StakingControllerFixture {}

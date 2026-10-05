@@ -21,8 +21,8 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
     address public override ve;
     address public immutable override vaultImplementation;
     address public immutable override agentImplementation;
-    mapping(address gauge => address vault) public override vaultByGauge;
-    mapping(address vault => address gauge) public gaugeByVault;
+    mapping(address stakingRewards => address vault) public override vaultByStakingRewards;
+    mapping(address vault => address stakingRewards) public stakingRewardsByVault;
     mapping(address => bool) internal _isVault;
     mapping(address => bool) internal _isAgent;
     mapping(address token => bool whitelisted) public override isWhitelistedToken;
@@ -55,20 +55,20 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         emit VeSet(ve_);
     }
 
-    /// @notice Manage the reward tokens accepted by every validator gauge.
+    /// @notice Manage the reward tokens accepted by every validator stakingRewards.
     function setRewardTokenWhitelisted(address token, bool whitelisted) external override onlyOwner {
         if (token == address(0) || token.code.length == 0) revert InvalidAddress();
         isWhitelistedToken[token] = whitelisted;
         emit RewardTokenWhitelistUpdated(token, whitelisted);
     }
 
-    /// @notice Admit a registry request and create its vault and canonical gauge.
+    /// @notice Admit a registry request and create its vault and canonical stakingRewards.
     /// @dev The vault address is derived from the requester's salt and, for a
     ///      new validator, must match the auth address committed in the payload.
     function admitValidatorRequest(uint256 requestId, bytes32 saltSeed)
         external
         override
-        returns (address vault, address gauge)
+        returns (address vault, address stakingRewards)
     {
         IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
         if (msg.sender != submission.requester) revert NotRequester();
@@ -76,7 +76,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         vault = _deployValidatorRequest(
             requestId, submission.requester, submission.requester, address(0), saltSeed, expectedAuthAddress
         );
-        gauge = validatorGaugeForRequest[requestId];
+        stakingRewards = stakingRewardsForRequest[requestId];
     }
 
     /// @dev Matches the operator/requester split used by the voter architecture:
@@ -88,10 +88,10 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) internal returns (uint256 requestId, address vault, address gauge) {
+    ) internal returns (uint256 requestId, address vault, address stakingRewards) {
         requestId = registry.requestValidatorFor(operator, payload, signedSecpMessage, signedBlsMessage);
         vault = _deployValidatorRequest(requestId, operator, address(this), operator, saltSeed, expectedAuthAddress);
-        gauge = validatorGaugeForRequest[requestId];
+        stakingRewards = stakingRewardsForRequest[requestId];
     }
 
     function _deployValidatorRequest(
@@ -103,7 +103,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         address expectedAuthAddress
     ) private returns (address vault) {
         if (msg.sender != requester) revert NotRequester();
-        if (requester == address(0) || validatorGaugeForRequest[requestId] != address(0)) revert InvalidVault();
+        if (requester == address(0) || stakingRewardsForRequest[requestId] != address(0)) revert InvalidVault();
 
         IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
         if (
@@ -141,11 +141,11 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
             StakingVault(payable(vault)).initializeExisting(address(registry), requestId, validatorId);
         }
 
-        address canonicalGauge = _registerValidatorGauge(requestId, submission.operator, vault, validatorId);
-        vaultByGauge[canonicalGauge] = vault;
-        gaugeByVault[vault] = canonicalGauge;
+        address canonicalStakingRewards = _registerStakingRewards(requestId, submission.operator, vault, validatorId);
+        vaultByStakingRewards[canonicalStakingRewards] = vault;
+        stakingRewardsByVault[vault] = canonicalStakingRewards;
         _isVault[vault] = true;
-        emit VaultRegistered(requestId, vault, canonicalGauge, requester);
+        emit VaultRegistered(requestId, vault, canonicalStakingRewards, requester);
     }
 
     function predictVaultAddress(address requester, bytes32 saltSeed) public view override returns (address) {

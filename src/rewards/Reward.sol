@@ -27,7 +27,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
     mapping(address token => mapping(uint256 cycle => uint256 amount)) public override tokenRewardsPerCycle;
     mapping(address token => mapping(uint256 tokenId => uint256 epoch)) public override lastEarnEpoch;
 
-    address[] public rewards;
+    address[] public rewardTokens;
     mapping(address token => bool registered) public override isReward;
 
     mapping(uint256 tokenId => mapping(uint256 index => Checkpoint)) public checkpoints;
@@ -101,17 +101,17 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
     }
 
     function rewardsListLength() external view override returns (uint256) {
-        return rewards.length;
+        return rewardTokens.length;
     }
 
     function duration() external pure override returns (uint256) {
         return CYCLE_EPOCHS;
     }
 
-    function earned(address token, uint256 tokenId) public view override returns (uint256) {
+    function earned(address token, uint256 tokenId) public override returns (uint256) {
         if (numCheckpoints[tokenId] == 0) return 0;
 
-        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpochView();
+        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
         uint256 currentCycle = ProtocolTimeLibrary.cycleStart(currentEpoch);
         uint256 cursor = ProtocolTimeLibrary.cycleStart(uint64(lastEarnEpoch[token][tokenId]));
         uint256 index = getPriorBalanceIndex(tokenId, cursor);

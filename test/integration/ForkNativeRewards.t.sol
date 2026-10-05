@@ -16,7 +16,11 @@ contract ConsensusBoundVault is StakingVault {
 contract ConsensusBoundController is StakingController {
     constructor(address registry_, address owner_) StakingController(registry_, owner_, 0) {}
 
-    function attachConsensusValidator(uint64 validatorId) external onlyOwner returns (address vault, address gauge) {
+    function attachConsensusValidator(uint64 validatorId)
+        external
+        onlyOwner
+        returns (address vault, address stakingRewards)
+    {
         uint256 requestId = registry.requestExistingValidator(validatorId);
 
         ConsensusBoundVault implementation = new ConsensusBoundVault();
@@ -24,9 +28,9 @@ contract ConsensusBoundController is StakingController {
         ConsensusBoundVault(payable(vault)).initialize(address(registry), requestId);
         ConsensusBoundVault(payable(vault)).bindValidator(validatorId);
 
-        gauge = _registerValidatorGauge(requestId, address(this), vault, validatorId);
-        vaultByGauge[gauge] = vault;
-        gaugeByVault[vault] = gauge;
+        stakingRewards = _registerStakingRewards(requestId, address(this), vault, validatorId);
+        vaultByStakingRewards[stakingRewards] = vault;
+        stakingRewardsByVault[vault] = stakingRewards;
         _isVault[vault] = true;
     }
 }
@@ -38,7 +42,7 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
     ConsensusBoundController private forkController;
     VeMON private forkVe;
     StakingVault private forkVault;
-    address private gauge;
+    address private stakingRewards;
     address private vaultAddress;
     uint64 private validatorId;
     uint64 private firstWithdrawalEpoch;
@@ -61,14 +65,14 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         forkController = new ConsensusBoundController(address(registry), address(this));
         forkVe = new VeMON(address(forkController), 4);
         forkController.setVe(address(forkVe));
-        (vaultAddress, gauge) = forkController.attachConsensusValidator(validatorId);
+        (vaultAddress, stakingRewards) = forkController.attachConsensusValidator(validatorId);
         forkVault = StakingVault(payable(vaultAddress));
 
         vm.deal(operator, FIRST_STAKE + 1 ether);
         vm.prank(operator);
         forkVe.createLock{value: FIRST_STAKE}(FIRST_STAKE, lockDuration);
         vm.prank(operator);
-        forkController.stake(1, _oneGauge(gauge), _oneAmount(FIRST_STAKE));
+        forkController.stake(1, _oneVault(vaultAddress), _oneAmount(FIRST_STAKE));
     }
 
     function _replacePartOfVaultStake() private {
@@ -76,7 +80,7 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         // fill that live vault deficit after the validator is already active.
         _setEpoch(6, false);
         vm.prank(operator);
-        forkController.unstake(1, _oneGauge(gauge), _oneAmount(REPLACEMENT_STAKE));
+        forkController.unstake(1, _oneVault(vaultAddress), _oneAmount(REPLACEMENT_STAKE));
         (,, firstWithdrawalEpoch) = staking.getWithdrawalRequest(validatorId, vaultAddress, 0);
         _setEpoch(firstWithdrawalEpoch + 1, false);
         vm.prank(makeAddr("fork-reward-withdraw-keeper"));
@@ -86,7 +90,7 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         vm.prank(stranger);
         forkVe.createLock{value: REPLACEMENT_STAKE}(REPLACEMENT_STAKE, lockDuration);
         vm.prank(stranger);
-        forkController.stake(2, _oneGauge(gauge), _oneAmount(REPLACEMENT_STAKE));
+        forkController.stake(2, _oneVault(vaultAddress), _oneAmount(REPLACEMENT_STAKE));
         assertEq(forkVault.balanceOf(1), 80_000 ether);
         assertEq(forkVault.balanceOf(2), REPLACEMENT_STAKE);
         assertEq(forkVault.totalBalance(), FIRST_STAKE);
@@ -115,11 +119,11 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         assertEq(operator.balance, firstBalance);
         (int128 lockedAfterCompound,,,) = forkVe.locked(1);
         assertEq(uint256(uint128(lockedAfterCompound)), FIRST_STAKE + expectedCompound);
-        assertEq(forkController.allocationOf(1, gauge), 80_000 ether + expectedCompound);
+        assertEq(forkController.allocationOf(1, vaultAddress), 80_000 ether + expectedCompound);
 
         uint256 secondBalance = stranger.balance;
         vm.prank(stranger);
-        forkController.claimRewards(2, _oneGauge(gauge));
+        forkController.claimRewards(2, _oneVault(vaultAddress));
         assertEq(stranger.balance - secondBalance, expectedClaim);
         assertGt(forkVault.rewardReserve(), 0, "reward rounding should leave vault dust");
         assertEq(forkVault.availableBalance(), forkVault.rewardReserve());
@@ -129,9 +133,9 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         // The first user's compounded MON is real delegated backing and returns
         // with the original principal after the normal delayed exit flow.
         _setEpoch(firstWithdrawalEpoch + 3, false);
-        uint256 firstAllocation = forkController.allocationOf(1, gauge);
+        uint256 firstAllocation = forkController.allocationOf(1, vaultAddress);
         vm.prank(operator);
-        forkController.unstake(1, _oneGauge(gauge), _oneAmount(firstAllocation));
+        forkController.unstake(1, _oneVault(vaultAddress), _oneAmount(firstAllocation));
         (,, uint64 principalWithdrawalEpoch) = staking.getWithdrawalRequest(validatorId, vaultAddress, 0);
         address agentAddress = forkController.agentByToken(1);
         (,, uint64 compoundWithdrawalEpoch) = staking.getWithdrawalRequest(validatorId, agentAddress, 0);
@@ -148,9 +152,9 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         assertEq(operator.balance - finalBalance, FIRST_STAKE + expectedCompound);
     }
 
-    function _oneGauge(address gaugeAddress) private pure returns (address[] memory gauges) {
-        gauges = new address[](1);
-        gauges[0] = gaugeAddress;
+    function _oneVault(address vaultAddress_) private pure returns (address[] memory vaults) {
+        vaults = new address[](1);
+        vaults[0] = vaultAddress_;
     }
 
     function _oneAmount(uint256 amount) private pure returns (uint256[] memory amounts) {

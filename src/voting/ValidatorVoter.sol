@@ -1,25 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ValidatorGauge} from "./ValidatorGauge.sol";
+import {StakingRewards} from "../rewards/StakingRewards.sol";
+import {StakingVault} from "../staking/controlled/StakingVault.sol";
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
 
 /// @title ValidatorVoter
-/// @notice Validator-to-gauge lifecycle and canonical voting-target registry.
+/// @notice Validator-to-stakingRewards lifecycle and canonical voting-target registry.
 /// @dev StakingController inherits this layer so validator admission, vault
-///      setup, gauge registration, and stake-backed gauge weight share one lifecycle.
+///      setup, stakingRewards registration, and stake-backed stakingRewards weight share one lifecycle.
 ///      veMON vote selection is added in a later stage.
 abstract contract ValidatorVoter {
     IValidatorRegistry private immutable _validatorRegistry;
 
-    mapping(uint256 requestId => address gauge) public validatorGaugeForRequest;
-    mapping(address gauge => uint256 requestId) public requestForValidatorGauge;
-    mapping(address gauge => address vault) public vaultForValidatorGauge;
-    mapping(address gauge => uint64 validatorId) public validatorIdForGauge;
-    mapping(uint64 validatorId => address gauge) public gaugeForValidatorId;
-    mapping(address gauge => bool registered) public isValidatorGauge;
-    address[] private _validatorGauges;
+    mapping(uint256 requestId => address stakingRewards) public stakingRewardsForRequest;
+    mapping(address stakingRewards => uint256 requestId) public requestForStakingRewards;
+    mapping(address stakingRewards => address vault) public vaultForStakingRewards;
+    mapping(address stakingRewards => bool registered) public isStakingRewards;
+    address[] private _stakingRewards;
 
     constructor(address validatorRegistry_) {
         if (validatorRegistry_ == address(0)) revert IStakingController.InvalidValidatorRegistry();
@@ -31,82 +30,71 @@ abstract contract ValidatorVoter {
         return _validatorRegistry.getSubmission(requestId);
     }
 
-    /// @notice Number of canonical Quevra validator gauges.
-    function validatorGaugeCount() external view returns (uint256) {
-        return _validatorGauges.length;
+    /// @notice Number of canonical Quevra validator vaults.
+    function stakingRewardsCount() external view returns (uint256) {
+        return _stakingRewards.length;
     }
 
-    /// @notice Canonical validator gauge at `index`.
-    function validatorGaugeAt(uint256 index) external view returns (address) {
-        return _validatorGauges[index];
+    /// @notice Canonical validator stakingRewards at `index`.
+    function stakingRewardsAt(uint256 index) external view returns (address) {
+        return _stakingRewards[index];
     }
 
-    /// @notice Resolve a registered gauge to its request, vault, and current validator ID.
+    /// @notice Resolve a registered stakingRewards to its request, vault, and current validator ID.
     /// @dev `validatorId` is zero until a new-validator request is activated by staking.
-    function validatorForGauge(address gauge)
+    function validatorForStakingRewards(address stakingRewards)
         external
         view
         returns (uint256 requestId, address vault, uint64 validatorId, address operator)
     {
-        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
-        requestId = requestForValidatorGauge[gauge];
-        vault = vaultForValidatorGauge[gauge];
-        validatorId = validatorIdForGauge[gauge];
-        operator = ValidatorGauge(gauge).operator();
+        if (!isStakingRewards[stakingRewards]) revert IStakingController.InvalidStakingRewards();
+        requestId = requestForStakingRewards[stakingRewards];
+        vault = vaultForStakingRewards[stakingRewards];
+        validatorId = StakingVault(payable(vault)).validatorId();
+        operator = StakingRewards(stakingRewards).operator();
     }
 
-    function _registerValidatorGauge(uint256 requestId, address operator, address vault, uint64 validatorId)
+    function stakingRewardsForValidatorId(uint64 validatorId) public view returns (address stakingRewards) {
+        if (validatorId == 0) return address(0);
+        for (uint256 i; i < _stakingRewards.length; ++i) {
+            address candidate = _stakingRewards[i];
+            if (StakingVault(payable(vaultForStakingRewards[candidate])).validatorId() == validatorId) {
+                return candidate;
+            }
+        }
+    }
+
+    function _registerStakingRewards(uint256 requestId, address operator, address vault, uint64 validatorId)
         internal
-        returns (address gauge)
+        returns (address stakingRewards)
     {
         if (requestId == 0 || operator == address(0) || vault == address(0)) {
-            revert IStakingController.InvalidValidatorGauge();
+            revert IStakingController.InvalidStakingRewards();
         }
-        if (validatorGaugeForRequest[requestId] != address(0)) {
-            revert IStakingController.ValidatorGaugeAlreadyExists(requestId);
+        if (stakingRewardsForRequest[requestId] != address(0)) {
+            revert IStakingController.StakingRewardsAlreadyExists(requestId);
         }
-        if (validatorId != 0 && gaugeForValidatorId[validatorId] != address(0)) {
+        if (validatorId != 0 && stakingRewardsForValidatorId(validatorId) != address(0)) {
             revert IStakingController.ValidatorAlreadyRegistered(validatorId);
         }
 
-        gauge = address(new ValidatorGauge(address(this), requestId, operator));
-        validatorGaugeForRequest[requestId] = gauge;
-        requestForValidatorGauge[gauge] = requestId;
-        vaultForValidatorGauge[gauge] = vault;
-        isValidatorGauge[gauge] = true;
-        _validatorGauges.push(gauge);
+        stakingRewards = address(new StakingRewards(address(this), requestId, operator));
+        stakingRewardsForRequest[requestId] = stakingRewards;
+        requestForStakingRewards[stakingRewards] = requestId;
+        vaultForStakingRewards[stakingRewards] = vault;
+        isStakingRewards[stakingRewards] = true;
+        _stakingRewards.push(stakingRewards);
 
-        if (validatorId != 0) {
-            validatorIdForGauge[gauge] = validatorId;
-            gaugeForValidatorId[validatorId] = gauge;
-        }
-
-        emit IStakingController.ValidatorGaugeRegistered(requestId, validatorId, gauge, vault, operator);
+        emit IStakingController.StakingRewardsRegistered(requestId, validatorId, stakingRewards, vault, operator);
     }
 
-    /// @dev Called when the existing StakingVault lifecycle first activates a
-    ///      request, binding its already-created gauge to the returned ID.
-    function _bindValidatorGauge(address gauge, uint64 validatorId) internal {
-        if (!isValidatorGauge[gauge] || validatorId == 0) revert IStakingController.InvalidValidatorGauge();
-        uint64 currentId = validatorIdForGauge[gauge];
-        if (currentId == validatorId) return;
-        if (currentId != 0) revert IStakingController.InvalidValidatorGauge();
-        if (gaugeForValidatorId[validatorId] != address(0)) {
-            revert IStakingController.ValidatorAlreadyRegistered(validatorId);
-        }
-
-        validatorIdForGauge[gauge] = validatorId;
-        gaugeForValidatorId[validatorId] = gauge;
-        emit IStakingController.ValidatorGaugeBound(requestForValidatorGauge[gauge], validatorId, gauge);
+    function _increaseStakingRewardsWeight(address stakingRewards, uint256 tokenId, uint256 amount) internal {
+        if (!isStakingRewards[stakingRewards]) revert IStakingController.InvalidStakingRewards();
+        StakingRewards(stakingRewards)._deposit(amount, tokenId);
     }
 
-    function _increaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
-        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
-        ValidatorGauge(gauge).increaseWeight(tokenId, amount);
-    }
-
-    function _decreaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
-        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
-        ValidatorGauge(gauge).decreaseWeight(tokenId, amount);
+    function _decreaseStakingRewardsWeight(address stakingRewards, uint256 tokenId, uint256 amount) internal {
+        if (!isStakingRewards[stakingRewards]) revert IStakingController.InvalidStakingRewards();
+        StakingRewards(stakingRewards)._withdraw(amount, tokenId);
     }
 }

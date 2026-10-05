@@ -18,10 +18,10 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     uint256 private constant INCREASE_B = 60_000 ether;
     uint256 private constant ADD_D = 120_000 ether;
 
-    address private gaugeA;
-    address private gaugeB;
-    address private gaugeC;
-    address private gaugeD;
+    address private stakingRewardsA;
+    address private stakingRewardsB;
+    address private stakingRewardsC;
+    address private stakingRewardsD;
     address private vaultA;
     address private vaultB;
     address private vaultC;
@@ -40,8 +40,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_stakeRestakeAndCompoundKeepVeMONEqualToBackingAcrossEpochs() public {
-        (vaultA, gaugeA) = _deployValidator(keccak256("compound-validator-a"), 1);
-        (vaultB, gaugeB) = _deployValidator(keccak256("compound-validator-b"), 2);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("compound-validator-a"), 1);
+        (vaultB, stakingRewardsB) = _deployValidator(keccak256("compound-validator-b"), 2);
 
         uint256 initialPerValidator = 10_100_000 ether;
         uint256 lockedAmount = 2 * initialPerValidator;
@@ -49,24 +49,24 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(operator);
         veMON.createLock{value: lockedAmount}(lockedAmount, lockDuration);
 
-        address[] memory gauges = new address[](2);
-        gauges[0] = gaugeA;
-        gauges[1] = gaugeB;
+        address[] memory vaults = new address[](2);
+        vaults[0] = vaultA;
+        vaults[1] = vaultB;
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = initialPerValidator;
         amounts[1] = initialPerValidator;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
         validatorIdA = StakingVault(payable(vaultA)).validatorId();
         validatorIdB = StakingVault(payable(vaultB)).validatorId();
         StakingAgent tokenAgent = StakingAgent(payable(controller.agentByToken(1)));
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(6, false);
         amounts[0] -= 100_000 ether;
         amounts[1] += 100_000 ether;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
         (int128 amountAfterRestake,,,) = veMON.locked(1);
         assertEq(int256(amountAfterRestake), int256(lockedAmount));
 
@@ -75,7 +75,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(ProtocolTimeLibrary.currentCycle(), 1);
         vm.prank(makeAddr("compound-keeper"));
         assertTrue(controller.poke(1));
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(9, false);
         _setEpoch(10, false);
@@ -87,7 +87,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         uint256 compounded = controller.compound(1);
 
         assertEq(compounded, 0);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
         (int128 amountAfterCompound,,,) = veMON.locked(1);
         assertEq(int256(amountAfterCompound), int256(lockedAmount));
     }
@@ -95,8 +95,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     function test_claimRewardsEveryCycleAfterMultipleCyclesAndAlternatingWithCompound() public {
         // The fork harness does not snapshot test-created validators into its
         // consensus set, so their native reward balance stays empty here.
-        (vaultA, gaugeA) = _deployValidator(keccak256("claim-validator-a"), 1);
-        (vaultB, gaugeB) = _deployValidator(keccak256("claim-validator-b"), 2);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("claim-validator-a"), 1);
+        (vaultB, stakingRewardsB) = _deployValidator(keccak256("claim-validator-b"), 2);
 
         uint256 initialPerValidator = 10_100_000 ether;
         uint256 lockedAmount = 2 * initialPerValidator;
@@ -104,14 +104,14 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(operator);
         veMON.createLock{value: lockedAmount}(lockedAmount, lockDuration);
 
-        address[] memory gauges = new address[](2);
-        gauges[0] = gaugeA;
-        gauges[1] = gaugeB;
+        address[] memory vaults = new address[](2);
+        vaults[0] = vaultA;
+        vaults[1] = vaultB;
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = initialPerValidator;
         amounts[1] = initialPerValidator;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
         validatorIdA = StakingVault(payable(vaultA)).validatorId();
         validatorIdB = StakingVault(payable(vaultB)).validatorId();
 
@@ -120,31 +120,31 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         amounts[0] -= 100_000 ether;
         amounts[1] += 100_000 ether;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorIdA, controller.agentByToken(1), 0);
         _setEpoch(withdrawEpoch + 1, false);
         vm.prank(makeAddr("claim-keeper"));
         assertTrue(controller.poke(1));
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         // Claim after each of two consecutive cycles.
         _setEpoch(10, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 2);
         uint256 ownerBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
+        controller.claimRewards(1, vaults);
         uint256 firstCycleClaim = operator.balance - ownerBalance;
         assertEq(firstCycleClaim, 0);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(15, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 3);
         ownerBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
+        controller.claimRewards(1, vaults);
         uint256 secondCycleClaim = operator.balance - ownerBalance;
         assertEq(secondCycleClaim, 0);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         // Leave two cycles without a claim, then claim once after both rollovers.
         _setEpoch(20, false);
@@ -153,10 +153,10 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(ProtocolTimeLibrary.currentCycle(), 5);
         ownerBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
+        controller.claimRewards(1, vaults);
         uint256 multiCycleClaim = operator.balance - ownerBalance;
         assertEq(multiCycleClaim, firstCycleClaim + secondCycleClaim);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         // Alternate compounding and liquid claims across successive cycles.
         _setEpoch(30, false);
@@ -165,15 +165,15 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         uint256 firstCompound = controller.compound(1);
         assertEq(firstCompound, 0);
         lockedAmount += firstCompound;
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(35, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 7);
         ownerBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
+        controller.claimRewards(1, vaults);
         assertEq(operator.balance, ownerBalance);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(40, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 8);
@@ -181,19 +181,19 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         uint256 secondCompound = controller.compound(1);
         assertEq(secondCompound, 0);
         lockedAmount += secondCompound;
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
 
         _setEpoch(45, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 9);
         ownerBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, gauges);
+        controller.claimRewards(1, vaults);
         assertEq(operator.balance, ownerBalance);
-        _assertTwoGaugeBacking(lockedAmount);
+        _assertTwoStakingRewardsBacking(lockedAmount);
     }
 
     function test_sharedVaultRewardsAreAccountedPerTokenAndCompoundIndependently() public {
-        (vaultA, gaugeA) = _deployValidator(keccak256("shared-reward-validator"), 1);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("shared-reward-validator"), 1);
 
         uint256 firstShare = 80_000 ether;
         uint256 secondShare = 20_000 ether;
@@ -204,26 +204,26 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(stranger);
         veMON.createLock{value: secondShare}(secondShare, lockDuration);
 
-        address[] memory gauges = new address[](1);
-        gauges[0] = gaugeA;
+        address[] memory vaults = new address[](1);
+        vaults[0] = vaultA;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = firstShare;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
         amounts[0] = secondShare;
         vm.prank(stranger);
-        controller.stake(2, gauges, amounts);
+        controller.stake(2, vaults, amounts);
 
-        (vaultB, gaugeB) = _deployValidator(keccak256("other-reward-validator"), 2);
+        (vaultB, stakingRewardsB) = _deployValidator(keccak256("other-reward-validator"), 2);
         vm.prank(owner);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         amounts[0] = validatorStake;
         vm.prank(owner);
-        controller.stake(3, _singleGauge(gaugeB), amounts);
+        controller.stake(3, _singleVault(vaultB), amounts);
 
         vm.prank(stranger);
-        vm.expectRevert(IStakingController.NotGaugeParticipant.selector);
-        controller.claimRewards(2, _singleGauge(gaugeB));
+        vm.expectRevert(IStakingController.NotVaultParticipant.selector);
+        controller.claimRewards(2, _singleVault(vaultB));
 
         uint256 reward = 100 ether;
         vm.deal(vaultA, reward);
@@ -243,24 +243,24 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(int256(firstLockedAfter), int256(firstLockedBefore) + 80 ether);
         assertEq(int256(secondLockedAfter), int256(secondLockedBefore));
         assertEq(StakingVault(payable(vaultA)).balanceOf(2), secondShare);
-        assertEq(controller.allocationOf(1, gaugeA), firstShare + 80 ether);
-        assertEq(controller.allocationOf(2, gaugeA), secondShare);
+        assertEq(controller.allocationOf(1, vaultA), firstShare + 80 ether);
+        assertEq(controller.allocationOf(2, vaultA), secondShare);
 
         _mockVaultRewards(vaultA, StakingVault(payable(vaultA)).validatorId(), 0);
         uint256 strangerBalanceBefore = stranger.balance;
         vm.prank(stranger);
-        controller.claimRewards(2, _singleGauge(gaugeA));
+        controller.claimRewards(2, _singleVault(vaultA));
         assertEq(stranger.balance - strangerBalanceBefore, 20 ether);
     }
 
     function test_lateVaultDepositDoesNotSharePreviouslyAccruedRewards() public {
-        (vaultA, gaugeA) = _deployValidator(keccak256("late-deposit-reward-validator"), 1);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("late-deposit-reward-validator"), 1);
 
         vm.deal(operator, validatorStake + 1 ether);
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         vm.prank(operator);
-        controller.stake(1, _singleGauge(gaugeA), _singleAmount(validatorStake));
+        controller.stake(1, _singleVault(vaultA), _singleAmount(validatorStake));
 
         uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
         uint256 reward = 50 ether;
@@ -272,51 +272,51 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(stranger);
         veMON.createLock{value: 25_000 ether}(25_000 ether, lockDuration);
         vm.prank(stranger);
-        controller.stake(2, _singleGauge(gaugeA), _singleAmount(25_000 ether));
+        controller.stake(2, _singleVault(vaultA), _singleAmount(25_000 ether));
 
         uint256 operatorBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, _singleGauge(gaugeA));
+        controller.claimRewards(1, _singleVault(vaultA));
         assertEq(operator.balance - operatorBalance, reward);
 
         _mockVaultRewards(vaultA, validatorId, 0);
         uint256 strangerBalance = stranger.balance;
         vm.prank(stranger);
-        controller.claimRewards(2, _singleGauge(gaugeA));
+        controller.claimRewards(2, _singleVault(vaultA));
         assertEq(stranger.balance - strangerBalance, 0);
     }
 
     function test_restoresActivatedVaultDeficitBeforeDelegatingRemainderToAgent() public {
-        (vaultA, gaugeA) = _deployValidator(keccak256("vault-deficit-validator"), 1);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("vault-deficit-validator"), 1);
 
         vm.deal(operator, validatorStake + 1 ether);
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         vm.prank(operator);
-        controller.stake(1, _singleGauge(gaugeA), _singleAmount(validatorStake));
+        controller.stake(1, _singleVault(vaultA), _singleAmount(validatorStake));
 
         uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
         _setEpoch(6, false);
         vm.prank(operator);
-        controller.unstake(1, _singleGauge(gaugeA), _singleAmount(40_000 ether));
+        controller.unstake(1, _singleVault(vaultA), _singleAmount(40_000 ether));
         assertEq(StakingVault(payable(vaultA)).deficit(), 40_000 ether);
 
         vm.deal(stranger, validatorStake + 1 ether);
         vm.prank(stranger);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         vm.prank(stranger);
-        controller.stake(2, _singleGauge(gaugeA), _singleAmount(validatorStake));
+        controller.stake(2, _singleVault(vaultA), _singleAmount(validatorStake));
 
         StakingVault vault = StakingVault(payable(vaultA));
         StakingAgent tokenAgent = StakingAgent(payable(controller.agentByToken(2)));
         assertEq(vault.balanceOf(2), 40_000 ether);
         assertEq(vault.totalBalance(), validatorStake);
         assertEq(tokenAgent.balanceOf(validatorId), 60_000 ether);
-        assertEq(controller.allocationOf(2, gaugeA), validatorStake);
+        assertEq(controller.allocationOf(2, vaultA), validatorStake);
     }
 
     function test_rewardSharesSurvivePartialAndFullExit() public {
-        (vaultA, gaugeA) = _deployValidator(keccak256("exit-reward-validator"), 1);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("exit-reward-validator"), 1);
 
         uint256 firstShare = 80_000 ether;
         uint256 secondShare = 20_000 ether;
@@ -328,9 +328,9 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         veMON.createLock{value: secondShare}(secondShare, lockDuration);
 
         vm.prank(operator);
-        controller.stake(1, _singleGauge(gaugeA), _singleAmount(firstShare));
+        controller.stake(1, _singleVault(vaultA), _singleAmount(firstShare));
         vm.prank(stranger);
-        controller.stake(2, _singleGauge(gaugeA), _singleAmount(secondShare));
+        controller.stake(2, _singleVault(vaultA), _singleAmount(secondShare));
 
         uint64 validatorId = StakingVault(payable(vaultA)).validatorId();
         uint256 reward = 100 ether;
@@ -339,7 +339,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
 
         _setEpoch(6, false);
         vm.prank(operator);
-        controller.unstake(1, _singleGauge(gaugeA), _singleAmount(40_000 ether));
+        controller.unstake(1, _singleVault(vaultA), _singleAmount(40_000 ether));
 
         (,, uint64 firstExitEpoch) = staking.getWithdrawalRequest(validatorId, address(vaultA), 0);
         _setEpoch(firstExitEpoch + 1, false);
@@ -347,14 +347,14 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         controller.poke(1);
 
         vm.prank(stranger);
-        controller.unstake(2, _singleGauge(gaugeA), _singleAmount(secondShare));
+        controller.unstake(2, _singleVault(vaultA), _singleAmount(secondShare));
 
         _mockVaultRewards(vaultA, validatorId, reward);
         vm.deal(vaultA, reward);
 
         uint256 operatorBalance = operator.balance;
         vm.prank(operator);
-        controller.claimRewards(1, _singleGauge(gaugeA));
+        controller.claimRewards(1, _singleVault(vaultA));
         assertEq(operator.balance - operatorBalance, 80 ether);
         assertEq(StakingVault(payable(vaultA)).balanceOf(1), 40_000 ether);
 
@@ -381,16 +381,16 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         amounts[0] = amount;
     }
 
-    function _singleGauge(address gauge) internal pure returns (address[] memory gauges) {
-        gauges = new address[](1);
-        gauges[0] = gauge;
+    function _singleVault(address vault) internal pure returns (address[] memory vaults) {
+        vaults = new address[](1);
+        vaults[0] = vault;
     }
 
     function _setupValidators() internal {
-        (vaultA, gaugeA) = _deployValidator(keccak256("validator-a"), 1);
-        (vaultB, gaugeB) = _deployValidator(keccak256("validator-b"), 2);
-        (vaultC, gaugeC) = _deployValidator(keccak256("validator-c"), 3);
-        (vaultD, gaugeD) = _deployValidator(keccak256("validator-d"), 4);
+        (vaultA, stakingRewardsA) = _deployValidator(keccak256("validator-a"), 1);
+        (vaultB, stakingRewardsB) = _deployValidator(keccak256("validator-b"), 2);
+        (vaultC, stakingRewardsC) = _deployValidator(keccak256("validator-c"), 3);
+        (vaultD, stakingRewardsD) = _deployValidator(keccak256("validator-d"), 4);
     }
 
     function _initialStake() internal {
@@ -401,17 +401,17 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(int256(lockedAmount), int256(TOTAL_LOCKED));
         assertEq(controller.balanceOf(1), TOTAL_LOCKED);
 
-        address[] memory gauges = new address[](3);
-        gauges[0] = gaugeA;
-        gauges[1] = gaugeB;
-        gauges[2] = gaugeC;
+        address[] memory vaults = new address[](3);
+        vaults[0] = vaultA;
+        vaults[1] = vaultB;
+        vaults[2] = vaultC;
         uint256[] memory amounts = new uint256[](3);
         amounts[0] = INITIAL_A;
         amounts[1] = INITIAL_B;
         amounts[2] = INITIAL_C;
 
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
 
         agent = StakingAgent(payable(controller.agentByToken(1)));
         assertEq(controller.stakingCycleOf(1), 0);
@@ -419,10 +419,10 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         validatorIdB = StakingVault(payable(vaultB)).validatorId();
         validatorIdC = StakingVault(payable(vaultC)).validatorId();
         assertEq(controller.balanceOf(1), 0);
-        assertEq(controller.allocationOf(1, gaugeA), INITIAL_A);
-        assertEq(controller.allocationOf(1, gaugeB), INITIAL_B);
-        assertEq(controller.allocationOf(1, gaugeC), INITIAL_C);
-        assertEq(controller.allocationOf(1, gaugeD), 0);
+        assertEq(controller.allocationOf(1, vaultA), INITIAL_A);
+        assertEq(controller.allocationOf(1, vaultB), INITIAL_B);
+        assertEq(controller.allocationOf(1, vaultC), INITIAL_C);
+        assertEq(controller.allocationOf(1, vaultD), 0);
         assertEq(_allocationSum(1), TOTAL_LOCKED);
         assertEq(controller.balanceOf(1) + _allocationSum(1), TOTAL_LOCKED);
         assertEq(StakingVault(payable(vaultA)).balanceOf(1), validatorStake);
@@ -437,27 +437,27 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         // A later cycle replaces the allocation intent. B remains active while
         // A is reduced, C is removed, and D is added.
         _setEpoch(6, false);
-        address[] memory gauges = new address[](3);
-        gauges[0] = gaugeA;
-        gauges[1] = gaugeB;
-        gauges[2] = gaugeD;
+        address[] memory vaults = new address[](3);
+        vaults[0] = vaultA;
+        vaults[1] = vaultB;
+        vaults[2] = vaultD;
         uint256[] memory amounts = new uint256[](3);
         amounts[0] = INITIAL_A - REDUCE_A;
         amounts[1] = INITIAL_B + INCREASE_B;
         amounts[2] = ADD_D;
         vm.prank(operator);
-        controller.stake(1, gauges, amounts);
+        controller.stake(1, vaults, amounts);
 
-        assertEq(controller.allocationOf(1, gaugeA), INITIAL_A - REDUCE_A);
-        assertEq(controller.allocationOf(1, gaugeB), INITIAL_B);
-        assertEq(controller.allocationOf(1, gaugeC), 0);
-        assertEq(controller.allocationOf(1, gaugeD), 0);
-        assertEq(controller.intentOf(1, gaugeA), INITIAL_A - REDUCE_A);
-        assertEq(controller.intentOf(1, gaugeB), INITIAL_B + INCREASE_B);
-        assertEq(controller.intentOf(1, gaugeC), 0);
-        assertEq(controller.intentOf(1, gaugeD), ADD_D);
-        assertEq(controller.pendingOf(1, gaugeA), REDUCE_A);
-        assertEq(controller.pendingOf(1, gaugeC), REMOVE_C);
+        assertEq(controller.allocationOf(1, vaultA), INITIAL_A - REDUCE_A);
+        assertEq(controller.allocationOf(1, vaultB), INITIAL_B);
+        assertEq(controller.allocationOf(1, vaultC), 0);
+        assertEq(controller.allocationOf(1, vaultD), 0);
+        assertEq(controller.intentOf(1, vaultA), INITIAL_A - REDUCE_A);
+        assertEq(controller.intentOf(1, vaultB), INITIAL_B + INCREASE_B);
+        assertEq(controller.intentOf(1, vaultC), 0);
+        assertEq(controller.intentOf(1, vaultD), ADD_D);
+        assertEq(controller.pendingOf(1, vaultA), REDUCE_A);
+        assertEq(controller.pendingOf(1, vaultC), REMOVE_C);
         assertEq(controller.balanceOf(1), 0);
     }
 
@@ -475,12 +475,12 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(address(finalAgent), address(agent));
         assertEq(controller.stakingCycleOf(1), 1);
         assertEq(controller.balanceOf(1), 0);
-        assertEq(controller.allocationOf(1, gaugeA), INITIAL_A - REDUCE_A);
-        assertEq(controller.allocationOf(1, gaugeB), INITIAL_B + INCREASE_B);
-        assertEq(controller.allocationOf(1, gaugeC), 0);
-        assertEq(controller.allocationOf(1, gaugeD), ADD_D);
-        assertEq(controller.pendingOf(1, gaugeA), 0);
-        assertEq(controller.pendingOf(1, gaugeC), 0);
+        assertEq(controller.allocationOf(1, vaultA), INITIAL_A - REDUCE_A);
+        assertEq(controller.allocationOf(1, vaultB), INITIAL_B + INCREASE_B);
+        assertEq(controller.allocationOf(1, vaultC), 0);
+        assertEq(controller.allocationOf(1, vaultD), ADD_D);
+        assertEq(controller.pendingOf(1, vaultA), 0);
+        assertEq(controller.pendingOf(1, vaultC), 0);
         assertEq(_allocationSum(1), TOTAL_LOCKED);
         assertLe(_allocationSum(1), TOTAL_LOCKED);
         assertEq(controller.balanceOf(1) + _allocationSum(1), TOTAL_LOCKED);
@@ -500,7 +500,10 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(veMON.balanceOf(operator), 1);
     }
 
-    function _deployValidator(bytes32 saltSeed, uint8 keyNumber) internal returns (address vault, address gauge) {
+    function _deployValidator(bytes32 saltSeed, uint8 keyNumber)
+        internal
+        returns (address vault, address stakingRewards)
+    {
         address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
         bytes memory validatorSecpPubkey = _secpPubkey(keyNumber);
         bytes memory payload = abi.encodePacked(
@@ -513,7 +516,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        (vault, gauge) = controller.admitValidatorRequest(requestId, saltSeed);
+        (vault, stakingRewards) = controller.admitValidatorRequest(requestId, saltSeed);
     }
 
     function _secpPubkey(uint8 keyNumber) internal view returns (bytes memory) {
@@ -541,8 +544,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function _allocationSum(uint256 tokenId) internal view returns (uint256) {
-        return controller.allocationOf(tokenId, gaugeA) + controller.allocationOf(tokenId, gaugeB)
-            + controller.allocationOf(tokenId, gaugeC) + controller.allocationOf(tokenId, gaugeD);
+        return controller.allocationOf(tokenId, vaultA) + controller.allocationOf(tokenId, vaultB)
+            + controller.allocationOf(tokenId, vaultC) + controller.allocationOf(tokenId, vaultD);
     }
 
     function _assertVeMONMatchesBacking(uint256 expectedAmount) internal view {
@@ -551,11 +554,11 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(controller.balanceOf(1) + _allocationSum(1), expectedAmount);
     }
 
-    function _assertTwoGaugeBacking(uint256 expectedAmount) internal {
+    function _assertTwoStakingRewardsBacking(uint256 expectedAmount) internal {
         (int128 lockedAmount,,,) = veMON.locked(1);
         assertEq(int256(lockedAmount), int256(expectedAmount));
         assertEq(
-            controller.balanceOf(1) + controller.allocationOf(1, gaugeA) + controller.allocationOf(1, gaugeB),
+            controller.balanceOf(1) + controller.allocationOf(1, vaultA) + controller.allocationOf(1, vaultB),
             expectedAmount
         );
 

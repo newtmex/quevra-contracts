@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 interface IReward {
     error InvalidReward();
     error NotAuthorized();
-    error NotGauge();
+    error NotStakingRewards();
     error NotEscrowToken();
     error NotSingleToken();
     error NotVotingEscrow();
@@ -45,5 +45,8 @@ interface IReward {
     function getPriorBalanceIndex(uint256 tokenId, uint256 cycle) external view returns (uint256);
     function getPriorSupplyIndex(uint256 cycle) external view returns (uint256);
     function rewardsListLength() external view returns (uint256);
-    function earned(address token, uint256 tokenId) external view returns (uint256);
+    /// @notice Calculate rewards using the current Monad staking epoch.
+    /// @dev This is intentionally non-view because Monad's getEpoch precompile
+    ///      endpoint is CALL-only. RPC eth_call remains safe for consumers.
+    function earned(address token, uint256 tokenId) external returns (uint256);
 }

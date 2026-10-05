@@ -48,7 +48,7 @@ Before finishing:
 Rules:
 
 - Never use `block.timestamp` or block numbers for protocol economics.
-- All cycle-scoped state (veMON voting power, voting, validator selection, gauges, rewards, refunds, checkpoints) must transition on **cycle boundaries**.
+- All cycle-scoped state (veMON voting power, voting, validator selection, staking rewards, refunds, checkpoints) must transition on **cycle boundaries**.
 - Use the shared protocol epoch/cycle abstraction; do not reimplement cycle calculations per contract.
 - When adapting Tigris code, preserve the economic behavior but translate its timestamp/epoch logic into Monad epoch/cycle semantics.
 
