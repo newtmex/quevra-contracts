@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ValidatorGauge} from "./ValidatorGauge.sol";
 import {IValidatorRegistry} from "../interfaces/IValidatorRegistry.sol";
+import {IStakingController} from "../interfaces/IStakingController.sol";
 
 /// @title ValidatorVoter
 /// @notice Validator-to-gauge lifecycle and canonical voting-target registry.
@@ -20,20 +21,8 @@ abstract contract ValidatorVoter {
     mapping(address gauge => bool registered) public isValidatorGauge;
     address[] private _validatorGauges;
 
-    error ValidatorGaugeAlreadyExists(uint256 requestId);
-    error ValidatorAlreadyRegistered(uint64 validatorId);
-    error InvalidValidatorGauge();
-    error InvalidValidatorRequest();
-
-    event ValidatorGaugeRegistered(
-        uint256 indexed requestId, uint64 indexed validatorId, address indexed gauge, address vault, address operator
-    );
-    event ValidatorGaugeBound(uint256 indexed requestId, uint64 indexed validatorId, address indexed gauge);
-
-    error InvalidValidatorRegistry();
-
     constructor(address validatorRegistry_) {
-        if (validatorRegistry_ == address(0)) revert InvalidValidatorRegistry();
+        if (validatorRegistry_ == address(0)) revert IStakingController.InvalidValidatorRegistry();
         _validatorRegistry = IValidatorRegistry(validatorRegistry_);
     }
 
@@ -59,7 +48,7 @@ abstract contract ValidatorVoter {
         view
         returns (uint256 requestId, address vault, uint64 validatorId, address operator)
     {
-        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
         requestId = requestForValidatorGauge[gauge];
         vault = vaultForValidatorGauge[gauge];
         validatorId = validatorIdForGauge[gauge];
@@ -70,10 +59,14 @@ abstract contract ValidatorVoter {
         internal
         returns (address gauge)
     {
-        if (requestId == 0 || operator == address(0) || vault == address(0)) revert InvalidValidatorGauge();
-        if (validatorGaugeForRequest[requestId] != address(0)) revert ValidatorGaugeAlreadyExists(requestId);
+        if (requestId == 0 || operator == address(0) || vault == address(0)) {
+            revert IStakingController.InvalidValidatorGauge();
+        }
+        if (validatorGaugeForRequest[requestId] != address(0)) {
+            revert IStakingController.ValidatorGaugeAlreadyExists(requestId);
+        }
         if (validatorId != 0 && gaugeForValidatorId[validatorId] != address(0)) {
-            revert ValidatorAlreadyRegistered(validatorId);
+            revert IStakingController.ValidatorAlreadyRegistered(validatorId);
         }
 
         gauge = address(new ValidatorGauge(address(this), requestId, operator));
@@ -88,30 +81,32 @@ abstract contract ValidatorVoter {
             gaugeForValidatorId[validatorId] = gauge;
         }
 
-        emit ValidatorGaugeRegistered(requestId, validatorId, gauge, vault, operator);
+        emit IStakingController.ValidatorGaugeRegistered(requestId, validatorId, gauge, vault, operator);
     }
 
     /// @dev Called when the existing StakingVault lifecycle first activates a
     ///      request, binding its already-created gauge to the returned ID.
     function _bindValidatorGauge(address gauge, uint64 validatorId) internal {
-        if (!isValidatorGauge[gauge] || validatorId == 0) revert InvalidValidatorGauge();
+        if (!isValidatorGauge[gauge] || validatorId == 0) revert IStakingController.InvalidValidatorGauge();
         uint64 currentId = validatorIdForGauge[gauge];
         if (currentId == validatorId) return;
-        if (currentId != 0) revert InvalidValidatorGauge();
-        if (gaugeForValidatorId[validatorId] != address(0)) revert ValidatorAlreadyRegistered(validatorId);
+        if (currentId != 0) revert IStakingController.InvalidValidatorGauge();
+        if (gaugeForValidatorId[validatorId] != address(0)) {
+            revert IStakingController.ValidatorAlreadyRegistered(validatorId);
+        }
 
         validatorIdForGauge[gauge] = validatorId;
         gaugeForValidatorId[validatorId] = gauge;
-        emit ValidatorGaugeBound(requestForValidatorGauge[gauge], validatorId, gauge);
+        emit IStakingController.ValidatorGaugeBound(requestForValidatorGauge[gauge], validatorId, gauge);
     }
 
     function _increaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
-        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
         ValidatorGauge(gauge).increaseWeight(tokenId, amount);
     }
 
     function _decreaseValidatorGaugeWeight(address gauge, uint256 tokenId, uint256 amount) internal {
-        if (!isValidatorGauge[gauge]) revert InvalidValidatorGauge();
+        if (!isValidatorGauge[gauge]) revert IStakingController.InvalidValidatorGauge();
         ValidatorGauge(gauge).decreaseWeight(tokenId, amount);
     }
 }

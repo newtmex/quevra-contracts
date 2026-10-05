@@ -4,6 +4,25 @@ pragma solidity ^0.8.24;
 import {IValidatorRegistry} from "./IValidatorRegistry.sol";
 
 interface IStakingController {
+    struct Position {
+        address vault;
+        address agent;
+        uint64 validatorId;
+        uint256 vaultAllocation;
+        uint256 agentAllocation;
+        uint256 vaultPending;
+        uint256 agentPending;
+    }
+
+    struct PokeBatch {
+        address agent;
+        uint256 liquid;
+        uint256 delegateCount;
+        uint256 delegateValue;
+        uint64[] delegateValidators;
+        uint256[] delegateAmounts;
+    }
+
     error UnexpectedAuthAddress();
     error InvalidAddress();
     error InvalidCommission();
@@ -26,6 +45,11 @@ interface IStakingController {
     error TransferFailed();
     error StakingCycleNotAdvanced();
     error DuplicateGauge();
+    error ValidatorGaugeAlreadyExists(uint256 requestId);
+    error ValidatorAlreadyRegistered(uint64 validatorId);
+    error InvalidValidatorGauge();
+    error InvalidValidatorRequest();
+    error InvalidValidatorRegistry();
 
     event VeSet(address indexed ve);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
@@ -40,6 +64,10 @@ interface IStakingController {
     event Compounded(uint256 indexed tokenId, uint256 amount);
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
     event RewardsClaimed(uint256 indexed tokenId, uint256 amount);
+    event ValidatorGaugeRegistered(
+        uint256 indexed requestId, uint64 indexed validatorId, address indexed gauge, address vault, address operator
+    );
+    event ValidatorGaugeBound(uint256 indexed requestId, uint64 indexed validatorId, address indexed gauge);
 
     function ve() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
