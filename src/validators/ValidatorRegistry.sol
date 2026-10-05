@@ -53,8 +53,23 @@ contract ValidatorRegistry is IValidatorRegistry {
         submission.operator = operator;
         submission.requester = msg.sender;
         submission.status = Status.Submitted;
+        submission.requestType = RequestType.NewValidator;
 
         emit ValidatorRequested(id, operator, payload);
+    }
+
+    function requestExistingValidator(uint64 validatorId) external override returns (uint256 id) {
+        if (validatorId == 0) revert InvalidValidatorData();
+
+        id = nextId++;
+        Submission storage submission = _submissions[id];
+        submission.operator = msg.sender;
+        submission.requester = msg.sender;
+        submission.status = Status.Submitted;
+        submission.requestType = RequestType.ExistingValidator;
+        submission.validatorId = validatorId;
+
+        emit ExistingValidatorRequested(id, msg.sender, validatorId);
     }
 
     function getSubmission(uint256 id) external view override returns (Submission memory submission) {

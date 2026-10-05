@@ -40,10 +40,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_stakeRestakeAndCompoundKeepVeMONEqualToBackingAcrossEpochs() public {
-        gaugeA = makeAddr("compound-gauge-a");
-        gaugeB = makeAddr("compound-gauge-b");
-        vaultA = _deployValidator(keccak256("compound-validator-a"), gaugeA, 1);
-        vaultB = _deployValidator(keccak256("compound-validator-b"), gaugeB, 2);
+        (vaultA, gaugeA) = _deployValidator(keccak256("compound-validator-a"), 1);
+        (vaultB, gaugeB) = _deployValidator(keccak256("compound-validator-b"), 2);
 
         uint256 initialPerValidator = 10_100_000 ether;
         uint256 lockedAmount = 2 * initialPerValidator;
@@ -97,10 +95,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     function test_claimRewardsEveryCycleAfterMultipleCyclesAndAlternatingWithCompound() public {
         // The fork harness does not snapshot test-created validators into its
         // consensus set, so their native reward balance stays empty here.
-        gaugeA = makeAddr("claim-gauge-a");
-        gaugeB = makeAddr("claim-gauge-b");
-        vaultA = _deployValidator(keccak256("claim-validator-a"), gaugeA, 1);
-        vaultB = _deployValidator(keccak256("claim-validator-b"), gaugeB, 2);
+        (vaultA, gaugeA) = _deployValidator(keccak256("claim-validator-a"), 1);
+        (vaultB, gaugeB) = _deployValidator(keccak256("claim-validator-b"), 2);
 
         uint256 initialPerValidator = 10_100_000 ether;
         uint256 lockedAmount = 2 * initialPerValidator;
@@ -197,8 +193,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_sharedVaultRewardsAreAccountedPerTokenAndCompoundIndependently() public {
-        gaugeA = makeAddr("shared-reward-gauge");
-        vaultA = _deployValidator(keccak256("shared-reward-validator"), gaugeA, 1);
+        (vaultA, gaugeA) = _deployValidator(keccak256("shared-reward-validator"), 1);
 
         uint256 firstShare = 80_000 ether;
         uint256 secondShare = 20_000 ether;
@@ -219,8 +214,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(stranger);
         controller.stake(2, gauges, amounts);
 
-        gaugeB = makeAddr("other-reward-gauge");
-        vaultB = _deployValidator(keccak256("other-reward-validator"), gaugeB, 2);
+        (vaultB, gaugeB) = _deployValidator(keccak256("other-reward-validator"), 2);
         vm.prank(owner);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         amounts[0] = validatorStake;
@@ -260,8 +254,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_lateVaultDepositDoesNotSharePreviouslyAccruedRewards() public {
-        gaugeA = makeAddr("late-deposit-reward-gauge");
-        vaultA = _deployValidator(keccak256("late-deposit-reward-validator"), gaugeA, 1);
+        (vaultA, gaugeA) = _deployValidator(keccak256("late-deposit-reward-validator"), 1);
 
         vm.deal(operator, validatorStake + 1 ether);
         vm.prank(operator);
@@ -294,8 +287,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_restoresActivatedVaultDeficitBeforeDelegatingRemainderToAgent() public {
-        gaugeA = makeAddr("vault-deficit-gauge");
-        vaultA = _deployValidator(keccak256("vault-deficit-validator"), gaugeA, 1);
+        (vaultA, gaugeA) = _deployValidator(keccak256("vault-deficit-validator"), 1);
 
         vm.deal(operator, validatorStake + 1 ether);
         vm.prank(operator);
@@ -324,8 +316,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function test_rewardSharesSurvivePartialAndFullExit() public {
-        gaugeA = makeAddr("exit-reward-gauge");
-        vaultA = _deployValidator(keccak256("exit-reward-validator"), gaugeA, 1);
+        (vaultA, gaugeA) = _deployValidator(keccak256("exit-reward-validator"), 1);
 
         uint256 firstShare = 80_000 ether;
         uint256 secondShare = 20_000 ether;
@@ -396,14 +387,10 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
     }
 
     function _setupValidators() internal {
-        gaugeA = makeAddr("gauge-a");
-        gaugeB = makeAddr("gauge-b");
-        gaugeC = makeAddr("gauge-c");
-        gaugeD = makeAddr("gauge-d");
-        vaultA = _deployValidator(keccak256("validator-a"), gaugeA, 1);
-        vaultB = _deployValidator(keccak256("validator-b"), gaugeB, 2);
-        vaultC = _deployValidator(keccak256("validator-c"), gaugeC, 3);
-        vaultD = _deployValidator(keccak256("validator-d"), gaugeD, 4);
+        (vaultA, gaugeA) = _deployValidator(keccak256("validator-a"), 1);
+        (vaultB, gaugeB) = _deployValidator(keccak256("validator-b"), 2);
+        (vaultC, gaugeC) = _deployValidator(keccak256("validator-c"), 3);
+        (vaultD, gaugeD) = _deployValidator(keccak256("validator-d"), 4);
     }
 
     function _initialStake() internal {
@@ -513,7 +500,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         assertEq(veMON.balanceOf(operator), 1);
     }
 
-    function _deployValidator(bytes32 saltSeed, address gauge, uint8 keyNumber) internal returns (address vault) {
+    function _deployValidator(bytes32 saltSeed, uint8 keyNumber) internal returns (address vault, address gauge) {
         address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
         bytes memory validatorSecpPubkey = _secpPubkey(keyNumber);
         bytes memory payload = abi.encodePacked(
@@ -526,7 +513,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        vault = controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+        (vault, gauge) = controller.admitValidatorRequest(requestId, saltSeed);
     }
 
     function _secpPubkey(uint8 keyNumber) internal view returns (bytes memory) {

@@ -8,6 +8,11 @@ interface IValidatorRegistry {
         Submitted
     }
 
+    enum RequestType {
+        NewValidator,
+        ExistingValidator
+    }
+
     struct Submission {
         bytes payload;
         bytes signedSecpMessage;
@@ -17,9 +22,12 @@ interface IValidatorRegistry {
         Status status;
 
         address requester;
+        RequestType requestType;
+        uint64 validatorId;
     }
 
     event ValidatorRequested(uint256 indexed id, address indexed operator, bytes payload);
+    event ExistingValidatorRequested(uint256 indexed id, address indexed operator, uint64 indexed validatorId);
 
     error UnknownSubmission();
     error NotSubmitted();
@@ -38,6 +46,10 @@ interface IValidatorRegistry {
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
     ) external returns (uint256 id);
+
+    /// @notice Request to add Quevra staking support for an already-created Monad validator.
+    /// @dev The controller validates the ID against Monad when admitting the request.
+    function requestExistingValidator(uint64 validatorId) external returns (uint256 id);
 
     function getSubmission(uint256 id) external view returns (Submission memory);
 }

@@ -51,7 +51,23 @@ contract StakingVault is StakeControlled {
         requestId = requestId_;
     }
 
+    /// @notice Bind this vault to a Monad validator that already exists.
+    /// @dev Existing validators have no addValidator submission to execute, so
+    ///      their vault starts with the known ID and delegates on its first deposit.
+    function initializeExisting(address registry_, uint256 requestId_, uint64 validatorId_)
+        external
+        onlyController
+        initializer
+    {
+        if (registry_ == address(0) || requestId_ == 0 || validatorId_ == 0) revert InvalidRequest();
+
+        registry = IValidatorRegistry(registry_);
+        requestId = requestId_;
+        validatorId = validatorId_;
+    }
+
     function deficit() public view returns (uint256) {
+        if (validatorId != 0) return 0;
         return totalBalance >= MIN_AUTH_ADDRESS_STAKE ? 0 : MIN_AUTH_ADDRESS_STAKE - totalBalance;
     }
 

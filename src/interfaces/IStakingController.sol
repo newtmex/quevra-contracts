@@ -55,16 +55,17 @@ interface IStakingController {
 
     function setVe(address ve_) external;
 
-    function deployVault(
-        uint256 requestId,
-        address requester,
-        bytes32 saltSeed,
-        address expectedAuthAddress,
-        address gauge
-    ) external returns (address vault);
-
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
     function predictAgentAddress(uint256 tokenId) external view returns (address);
+
+    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed) external returns (address vault, address gauge);
+    function createValidator(
+        bytes32 saltSeed,
+        address expectedAuthAddress,
+        bytes calldata payload,
+        bytes calldata signedSecpMessage,
+        bytes calldata signedBlsMessage
+    ) external returns (uint256 requestId, address vault, address gauge);
 
     function setCommission(uint256 commission_) external;
     function signingConfigFor(address requester, bytes32 saltSeed)

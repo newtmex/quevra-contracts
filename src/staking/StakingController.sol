@@ -48,6 +48,19 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         StakingAdmin(registry_, owner_, initialCommission_)
     {}
 
+    /// @notice Submit a new validator request and create its vault and canonical gauge.
+    /// @dev The controller is the registry requester; `msg.sender` is the operator
+    ///      whose salt determines the vault address and whose identity is registered.
+    function createValidator(
+        bytes32 saltSeed,
+        address expectedAuthAddress,
+        bytes calldata payload,
+        bytes calldata signedSecpMessage,
+        bytes calldata signedBlsMessage
+    ) external override nonReentrant returns (uint256 requestId, address vault, address gauge) {
+        return _createValidator(msg.sender, saltSeed, expectedAuthAddress, payload, signedSecpMessage, signedBlsMessage);
+    }
+
     modifier onlyNewCycle(uint256 tokenId) {
         uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
         if (_intentGauges[tokenId].length != 0 && currentCycle <= stakingCycleOf[tokenId]) {
@@ -72,6 +85,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     function isValidatorActive(address gauge) external view override returns (bool) {
+        if (!isValidatorGauge[gauge]) return false;
         address vault = vaultByGauge[gauge];
         return vault != address(0) && StakingVault(payable(vault)).validatorId() != 0;
     }
@@ -380,9 +394,13 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         }
 
         remainder = amount - toVault;
+        if (validatorId == 0) validatorId = StakingVault(payable(position.vault)).validatorId();
+        address validatorGauge = gaugeByVault[position.vault];
+        if (validatorId != 0 && isValidatorGauge[validatorGauge]) {
+            _bindValidatorGauge(validatorGauge, validatorId);
+        }
         if (remainder == 0) return (agent, 0, 0);
 
-        if (validatorId == 0) validatorId = StakingVault(payable(position.vault)).validatorId();
         if (validatorId == 0) revert ValidatorNotActivated();
 
         if (agent == address(0)) {

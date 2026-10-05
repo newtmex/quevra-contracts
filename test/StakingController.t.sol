@@ -117,9 +117,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         );
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        address gauge = makeAddr("gauge-0");
         vm.prank(operator);
-        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+        (, address gauge) = controller.admitValidatorRequest(requestId, saltSeed);
         uint256 amount = validatorStake;
 
         vm.prank(operator);
@@ -166,9 +165,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         );
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        address gauge = makeAddr("gauge-cycle");
         vm.prank(operator);
-        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+        (, address gauge) = controller.admitValidatorRequest(requestId, saltSeed);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);
@@ -220,9 +218,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         );
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        address gauge = makeAddr("gauge-agent");
         vm.prank(operator);
-        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+        (, address gauge) = controller.admitValidatorRequest(requestId, saltSeed);
 
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
@@ -279,9 +276,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         );
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        address gauge = makeAddr("gauge-mixed");
         vm.prank(operator);
-        controller.deployVault(requestId, operator, saltSeed, expectedAuthAddress, gauge);
+        (, address gauge) = controller.admitValidatorRequest(requestId, saltSeed);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);

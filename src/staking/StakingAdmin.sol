@@ -11,10 +11,12 @@ import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
+import {ValidatorVoter} from "../voting/ValidatorVoter.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title StakingAdmin
 /// @notice Administrative and validator-deployment layer for staking controllers.
-abstract contract StakingAdmin is Ownable2Step, IStakingController {
+abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVoter {
     IValidatorRegistry public immutable override registry;
     address public override ve;
     address public immutable override vaultImplementation;
@@ -32,7 +34,10 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
     /// @notice Maximum commission accepted by Monad's staking precompile (100%, scaled by 1e18).
     uint256 public constant MAX_COMMISSION = 1e18;
 
-    constructor(address registry_, address owner_, uint256 initialCommission_) Ownable(owner_) {
+    constructor(address registry_, address owner_, uint256 initialCommission_)
+        Ownable(owner_)
+        ValidatorVoter(registry_)
+    {
         if (registry_ == address(0) || owner_ == address(0)) revert InvalidAddress();
         if (initialCommission_ > MAX_COMMISSION) revert InvalidCommission();
         registry = IValidatorRegistry(registry_);
@@ -49,36 +54,90 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         emit VeSet(ve_);
     }
 
-    /// @notice Deploy, initialize, and register a vault for a validator request.
-    function deployVault(
-        uint256 requestId,
-        address requester,
+    /// @notice Admit a registry request and create its vault and canonical gauge.
+    /// @dev The vault address is derived from the requester's salt and, for a
+    ///      new validator, must match the auth address committed in the payload.
+    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed)
+        external
+        override
+        returns (address vault, address gauge)
+    {
+        IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
+        if (msg.sender != submission.requester) revert NotRequester();
+        address expectedAuthAddress = predictVaultAddress(submission.requester, saltSeed);
+        vault = _deployValidatorRequest(
+            requestId, submission.requester, submission.requester, address(0), saltSeed, expectedAuthAddress
+        );
+        gauge = validatorGaugeForRequest[requestId];
+    }
+
+    /// @dev Matches the operator/requester split used by the voter architecture:
+    ///      the controller submits the request while the operator owns its vault.
+    function _createValidator(
+        address operator,
         bytes32 saltSeed,
         address expectedAuthAddress,
-        address gauge
-    ) external override returns (address vault) {
-        if (msg.sender != requester) revert NotRequester();
-        if (requester == address(0) || gauge == address(0) || vaultByGauge[gauge] != address(0)) {
-            revert InvalidVault();
-        }
+        bytes calldata payload,
+        bytes calldata signedSecpMessage,
+        bytes calldata signedBlsMessage
+    ) internal returns (uint256 requestId, address vault, address gauge) {
+        requestId = registry.requestValidatorFor(operator, payload, signedSecpMessage, signedBlsMessage);
+        vault = _deployValidatorRequest(requestId, operator, address(this), operator, saltSeed, expectedAuthAddress);
+        gauge = validatorGaugeForRequest[requestId];
+    }
 
-        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
-        if (submission.requester != requester || submission.status != IValidatorRegistry.Status.Submitted) {
+    function _deployValidatorRequest(
+        uint256 requestId,
+        address requester,
+        address submissionRequester,
+        address expectedOperator,
+        bytes32 saltSeed,
+        address expectedAuthAddress
+    ) private returns (address vault) {
+        if (msg.sender != requester) revert NotRequester();
+        if (requester == address(0) || validatorGaugeForRequest[requestId] != address(0)) revert InvalidVault();
+
+        IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
+        if (
+            submission.requester != submissionRequester || submission.status != IValidatorRegistry.Status.Submitted
+                || (expectedOperator != address(0) && submission.operator != expectedOperator)
+        ) {
             revert InvalidValidatorState();
-        }
-        if (ValidatorPayloadLibrary.authAddress(submission.payload) != expectedAuthAddress) {
-            revert UnexpectedAuthAddress();
         }
         if (predictVaultAddress(requester, saltSeed) != expectedAuthAddress) {
             revert UnexpectedAuthAddress();
         }
 
+        uint64 validatorId;
+        if (submission.requestType == IValidatorRegistry.RequestType.NewValidator) {
+            if (ValidatorPayloadLibrary.authAddress(submission.payload) != expectedAuthAddress) {
+                revert UnexpectedAuthAddress();
+            }
+        } else {
+            validatorId = submission.validatorId;
+            if (validatorId == 0) revert InvalidValidatorState();
+            (bool success, bytes memory validatorData) =
+                address(0x1000).call(abi.encodeWithSelector(IMonadStaking.getValidator.selector, validatorId));
+            if (!success || validatorData.length < 32) revert InvalidValidatorState();
+            address authAddress;
+            assembly ("memory-safe") {
+                authAddress := mload(add(validatorData, 32))
+            }
+            if (authAddress == address(0)) revert InvalidValidatorState();
+        }
+
         vault = Clones.cloneDeterministic(vaultImplementation, _vaultSalt(requester, saltSeed));
-        StakingVault(payable(vault)).initialize(address(registry), requestId);
-        vaultByGauge[gauge] = vault;
-        gaugeByVault[vault] = gauge;
+        if (submission.requestType == IValidatorRegistry.RequestType.NewValidator) {
+            StakingVault(payable(vault)).initialize(address(registry), requestId);
+        } else {
+            StakingVault(payable(vault)).initializeExisting(address(registry), requestId, validatorId);
+        }
+
+        address canonicalGauge = _registerValidatorGauge(requestId, submission.operator, vault, validatorId);
+        vaultByGauge[canonicalGauge] = vault;
+        gaugeByVault[vault] = canonicalGauge;
         _isVault[vault] = true;
-        emit VaultRegistered(requestId, vault, gauge, requester);
+        emit VaultRegistered(requestId, vault, canonicalGauge, requester);
     }
 
     function predictVaultAddress(address requester, bytes32 saltSeed) public view override returns (address) {
