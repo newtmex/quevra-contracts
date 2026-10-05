@@ -221,6 +221,16 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Unstaked(tokenId, _sum(amounts));
     }
 
+    /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.
+    function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+        return _withdrawToken(tokenId);
+    }
+
+    /// @notice Claim native rewards earned by this token's validator positions.
+    function claimRewards(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
+        _claimTokenRewardsToOwner(tokenId, gauges);
+    }
+
     // -------------------------------------------------------------------------
     // External and public read API
     // -------------------------------------------------------------------------
@@ -545,11 +555,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     // -------------------------------------------------------------------------
-    // External reward and withdrawal API
+    // Internal reward and withdrawal settlement
     // -------------------------------------------------------------------------
 
-    /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.
-    function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+    function _withdrawToken(uint256 tokenId) internal returns (uint256 amount) {
         if (msg.sender != _ve()) revert NotVe();
         address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
 
@@ -577,7 +586,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     /// @notice Claim only rewards earned by this token's own positions.
-    function claimRewards(uint256 tokenId, address[] calldata gauges) external override nonReentrant {
+    function _claimTokenRewardsToOwner(uint256 tokenId, address[] calldata gauges) internal {
         address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
         if (tokenOwner != msg.sender) revert NotTokenOwner();
         uint256 beforeBalance = address(this).balance;
