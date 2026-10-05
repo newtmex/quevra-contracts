@@ -79,41 +79,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit MONDeposited(tokenId, msg.value);
     }
 
-    // -------------------------------------------------------------------------
-    // External and public read API
-    // -------------------------------------------------------------------------
-
-    function allocationOf(uint256 tokenId, address gauge) external view override returns (uint256 allocation) {
-        allocation = _allocationOf(tokenId, gauge);
-    }
-
-    function isValidatorActive(address gauge) external view override returns (bool) {
-        if (!isValidatorGauge[gauge]) return false;
-        address vault = vaultByGauge[gauge];
-        return vault != address(0) && StakingVault(payable(vault)).validatorId() != 0;
-    }
-
-    function pendingOf(uint256 tokenId, address gauge) external view returns (uint256 pending) {
-        pending = _pendingOf(tokenId, gauge);
-    }
-
-    function isFullyUnstaked(uint256 tokenId) external view override returns (bool) {
-        return _isFullyUnstaked(tokenId);
-    }
-
-    function _isFullyUnstaked(uint256 tokenId) internal view returns (bool) {
-        address[] memory gauges = _tokenGauges[tokenId].values();
-        address agent = agentByToken[tokenId];
-        for (uint256 i; i < gauges.length; ++i) {
-            Position memory position = _positionOf(tokenId, gauges[i], agent);
-            if (
-                position.vaultAllocation + position.agentAllocation != 0
-                    || position.vaultPending + position.agentPending != 0 || intentOf[tokenId][gauges[i]] != 0
-            ) return false;
-        }
-        return true;
-    }
-
     /// @dev Receives redeemed MON from a token's vault or agent.
     receive() external payable {
         if (!_isVault[msg.sender] && !_isAgent[msg.sender]) revert UnexpectedEtherSender();
@@ -257,8 +222,43 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     // -------------------------------------------------------------------------
+    // External and public read API
+    // -------------------------------------------------------------------------
+
+    function allocationOf(uint256 tokenId, address gauge) external view override returns (uint256 allocation) {
+        allocation = _allocationOf(tokenId, gauge);
+    }
+
+    function isValidatorActive(address gauge) external view override returns (bool) {
+        if (!isValidatorGauge[gauge]) return false;
+        address vault = vaultByGauge[gauge];
+        return vault != address(0) && StakingVault(payable(vault)).validatorId() != 0;
+    }
+
+    function pendingOf(uint256 tokenId, address gauge) external view returns (uint256 pending) {
+        pending = _pendingOf(tokenId, gauge);
+    }
+
+    function isFullyUnstaked(uint256 tokenId) external view override returns (bool) {
+        return _isFullyUnstaked(tokenId);
+    }
+
+    // -------------------------------------------------------------------------
     // Internal state transitions
     // -------------------------------------------------------------------------
+
+    function _isFullyUnstaked(uint256 tokenId) internal view returns (bool) {
+        address[] memory gauges = _tokenGauges[tokenId].values();
+        address agent = agentByToken[tokenId];
+        for (uint256 i; i < gauges.length; ++i) {
+            Position memory position = _positionOf(tokenId, gauges[i], agent);
+            if (
+                position.vaultAllocation + position.agentAllocation != 0
+                    || position.vaultPending + position.agentPending != 0 || intentOf[tokenId][gauges[i]] != 0
+            ) return false;
+        }
+        return true;
+    }
 
     function _poke(uint256 tokenId) internal returns (bool satisfied) {
         if (_intentGauges[tokenId].length == 0) return true;
