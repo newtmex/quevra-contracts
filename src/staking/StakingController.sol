@@ -28,7 +28,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
     mapping(uint256 tokenId => address agent) public override agentByToken;
     mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
-    
+
     mapping(uint256 tokenId => mapping(address vault => uint256 amount)) public override intentOf;
     mapping(uint256 tokenId => mapping(address vault => uint256 amount)) public attributedStakeOf;
 

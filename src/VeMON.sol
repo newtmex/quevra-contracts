@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {VotingEscrow} from "./ve/VotingEscrow.sol";
+import {VotingEscrow} from "./VotingEscrow.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
 import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
 

@@ -11,7 +11,7 @@ import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
-import {ValidatorVoter} from "../voting/ValidatorVoter.sol";
+import {ValidatorVoter} from "../validators/ValidatorVoter.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title StakingAdmin
