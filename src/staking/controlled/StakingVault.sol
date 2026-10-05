@@ -31,7 +31,6 @@ contract StakingVault is StakeControlled {
     /// @notice Set after the request is successfully executed.
     uint64 public validatorId;
 
-    error ValidatorAlreadyAdded();
     error ValidatorNotAdded();
     error InvalidRequest();
     error AddValidatorFailed();
@@ -110,7 +109,7 @@ contract StakingVault is StakeControlled {
         if (deficit() != 0) return validatorId;
 
         if (validatorId != 0) {
-            STAKING.delegate{value: msg.value}(validatorId);
+            if (!STAKING.delegate{value: msg.value}(validatorId)) revert StakingCallFailed();
         } else {
             IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
             validatorId = STAKING.addValidator{value: availableBalance()}(
@@ -188,9 +187,11 @@ contract StakingVault is StakeControlled {
     ///      only the increase since the previous synchronization.
     function _syncRewards() internal {
         if (validatorId == 0 || totalBalance == 0) return;
+        // The precompile returns the complete tuple; only unclaimed rewards are relevant here.
+        // forge-lint: disable-next-line(unused-return)
         (,, uint256 unclaimedRewards,,,,) = STAKING.getDelegator(validatorId, address(this));
 
-        uint256 newlyAccrued;
+        uint256 newlyAccrued = 0;
         if (unclaimedRewards > accountedUnclaimedRewards) {
             newlyAccrued = unclaimedRewards - accountedUnclaimedRewards;
         }

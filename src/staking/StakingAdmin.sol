@@ -116,7 +116,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
             revert UnexpectedAuthAddress();
         }
 
-        uint64 validatorId;
+        uint64 validatorId = 0;
         if (submission.requestType == IValidatorRegistry.RequestType.NewValidator) {
             if (ValidatorPayloadLibrary.authAddress(submission.payload) != expectedAuthAddress) {
                 revert UnexpectedAuthAddress();

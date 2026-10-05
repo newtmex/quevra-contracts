@@ -259,7 +259,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         Point[] storage history = _userPointHistory[tokenId];
         uint256 length = history.length;
         if (length == 0) return 0;
-        uint256 low;
+        uint256 low = 0;
         uint256 high = length;
         while (low < high) {
             uint256 mid = (low + high) / 2;

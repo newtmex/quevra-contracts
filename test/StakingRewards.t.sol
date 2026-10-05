@@ -201,7 +201,7 @@ contract StakingRewardsAccountingTest is StakingRewardsFixture {
         assertEq(_lockAndStake(executor, 30 ether, stakingRewards), 2);
     }
 
-    function test_constructorDoesNotRegisterEscrowToken() public {
+    function test_constructorDoesNotRegisterEscrowToken() public view {
         assertEq(stakingRewards.rewardsListLength(), 0);
     }
 

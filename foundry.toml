@@ -10,6 +10,19 @@ optimizer_runs = 200
 bytecode_hash = "none"
 use_literal_content = true
 ignored_warnings_from = ["lib"]
+lint = { exclude_lints = [
+    # Intentional protocol patterns: bounded casts, controlled batch/precompile
+    # calls, balance-based accounting, and event ordering around interactions.
+    "arbitrary-send-eth",
+    "calls-loop",
+    "missing-events-access-control",
+    "missing-events-arithmetic",
+    "reentrancy-balance",
+    "reentrancy-events",
+    "reentrancy-no-eth",
+    "require-revert-in-loop",
+    "unsafe-typecast",
+] }
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",

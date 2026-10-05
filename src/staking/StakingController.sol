@@ -142,7 +142,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         address agent = agentByToken[tokenId];
         uint64[] memory agentValidators = new uint64[](vaults.length);
         uint256[] memory agentStakingRewardsIndexes = new uint256[](vaults.length);
-        uint256 agentValidatorCount;
+        uint256 agentValidatorCount = 0;
 
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
@@ -282,7 +282,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             delegateValidators: new uint64[](vaults.length()),
             delegateAmounts: new uint256[](vaults.length())
         });
-        uint256 i;
+        uint256 i = 0;
         satisfied = true;
 
         while (i < vaults.length()) {
@@ -564,7 +564,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (msg.sender != _ve()) revert NotVe();
         address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
 
-        uint256 i;
+        uint256 i = 0;
         EnumerableSet.AddressSet storage vaults = _tokenVaultLists[tokenId];
         while (i < vaults.length()) {
             address vault = vaults.at(i);
@@ -633,11 +633,15 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint64 validatorId = vault.validatorId();
         if (validatorId == 0) return;
 
+        // The vault transfers the reward to this controller; the return value is not needed here.
+        // forge-lint: disable-next-line(unused-return)
         vault.claimReward(tokenId, address(this));
         address agent = agentByToken[tokenId];
         if (agent != address(0) && StakingAgent(payable(agent)).usedValidator(validatorId)) {
             uint64[] memory validatorIds = new uint64[](1);
             validatorIds[0] = validatorId;
+            // The agent transfers the claimed reward to this controller.
+            // forge-lint: disable-next-line(unused-return)
             StakingAgent(payable(agent)).claimRewards(validatorIds);
         }
     }

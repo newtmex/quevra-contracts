@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {StakeControlled} from "./StakeControlled.sol";
 
 /// @title StakingAgent
@@ -53,7 +52,7 @@ contract StakingAgent is StakeControlled {
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
         _validateArrays(validatorIds.length, amounts.length);
-        uint256 total;
+        uint256 total = 0;
         for (uint256 i; i < amounts.length; ++i) {
             uint256 amount = amounts[i];
             if (amount == 0) revert ZeroAmount();

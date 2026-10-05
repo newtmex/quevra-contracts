@@ -35,6 +35,8 @@ contract VeMON is VotingEscrow {
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
         if (_locked[tokenId].end > currentEpoch) revert LockNotExpired();
 
+        // Withdrawal proceeds are forwarded to the controller and do not need to be read here.
+        // forge-lint: disable-next-line(unused-return)
         IStakingController(controller).withdraw(tokenId);
         _burn(tokenId);
     }

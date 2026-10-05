@@ -10,7 +10,6 @@ import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 ///      discrete analogue of Velodrome's ±1 hour vote window.
 library ProtocolTimeLibrary {
     uint64 internal constant EPOCHS_PER_CYCLE = 5; // 5 is good for testnet; 40 will be more practical for mainnet
-    uint64 internal constant VOTE_BUFFER_EPOCHS = 1;
     address internal constant STAKING_PRECOMPILE = 0x0000000000000000000000000000000000001000;
 
     /// @dev Cycle index containing `epoch` (`epoch / 5`).
@@ -32,29 +31,9 @@ library ProtocolTimeLibrary {
         }
     }
 
-    /// @dev First Monad epoch at which anyone may vote this cycle.
-    function cycleVoteStart(uint64 epoch) internal pure returns (uint64) {
-        return cycleStart(epoch) + VOTE_BUFFER_EPOCHS;
-    }
-
-    /// @dev First Monad epoch of the end-of-cycle vote blackout (whitelist-only).
-    function cycleVoteEnd(uint64 epoch) internal pure returns (uint64) {
-        return cycleNext(epoch) - VOTE_BUFFER_EPOCHS;
-    }
-
     /// @dev Current Monad staking epoch from the precompile. Not `view` (`getEpoch` is CALL-only).
     function currentEpoch() internal returns (uint64 epoch, bool inEpochDelayPeriod) {
         return IMonadStaking(STAKING_PRECOMPILE).getEpoch();
-    }
-
-    /// @dev Read-only counterpart for view APIs that need the current epoch.
-    ///      The staking precompile exposes getEpoch as CALL-only on some runtimes;
-    ///      this static call preserves Solidity view compatibility where supported.
-    function currentEpochView() internal view returns (uint64 epoch, bool inEpochDelayPeriod) {
-        (bool success, bytes memory data) =
-            STAKING_PRECOMPILE.staticcall(abi.encodeWithSelector(IMonadStaking.getEpoch.selector));
-        require(success && data.length >= 64, "EPOCH_READ_FAILED");
-        return abi.decode(data, (uint64, bool));
     }
 
     /// @notice First Monad epoch in which a staking state change takes effect.

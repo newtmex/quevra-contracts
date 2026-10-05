@@ -104,15 +104,6 @@ contract ProtocolTimeLibraryTest is ProtocolTimeLibraryFixture {
         assertEq(ProtocolTimeLibrary.cycleNext(14), 15);
     }
 
-    function test_voteWindowBuffersOneMonadEpoch() public pure {
-        // Cycle covering Monad epochs [10, 15): vote [11, 14).
-        assertEq(ProtocolTimeLibrary.VOTE_BUFFER_EPOCHS, 1);
-        assertEq(ProtocolTimeLibrary.cycleVoteStart(12), 11);
-        assertEq(ProtocolTimeLibrary.cycleVoteEnd(12), 14);
-        assertEq(ProtocolTimeLibrary.cycleVoteStart(10), 11);
-        assertEq(ProtocolTimeLibrary.cycleVoteEnd(14), 14);
-    }
-
     function testFuzz_cycleBounds(uint64 epoch) public pure {
         epoch = uint64(bound(epoch, 0, type(uint64).max - ProtocolTimeLibrary.EPOCHS_PER_CYCLE));
         uint64 start = ProtocolTimeLibrary.cycleStart(epoch);

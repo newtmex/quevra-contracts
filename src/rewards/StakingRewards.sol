@@ -33,13 +33,12 @@ contract StakingRewards is Reward {
     }
 
     function notifyRewardAmount(address token, uint256 amount) external override nonReentrant {
-        address sender = msg.sender;
         if (!isReward[token]) {
             if (!IBaseVoter(voter).isWhitelistedToken(token)) revert NotWhitelisted();
             isReward[token] = true;
             rewardTokens.push(token);
         }
 
-        _notifyRewardAmount(sender, token, amount);
+        _notifyRewardAmount(token, amount);
     }
 }

@@ -36,6 +36,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
     uint256 public override supplyNumCheckpoints;
 
     constructor(address voter_) {
+        if (voter_ == address(0)) revert InvalidReward();
         voter = voter_;
         ve = IBaseVoter(voter_).ve();
     }
@@ -46,7 +47,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         if (checkpoints[tokenId][count - 1].cycle <= cycle) return count - 1;
         if (checkpoints[tokenId][0].cycle > cycle) return 0;
 
-        uint256 lower;
+        uint256 lower = 0;
         uint256 upper = count - 1;
         while (upper > lower) {
             uint256 center = upper - (upper - lower) / 2;
@@ -64,7 +65,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         if (supplyCheckpoints[count - 1].cycle <= cycle) return count - 1;
         if (supplyCheckpoints[0].cycle > cycle) return 0;
 
-        uint256 lower;
+        uint256 lower = 0;
         uint256 upper = count - 1;
         while (upper > lower) {
             uint256 center = upper - (upper - lower) / 2;
@@ -118,7 +119,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         Checkpoint memory checkpoint = checkpoints[tokenId][index];
         cursor = Math.max(cursor, checkpoint.cycle);
 
-        uint256 reward;
+        uint256 reward = 0;
         uint256 supply = 1;
         uint256 cycles = (currentCycle - cursor) / CYCLE_EPOCHS;
         for (uint256 i; i < cycles; ++i) {
@@ -164,12 +165,12 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
 
     function notifyRewardAmount(address, uint256) external virtual override nonReentrant {}
 
-    function _notifyRewardAmount(address sender, address token, uint256 amount) internal {
+    function _notifyRewardAmount(address token, uint256 amount) internal {
         if (amount == 0) revert ZeroAmount();
-        IERC20(token).safeTransferFrom(sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         (uint64 epoch,) = ProtocolTimeLibrary.currentEpoch();
         uint64 cycle = ProtocolTimeLibrary.cycleStart(epoch);
         tokenRewardsPerCycle[token][cycle] += amount;
-        emit NotifyReward(sender, token, cycle, amount);
+        emit NotifyReward(msg.sender, token, cycle, amount);
     }
 }

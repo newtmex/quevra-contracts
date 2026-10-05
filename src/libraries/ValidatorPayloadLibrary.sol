@@ -5,8 +5,6 @@ pragma solidity ^0.8.24;
 /// @notice Reads fixed fields from Monad's 165-byte addValidator payload.
 library ValidatorPayloadLibrary {
     uint256 internal constant PAYLOAD_LENGTH = 165;
-    uint256 private constant AUTH_ADDRESS_OFFSET = 81;
-    uint256 private constant COMMISSION_OFFSET = 133;
 
     error InvalidPayloadLength();
 
