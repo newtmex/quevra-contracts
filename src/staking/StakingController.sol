@@ -19,6 +19,9 @@ import {StakingControllerGaugeLibrary} from "../libraries/StakingControllerGauge
 /// @dev User-selected allocations are intent; this contract only settles
 ///      physical MON toward that intent.
 contract StakingController is StakingAdmin, ReentrancyGuardTransient {
+    // -------------------------------------------------------------------------
+    // Storage and construction
+    // -------------------------------------------------------------------------
     using EnumerableSet for EnumerableSet.AddressSet;
     using StakingControllerGaugeLibrary for uint256;
 
@@ -35,6 +38,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     constructor(address registry_, address owner_, uint256 initialCommission_)
         StakingAdmin(registry_, owner_, initialCommission_)
     {}
+
+    // -------------------------------------------------------------------------
+    // Validator admission and cycle guards
+    // -------------------------------------------------------------------------
 
     /// @notice Submit a new validator request and create its vault and canonical gauge.
     /// @dev The controller is the registry requester; `msg.sender` is the operator
@@ -61,12 +68,20 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         _;
     }
 
+    // -------------------------------------------------------------------------
+    // External state-changing API
+    // -------------------------------------------------------------------------
+
     function deposit(uint256 tokenId) external payable override nonReentrant {
         if (ve == address(0) || msg.sender != ve) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
         balanceOf[tokenId] += msg.value;
         emit MONDeposited(tokenId, msg.value);
     }
+
+    // -------------------------------------------------------------------------
+    // External and public read API
+    // -------------------------------------------------------------------------
 
     function allocationOf(uint256 tokenId, address gauge) external view override returns (uint256 allocation) {
         allocation = _allocationOf(tokenId, gauge);
@@ -103,6 +118,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     receive() external payable {
         if (!_isVault[msg.sender] && !_isAgent[msg.sender]) revert UnexpectedEtherSender();
     }
+
+    // -------------------------------------------------------------------------
+    // External state-changing API: intent and rebalancing
+    // -------------------------------------------------------------------------
 
     /// @notice Set the token's validator allocation intent for this cycle.
     /// @dev The first call allocates from `balanceOf(tokenId)`. Later calls
@@ -237,6 +256,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Unstaked(tokenId, _sum(amounts));
     }
 
+    // -------------------------------------------------------------------------
+    // Internal state transitions
+    // -------------------------------------------------------------------------
+
     function _poke(uint256 tokenId) internal returns (bool satisfied) {
         if (_intentGauges[tokenId].length == 0) return true;
 
@@ -340,6 +363,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         }
         emit StakingIntentSet(tokenId, stakingCycleOf[tokenId]);
     }
+
+    // -------------------------------------------------------------------------
+    // Internal position movement and withdrawal settlement
+    // -------------------------------------------------------------------------
 
     function _tryUndelegate(uint256 tokenId, Position memory position, uint256 amount) internal returns (bool success) {
         if (amount == 0) return true;
@@ -485,6 +512,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         pending = position.vaultPending + position.agentPending;
     }
 
+    // -------------------------------------------------------------------------
+    // Gauge weight attribution
+    // -------------------------------------------------------------------------
+
     /// @dev Capture this delegation's veMON power proportionally to the locked
     ///      MON. The stored attribution does not change as ve power decays later.
     function _attributeGaugeStake(uint256 tokenId, address gauge, uint256 amount) internal {
@@ -512,6 +543,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         attributedStakeOf[tokenId][gauge] = remainingStake;
         _decreaseValidatorGaugeWeight(gauge, tokenId, previousWeight - remainingWeight);
     }
+
+    // -------------------------------------------------------------------------
+    // External reward and withdrawal API
+    // -------------------------------------------------------------------------
 
     /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.
     function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
@@ -567,6 +602,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit RewardsClaimed(tokenId, amount);
     }
 
+    // -------------------------------------------------------------------------
+    // Internal reward accounting
+    // -------------------------------------------------------------------------
+
     function _claimTokenRewards(uint256 tokenId, address[] memory gauges) internal returns (uint256 amount) {
         uint256 beforeBalance = address(this).balance;
         uint256 length = gauges.length;
@@ -609,6 +648,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             gauge, amount, _tokenGauges, _tokenRewardGauges, _intentGauges, _intentGaugeIndex, intentOf
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
 
     function _ve() private view returns (address) {
         return ve;
