@@ -2,8 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {IValidatorRegistry} from "./IValidatorRegistry.sol";
+import {IBaseVoter} from "./IBaseVoter.sol";
 
-interface IStakingController {
+interface IStakingController is IBaseVoter {
     struct Position {
         address vault;
         address agent;
@@ -70,7 +71,6 @@ interface IStakingController {
     );
     event ValidatorGaugeBound(uint256 indexed requestId, uint64 indexed validatorId, address indexed gauge);
 
-    function ve() external view returns (address);
     function registry() external view returns (IValidatorRegistry);
     function vaultImplementation() external view returns (address);
     function agentImplementation() external view returns (address);
@@ -80,7 +80,6 @@ interface IStakingController {
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function intentOf(uint256 tokenId, address gauge) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
-    function isRewardTokenWhitelisted(address token) external view returns (bool);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
     function pendingOf(uint256 tokenId, address gauge) external view returns (uint256);
 

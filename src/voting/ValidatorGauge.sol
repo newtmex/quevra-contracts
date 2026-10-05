@@ -73,7 +73,7 @@ contract ValidatorGauge is ReentrancyGuardTransient {
     /// @notice Distribute an ERC20 deposit to the weight backing this validator now.
     /// @dev Zero-weight deposits revert instead of being assigned to later voters.
     function notifyRewardAmount(address token, uint256 amount) external nonReentrant {
-        if (!IStakingController(controller).isRewardTokenWhitelisted(token)) revert RewardTokenNotWhitelisted();
+        if (!IStakingController(controller).isWhitelistedToken(token)) revert RewardTokenNotWhitelisted();
         uint256 supply = totalWeight;
         if (supply == 0) revert NoGaugeWeight();
         if (amount == 0) revert InvalidRewardAmount();
