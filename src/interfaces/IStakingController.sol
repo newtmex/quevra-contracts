@@ -52,6 +52,7 @@ interface IStakingController {
     error InvalidValidatorRegistry();
 
     event VeSet(address indexed ve);
+    event RewardTokenWhitelistUpdated(address indexed token, bool whitelisted);
     event VaultRegistered(uint256 indexed requestId, address indexed vault, address indexed gauge, address operator);
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
@@ -79,10 +80,12 @@ interface IStakingController {
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function intentOf(uint256 tokenId, address gauge) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);
+    function isRewardTokenWhitelisted(address token) external view returns (bool);
     function allocationOf(uint256 tokenId, address gauge) external view returns (uint256);
     function pendingOf(uint256 tokenId, address gauge) external view returns (uint256);
 
     function setVe(address ve_) external;
+    function setRewardTokenWhitelisted(address token, bool whitelisted) external;
 
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
     function predictAgentAddress(uint256 tokenId) external view returns (address);

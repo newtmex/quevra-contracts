@@ -25,6 +25,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
     mapping(address vault => address gauge) public gaugeByVault;
     mapping(address => bool) internal _isVault;
     mapping(address => bool) internal _isAgent;
+    mapping(address token => bool whitelisted) public override isRewardTokenWhitelisted;
     uint256 internal _commission;
     uint256 internal _pendingCommission;
     uint64 internal _pendingCommissionCycle;
@@ -52,6 +53,13 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         if (ve_ == address(0)) revert InvalidAddress();
         ve = ve_;
         emit VeSet(ve_);
+    }
+
+    /// @notice Manage the reward tokens accepted by every validator gauge.
+    function setRewardTokenWhitelisted(address token, bool whitelisted) external override onlyOwner {
+        if (token == address(0) || token.code.length == 0) revert InvalidAddress();
+        isRewardTokenWhitelisted[token] = whitelisted;
+        emit RewardTokenWhitelistUpdated(token, whitelisted);
     }
 
     /// @notice Admit a registry request and create its vault and canonical gauge.
