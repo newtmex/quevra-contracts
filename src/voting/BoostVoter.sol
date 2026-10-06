@@ -5,20 +5,24 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {IBoostVoter} from "../interfaces/IBoostVoter.sol";
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
 import {IVotingEscrowBooster} from "../interfaces/IVotingEscrowBooster.sol";
-import {StakingRewards} from "../rewards/StakingRewards.sol";
+import {IGauge} from "../interfaces/IGauge.sol";
+import {NonStakingGauge} from "../gauges/NonStakingGauge.sol";
+import {BribeVotingRewards} from "../rewards/BribeVotingRewards.sol";
 import {BoostLibrary} from "../libraries/BoostLibrary.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 /// @title BoostVoter
 /// @notice Allocates voting veMON power to veMON positions and refreshes their boost.
-/// @dev The Tigris reward target is represented by Quevra's cycle-scoped
-///      {StakingRewards} contract. This keeps incentive accounting in one
-///      reward implementation and avoids a second target type.
+/// @dev Gauge creation and reward funding live in the voter. Gauges own reward
+///      accounting and payout, while this contract only allocates boost power.
 contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
+    using SafeERC20 for IERC20;
     uint256 public constant BOOST_PRECISION = BoostLibrary.PRECISION;
     uint256 public constant MAX_BOOST = 5 * BoostLibrary.PRECISION;
 
@@ -26,20 +30,26 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
     address public immutable override boostableVe;
 
     mapping(address token => bool) public override isWhitelistedToken;
-    mapping(uint256 tokenId => address stakingRewards) public override boostableTokenIdToStakingRewards;
-    mapping(address stakingRewards => uint256 tokenId) public boostableTokenIdForStakingRewards;
-    mapping(address stakingRewards => uint256 amount) public weights;
-    mapping(uint256 tokenId => mapping(address stakingRewards => uint256 amount)) public votes;
+    mapping(uint256 tokenId => address gauge) public override boostableTokenIdToGauge;
+    mapping(uint256 tokenId => address bribeVotingRewards) public override boostableTokenIdToBribeVotingRewards;
+    mapping(address gauge => uint256 tokenId) public boostableTokenIdForGauge;
+    mapping(address bribeVotingRewards => uint256 tokenId) public boostableTokenIdForBribeVotingRewards;
+    mapping(address gauge => bool) public isGauge;
+    mapping(address bribeVotingRewards => bool) public isBribeVotingRewards;
+    mapping(address gauge => address bribeVotingRewards) public gaugeToBribeVotingRewards;
+    mapping(address gauge => uint256 amount) public weights;
+    mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public votes;
     mapping(uint256 tokenId => uint256 amount) public usedWeights;
     mapping(uint256 tokenId => uint64 cycle) public lastVoted;
     mapping(uint256 tokenId => address[]) private _targets;
 
     event RewardTokenWhitelistUpdated(address indexed token, bool whitelisted);
-    event BoostStakingRewardsCreated(uint256 indexed boostableTokenId, address indexed stakingRewards);
-    event Voted(address indexed voter, address indexed stakingRewards, uint256 indexed tokenId, uint256 weight);
-    event Abstained(address indexed voter, address indexed stakingRewards, uint256 indexed tokenId, uint256 weight);
+    event BoostGaugeCreated(uint256 indexed boostableTokenId, address indexed gauge, address indexed rewardToken);
+    event BribeVotingRewardsCreated(uint256 indexed boostableTokenId, address indexed bribeVotingRewards);
+    event Voted(address indexed voter, address indexed gauge, uint256 indexed tokenId, uint256 weight);
+    event Abstained(address indexed voter, address indexed gauge, uint256 indexed tokenId, uint256 weight);
     event BoostPoked(uint256 indexed boostableTokenId, uint256 boost);
-    event BoostableTokenBurned(uint256 indexed boostableTokenId, address indexed stakingRewards);
+    event BoostableTokenBurned(uint256 indexed boostableTokenId, address indexed gauge);
 
     error InvalidAddress();
     error NotApprovedOrOwner();
@@ -66,25 +76,43 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
         emit RewardTokenWhitelistUpdated(token, whitelisted);
     }
 
-    function createBoostStakingRewards(uint256 boostableTokenId)
+    function createBoostGauge(uint256 boostableTokenId, address rewardToken)
         external
         override
         nonReentrant
-        returns (address stakingRewards)
+        returns (address gauge)
     {
         if (!IVotingEscrow(boostableVe).isApprovedOrOwner(msg.sender, boostableTokenId)) {
             revert NotApprovedOrOwner();
         }
-        if (boostableTokenIdToStakingRewards[boostableTokenId] != address(0)) revert TargetExists();
+        if (!isWhitelistedToken[rewardToken]) revert NotWhitelisted();
+        if (boostableTokenIdToGauge[boostableTokenId] != address(0)) revert TargetExists();
 
         (int128 amount, uint256 end, bool isPermanent,) = IVotingEscrow(boostableVe).locked(boostableTokenId);
         if (amount <= 0) revert LockDoesNotExist();
         if (!isPermanent && end <= _currentEpoch()) revert LockExpired();
 
-        stakingRewards = address(new StakingRewards(address(this), boostableTokenId, msg.sender));
-        boostableTokenIdToStakingRewards[boostableTokenId] = stakingRewards;
-        boostableTokenIdForStakingRewards[stakingRewards] = boostableTokenId;
-        emit BoostStakingRewardsCreated(boostableTokenId, stakingRewards);
+        gauge = address(
+            new NonStakingGauge(rewardToken, address(this), IVotingEscrow(boostableVe).ownerOf(boostableTokenId))
+        );
+        address bribeVotingRewards = address(new BribeVotingRewards(address(this), new address[](0)));
+        boostableTokenIdToGauge[boostableTokenId] = gauge;
+        boostableTokenIdToBribeVotingRewards[boostableTokenId] = bribeVotingRewards;
+        boostableTokenIdForGauge[gauge] = boostableTokenId;
+        boostableTokenIdForBribeVotingRewards[bribeVotingRewards] = boostableTokenId;
+        isGauge[gauge] = true;
+        isBribeVotingRewards[bribeVotingRewards] = true;
+        gaugeToBribeVotingRewards[gauge] = bribeVotingRewards;
+        emit BoostGaugeCreated(boostableTokenId, gauge, rewardToken);
+        emit BribeVotingRewardsCreated(boostableTokenId, bribeVotingRewards);
+    }
+
+    function notifyGaugeReward(address gauge, uint256 amount) external override nonReentrant {
+        if (!isGauge[gauge]) revert InvalidTarget();
+        address token = IGauge(gauge).rewardToken();
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(token).forceApprove(gauge, amount);
+        IGauge(gauge).notifyRewardAmount(amount);
     }
 
     function vote(uint256 tokenId, address[] calldata targets, uint256[] calldata weights_)
@@ -100,7 +128,7 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
 
         uint256 total = 0;
         for (uint256 i; i < targets.length; ++i) {
-            if (weights_[i] == 0 || boostableTokenIdForStakingRewards[targets[i]] == 0) revert InvalidTarget();
+            if (weights_[i] == 0 || !isGauge[targets[i]]) revert InvalidTarget();
             total += weights_[i];
         }
         uint256 votingPower = IVotingEscrow(ve).votingPowerOf(tokenId);
@@ -110,7 +138,7 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
             votes[tokenId][targets[i]] = amount;
             weights[targets[i]] += amount;
             usedWeights[tokenId] += amount;
-            StakingRewards(targets[i])._deposit(amount, tokenId);
+            BribeVotingRewards(gaugeToBribeVotingRewards[targets[i]])._deposit(amount, tokenId);
             _targets[tokenId].push(targets[i]);
             emit Voted(msg.sender, targets[i], tokenId, amount);
         }
@@ -143,7 +171,7 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
     }
 
     function getBoost(uint256 boostableTokenId) public view override returns (uint256) {
-        address target = boostableTokenIdToStakingRewards[boostableTokenId];
+        address target = boostableTokenIdToGauge[boostableTokenId];
         uint256 votingTotal = IVotingEscrow(ve).totalVotingPower();
         uint256 targetWeight = weights[target];
         uint256 targetPower = IVotingEscrow(boostableVe).unboostedVotingPowerOf(boostableTokenId);
@@ -160,10 +188,16 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
 
     function notifyBoostableBurned(uint256 boostableTokenId) external override {
         if (msg.sender != boostableVe) revert NotBoostableVe();
-        address target = boostableTokenIdToStakingRewards[boostableTokenId];
+        address target = boostableTokenIdToGauge[boostableTokenId];
         if (target == address(0)) return;
-        delete boostableTokenIdToStakingRewards[boostableTokenId];
-        delete boostableTokenIdForStakingRewards[target];
+        address bribeVotingRewards = boostableTokenIdToBribeVotingRewards[boostableTokenId];
+        delete boostableTokenIdToGauge[boostableTokenId];
+        delete boostableTokenIdToBribeVotingRewards[boostableTokenId];
+        delete boostableTokenIdForGauge[target];
+        delete boostableTokenIdForBribeVotingRewards[bribeVotingRewards];
+        delete isGauge[target];
+        delete isBribeVotingRewards[bribeVotingRewards];
+        delete gaugeToBribeVotingRewards[target];
         emit BoostableTokenBurned(boostableTokenId, target);
     }
 
@@ -181,7 +215,7 @@ contract BoostVoter is Ownable2Step, ReentrancyGuardTransient, IBoostVoter {
             if (amount == 0) continue;
             weights[target] -= amount;
             delete votes[tokenId][target];
-            StakingRewards(target)._withdraw(amount, tokenId);
+            BribeVotingRewards(gaugeToBribeVotingRewards[target])._withdraw(amount, tokenId);
             emit Abstained(msg.sender, target, tokenId, amount);
         }
         delete _targets[tokenId];

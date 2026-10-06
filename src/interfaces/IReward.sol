@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 interface IReward {
     error InvalidReward();
     error NotAuthorized();
-    error NotStakingRewards();
     error NotEscrowToken();
     error NotSingleToken();
     error NotVotingEscrow();

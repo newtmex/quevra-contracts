@@ -7,8 +7,10 @@ import {IBaseVoter} from "./IBaseVoter.sol";
 /// @notice Voter surface for allocating one ve collection's power to boost targets.
 interface IBoostVoter is IBaseVoter {
     function boostableVe() external view returns (address);
-    function boostableTokenIdToStakingRewards(uint256 tokenId) external view returns (address);
-    function createBoostStakingRewards(uint256 boostableTokenId) external returns (address stakingRewards);
+    function boostableTokenIdToGauge(uint256 tokenId) external view returns (address);
+    function boostableTokenIdToBribeVotingRewards(uint256 tokenId) external view returns (address);
+    function createBoostGauge(uint256 boostableTokenId, address rewardToken) external returns (address gauge);
+    function notifyGaugeReward(address gauge, uint256 amount) external;
     function vote(uint256 tokenId, address[] calldata targets, uint256[] calldata weights) external;
     function reset(uint256 tokenId) external;
     function pokeBoost(uint256 boostableTokenId) external;
