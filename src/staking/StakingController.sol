@@ -9,9 +9,7 @@ import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
-import {StakingRewards} from "../rewards/StakingRewards.sol";
 import {StakingControllerRewardsLibrary} from "../libraries/StakingControllerRewardsLibrary.sol";
 
 /// @title StakingController
@@ -30,8 +28,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
 
     mapping(uint256 tokenId => mapping(address vault => uint256 amount)) public override intentOf;
-    mapping(uint256 tokenId => mapping(address vault => uint256 amount)) public attributedStakeOf;
-
     mapping(uint256 tokenId => EnumerableSet.AddressSet) private _tokenVaultLists;
     mapping(uint256 tokenId => EnumerableSet.AddressSet) private _tokenRewardVaultLists;
     mapping(uint256 tokenId => address[]) private _intentVaultLists;
@@ -45,7 +41,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // Validator admission and cycle guards
     // -------------------------------------------------------------------------
 
-    /// @notice Submit a new validator request and create its vault and canonical stakingRewards.
+    /// @notice Submit a new validator request and create its validator vault.
     /// @dev The controller is the registry requester; `msg.sender` is the operator
     ///      whose salt determines the vault address and whose identity is registered.
     function createValidator(
@@ -54,7 +50,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) external override nonReentrant returns (uint256 requestId, address vault, address stakingRewards) {
+    ) external override nonReentrant returns (uint256 requestId, address vault) {
         return _createValidator(msg.sender, saltSeed, expectedAuthAddress, payload, signedSecpMessage, signedBlsMessage);
     }
 
@@ -107,7 +103,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 total = 0;
         for (uint256 i; i < vaults.length; ++i) {
             if (amounts[i] == 0) revert ZeroAmount();
-            if (stakingRewardsByVault[vaults[i]] == address(0)) revert InvalidVault();
+            if (!_isVault[vaults[i]]) revert InvalidVault();
             for (uint256 j; j < i; ++j) {
                 if (vaults[j] == vaults[i]) revert DuplicateVault();
             }
@@ -138,24 +134,24 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (vaults.length == 0) revert EmptyArray();
 
         uint256 beforeBalance = address(this).balance;
-        uint256[] memory stakingRewardsRewards = new uint256[](vaults.length);
+        uint256[] memory vaultRewards = new uint256[](vaults.length);
         address agent = agentByToken[tokenId];
         uint64[] memory agentValidators = new uint64[](vaults.length);
-        uint256[] memory agentStakingRewardsIndexes = new uint256[](vaults.length);
+        uint256[] memory agentRewardIndexes = new uint256[](vaults.length);
         uint256 agentValidatorCount = 0;
 
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
-            if (stakingRewardsByVault[vault] == address(0)) revert InvalidVault();
+            if (!_isVault[vault]) revert InvalidVault();
 
             StakingVault vaultContract = StakingVault(payable(vault));
             uint64 validatorId = vaultContract.validatorId();
             if (validatorId == 0) continue;
 
-            stakingRewardsRewards[i] = vaultContract.claimReward(tokenId, address(this));
+            vaultRewards[i] = vaultContract.claimReward(tokenId, address(this));
             if (agent != address(0) && StakingAgent(payable(agent)).usedValidator(validatorId)) {
                 agentValidators[agentValidatorCount] = validatorId;
-                agentStakingRewardsIndexes[agentValidatorCount] = i;
+                agentRewardIndexes[agentValidatorCount] = i;
                 ++agentValidatorCount;
             }
         }
@@ -164,11 +160,11 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (agentValidatorCount != 0) {
             assembly ("memory-safe") {
                 mstore(agentValidators, agentValidatorCount)
-                mstore(agentStakingRewardsIndexes, agentValidatorCount)
+                mstore(agentRewardIndexes, agentValidatorCount)
             }
             agentRewards = StakingAgent(payable(agent)).claimRewards(agentValidators);
             for (uint256 i; i < agentRewards.length; ++i) {
-                stakingRewardsRewards[agentStakingRewardsIndexes[i]] += agentRewards[i];
+                vaultRewards[agentRewardIndexes[i]] += agentRewards[i];
             }
         }
 
@@ -181,7 +177,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         // The harvested MON is now a token-specific liquid principal balance.
         balanceOf[tokenId] += amount;
         for (uint256 i; i < vaults.length; ++i) {
-            uint256 reward = stakingRewardsRewards[i];
+            uint256 reward = vaultRewards[i];
             if (reward == 0) continue;
             _recordCompoundedReward(tokenId, vaults[i], reward);
         }
@@ -211,11 +207,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
             if (amounts[i] == 0) revert ZeroAmount();
-            if (stakingRewardsByVault[vault] == address(0)) revert InvalidVault();
+            if (!_isVault[vault]) revert InvalidVault();
             if (_pendingOf(tokenId, vault) != 0) _withdraw(tokenId, vault);
             tokenId.rememberVault(vault, _tokenVaultLists, _tokenRewardVaultLists);
             _undelegate(tokenId, vault, amounts[i]);
-            _removeVaultStake(tokenId, vault, amounts[i]);
             tokenId.reduceIntent(vault, amounts[i], intentOf);
         }
         emit Unstaked(tokenId, _sum(amounts));
@@ -239,10 +234,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         allocation = _allocationOf(tokenId, vault);
     }
 
-    function isValidatorActive(address stakingRewards) external view override returns (bool) {
-        if (!isStakingRewards[stakingRewards]) return false;
-        address vault = vaultByStakingRewards[stakingRewards];
-        return vault != address(0) && StakingVault(payable(vault)).validatorId() != 0;
+    function isValidatorActive(address vault) external view override returns (bool) {
+        return _isVault[vault] && StakingVault(payable(vault)).validatorId() != 0;
     }
 
     function pendingOf(uint256 tokenId, address vault) external view returns (uint256 pending) {
@@ -291,7 +284,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (vaults.contains(vault)) ++i;
         }
 
-        _executeDelegateBatch(tokenId, batch);
+        _executeDelegateBatch(batch);
 
         balanceOf[tokenId] = batch.liquid;
     }
@@ -317,9 +310,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             }
             _tryUndelegate(tokenId, position, current - target);
             uint256 currentAfterUndelegate = _allocationOf(tokenId, vault);
-            if (current > currentAfterUndelegate) {
-                _removeVaultStake(tokenId, vault, current - currentAfterUndelegate);
-            }
+            if (current > currentAfterUndelegate) {}
             return false;
         }
 
@@ -345,7 +336,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (current != target) satisfied = false;
     }
 
-    function _executeDelegateBatch(uint256 tokenId, PokeBatch memory batch) internal {
+    function _executeDelegateBatch(PokeBatch memory batch) internal {
         if (batch.delegateCount == 0) return;
         if (batch.delegateCount == 1) {
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(
@@ -360,11 +351,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 mstore(amounts, count)
             }
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(validators, amounts);
-        }
-        for (uint256 i; i < batch.delegateCount; ++i) {
-            address stakingRewards = stakingRewardsForValidatorId(batch.delegateValidators[i]);
-            address vault = vaultForStakingRewards[stakingRewards];
-            _attributeStakingRewardsStake(tokenId, vault, batch.delegateAmounts[i]);
         }
     }
 
@@ -420,10 +406,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         remainder = amount - toVault;
         if (validatorId == 0) validatorId = StakingVault(payable(position.vault)).validatorId();
-        address stakingRewards = stakingRewardsByVault[position.vault];
-        if (isStakingRewards[stakingRewards]) {
-            if (toVault != 0) _attributeStakingRewardsStake(tokenId, position.vault, toVault);
-        }
         if (remainder == 0) return (agent, 0, 0);
 
         if (validatorId == 0) revert ValidatorNotActivated();
@@ -505,7 +487,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         returns (Position memory position)
     {
         position.vault = vaultAddress;
-        if (vaultAddress == address(0) || stakingRewardsByVault[vaultAddress] == address(0)) return position;
+        if (vaultAddress == address(0) || !_isVault[vaultAddress]) return position;
         StakingVault vault = StakingVault(payable(position.vault));
         (position.vaultAllocation, position.vaultPending, position.validatorId) = vault.positionOf(tokenId);
         position.agent = agent;
@@ -523,40 +505,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     // -------------------------------------------------------------------------
-    // StakingRewards weight attribution
-    // -------------------------------------------------------------------------
-
-    /// @dev Capture this delegation's veMON power proportionally to the locked
-    ///      MON. The stored attribution does not change as ve power decays later.
-    function _attributeStakingRewardsStake(uint256 tokenId, address vault, uint256 amount) internal {
-        if (amount == 0) return;
-        address stakingRewards = stakingRewardsByVault[vault];
-        if (!isStakingRewards[stakingRewards]) revert InvalidStakingRewards();
-
-        (uint256 votingPower, int128 lockedAmount) = IVotingEscrow(ve).votingPowerAndLockedAmount(tokenId);
-        if (lockedAmount <= 0) revert InvalidStakeAttribution();
-        uint256 weight = Math.mulDiv(amount, votingPower, uint256(uint128(lockedAmount)));
-
-        attributedStakeOf[tokenId][vault] += amount;
-        _increaseStakingRewardsWeight(stakingRewards, tokenId, weight);
-    }
-
-    /// @dev Remove the same pro-rata share of previously attributed weight when
-    ///      MON is undelegated, including while its withdrawal is still pending.
-    function _removeVaultStake(uint256 tokenId, address vault, uint256 amount) internal {
-        if (amount == 0) return;
-        address stakingRewards = stakingRewardsByVault[vault];
-        uint256 previousStake = attributedStakeOf[tokenId][vault];
-        if (amount > previousStake) revert InvalidUnstakeAmount();
-
-        uint256 previousWeight = StakingRewards(stakingRewards).balanceOf(tokenId);
-        uint256 remainingStake = previousStake - amount;
-        uint256 remainingWeight = remainingStake == 0 ? 0 : Math.mulDiv(previousWeight, remainingStake, previousStake);
-        attributedStakeOf[tokenId][vault] = remainingStake;
-        _decreaseStakingRewardsWeight(stakingRewards, tokenId, previousWeight - remainingWeight);
-    }
-
-    // -------------------------------------------------------------------------
     // Internal reward and withdrawal settlement
     // -------------------------------------------------------------------------
 
@@ -568,7 +516,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         EnumerableSet.AddressSet storage vaults = _tokenVaultLists[tokenId];
         while (i < vaults.length()) {
             address vault = vaults.at(i);
-            if (stakingRewardsByVault[vault] == address(0)) revert InvalidVault();
+            if (!_isVault[vault]) revert InvalidVault();
             _withdraw(tokenId, vault);
             if (vaults.contains(vault)) ++i;
         }
@@ -594,7 +542,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 beforeBalance = address(this).balance;
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
-            if (stakingRewardsByVault[vault] == address(0)) revert InvalidVault();
+            if (!_isVault[vault]) revert InvalidVault();
             for (uint256 j; j < i; ++j) {
                 if (vaults[j] == vault) revert DuplicateVault();
             }
@@ -602,7 +550,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (!_tokenRewardVaultLists[tokenId].contains(vault)) {
                 revert NotVaultParticipant();
             }
-            _claimStakingRewardsReward(tokenId, vault);
+            _claimVaultRewards(tokenId, vault);
         }
 
         uint256 amount = address(this).balance - beforeBalance;
@@ -622,13 +570,13 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 beforeBalance = address(this).balance;
         uint256 length = vaults.length;
         for (uint256 i; i < length; ++i) {
-            _claimStakingRewardsReward(tokenId, vaults[i]);
+            _claimVaultRewards(tokenId, vaults[i]);
         }
         amount = address(this).balance - beforeBalance;
     }
 
-    function _claimStakingRewardsReward(uint256 tokenId, address vaultAddress) internal {
-        if (stakingRewardsByVault[vaultAddress] == address(0)) revert InvalidVault();
+    function _claimVaultRewards(uint256 tokenId, address vaultAddress) internal {
+        if (!_isVault[vaultAddress]) revert InvalidVault();
         StakingVault vault = StakingVault(payable(vaultAddress));
         uint64 validatorId = vault.validatorId();
         if (validatorId == 0) return;
@@ -650,7 +598,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
             if (_allocationOf(tokenId, vault) == 0 && _pendingOf(tokenId, vault) == 0) {
-                if (stakingRewardsByVault[vault] == address(0) || StakingVault(payable(vault)).earned(tokenId) == 0) {
+                if (!_isVault[vault] || StakingVault(payable(vault)).earned(tokenId) == 0) {
                     tokenId.removeRewardVault(vault, _tokenRewardVaultLists);
                 }
             }

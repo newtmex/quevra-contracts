@@ -69,6 +69,12 @@ interface IVotingEscrow is IERC721Metadata {
     /// @dev Callable only by the configured staking controller.
     function increaseAmountFromController(uint256 tokenId, uint256 amount) external;
 
+    function updateBoost(uint256 tokenId, uint256 boost) external;
+
+    function unboostedVotingPowerOf(uint256 tokenId) external view returns (uint256);
+
+    function unboostedTotalVotingPower() external view returns (uint256);
+
     /// @notice Permanently lock a normal veNFT.
     function lockPermanent(uint256 _tokenId) external;
 

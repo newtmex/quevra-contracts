@@ -11,21 +11,17 @@ import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {ValidatorPayloadLibrary} from "../libraries/ValidatorPayloadLibrary.sol";
-import {ValidatorVoter} from "../validators/ValidatorVoter.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title StakingAdmin
 /// @notice Administrative and validator-deployment layer for staking controllers.
-abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVoter {
+abstract contract StakingAdmin is Ownable2Step, IStakingController {
     IValidatorRegistry public immutable override registry;
     address public override ve;
     address public immutable override vaultImplementation;
     address public immutable override agentImplementation;
-    mapping(address stakingRewards => address vault) public override vaultByStakingRewards;
-    mapping(address vault => address stakingRewards) public stakingRewardsByVault;
     mapping(address => bool) internal _isVault;
     mapping(address => bool) internal _isAgent;
-    mapping(address token => bool whitelisted) public override isWhitelistedToken;
     uint256 internal _commission;
     uint256 internal _pendingCommission;
     uint64 internal _pendingCommissionCycle;
@@ -35,10 +31,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
     /// @notice Maximum commission accepted by Monad's staking precompile (100%, scaled by 1e18).
     uint256 public constant MAX_COMMISSION = 1e18;
 
-    constructor(address registry_, address owner_, uint256 initialCommission_)
-        Ownable(owner_)
-        ValidatorVoter(registry_)
-    {
+    constructor(address registry_, address owner_, uint256 initialCommission_) Ownable(owner_) {
         if (registry_ == address(0) || owner_ == address(0)) revert InvalidAddress();
         if (initialCommission_ > MAX_COMMISSION) revert InvalidCommission();
         registry = IValidatorRegistry(registry_);
@@ -55,28 +48,20 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         emit VeSet(ve_);
     }
 
-    /// @notice Manage the reward tokens accepted by every validator stakingRewards.
-    function setRewardTokenWhitelisted(address token, bool whitelisted) external override onlyOwner {
-        if (token == address(0) || token.code.length == 0) revert InvalidAddress();
-        isWhitelistedToken[token] = whitelisted;
-        emit RewardTokenWhitelistUpdated(token, whitelisted);
+    function isWhitelistedToken(address) external pure override returns (bool) {
+        return false;
     }
 
-    /// @notice Admit a registry request and create its vault and canonical stakingRewards.
+    /// @notice Admit a registry request and create its validator vault.
     /// @dev The vault address is derived from the requester's salt and, for a
     ///      new validator, must match the auth address committed in the payload.
-    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed)
-        external
-        override
-        returns (address vault, address stakingRewards)
-    {
-        IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
+    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed) external override returns (address vault) {
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
         if (msg.sender != submission.requester) revert NotRequester();
         address expectedAuthAddress = predictVaultAddress(submission.requester, saltSeed);
         vault = _deployValidatorRequest(
             requestId, submission.requester, submission.requester, address(0), saltSeed, expectedAuthAddress
         );
-        stakingRewards = stakingRewardsForRequest[requestId];
     }
 
     /// @dev Matches the operator/requester split used by the voter architecture:
@@ -88,10 +73,9 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) internal returns (uint256 requestId, address vault, address stakingRewards) {
+    ) internal returns (uint256 requestId, address vault) {
         requestId = registry.requestValidatorFor(operator, payload, signedSecpMessage, signedBlsMessage);
         vault = _deployValidatorRequest(requestId, operator, address(this), operator, saltSeed, expectedAuthAddress);
-        stakingRewards = stakingRewardsForRequest[requestId];
     }
 
     function _deployValidatorRequest(
@@ -103,9 +87,9 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
         address expectedAuthAddress
     ) private returns (address vault) {
         if (msg.sender != requester) revert NotRequester();
-        if (requester == address(0) || stakingRewardsForRequest[requestId] != address(0)) revert InvalidVault();
+        if (requester == address(0)) revert InvalidVault();
 
-        IValidatorRegistry.Submission memory submission = _getValidatorSubmission(requestId);
+        IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
         if (
             submission.requester != submissionRequester || submission.status != IValidatorRegistry.Status.Submitted
                 || (expectedOperator != address(0) && submission.operator != expectedOperator)
@@ -141,11 +125,8 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController, ValidatorVot
             StakingVault(payable(vault)).initializeExisting(address(registry), requestId, validatorId);
         }
 
-        address canonicalStakingRewards = _registerStakingRewards(requestId, submission.operator, vault, validatorId);
-        vaultByStakingRewards[canonicalStakingRewards] = vault;
-        stakingRewardsByVault[vault] = canonicalStakingRewards;
         _isVault[vault] = true;
-        emit VaultRegistered(requestId, vault, canonicalStakingRewards, requester);
+        emit VaultRegistered(requestId, vault, requester);
     }
 
     function predictVaultAddress(address requester, bytes32 saltSeed) public view override returns (address) {

@@ -46,17 +46,11 @@ interface IStakingController is IBaseVoter {
     error TransferFailed();
     error StakingCycleNotAdvanced();
     error DuplicateVault();
-    error StakingRewardsAlreadyExists(uint256 requestId);
-    error ValidatorAlreadyRegistered(uint64 validatorId);
-    error InvalidStakingRewards();
     error InvalidValidatorRequest();
     error InvalidValidatorRegistry();
 
     event VeSet(address indexed ve);
-    event RewardTokenWhitelistUpdated(address indexed token, bool whitelisted);
-    event VaultRegistered(
-        uint256 indexed requestId, address indexed vault, address indexed stakingRewards, address operator
-    );
+    event VaultRegistered(uint256 indexed requestId, address indexed vault, address operator);
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
@@ -68,19 +62,11 @@ interface IStakingController is IBaseVoter {
     event Compounded(uint256 indexed tokenId, uint256 amount);
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
     event RewardsClaimed(uint256 indexed tokenId, uint256 amount);
-    event StakingRewardsRegistered(
-        uint256 indexed requestId,
-        uint64 indexed validatorId,
-        address indexed stakingRewards,
-        address vault,
-        address operator
-    );
 
     function registry() external view returns (IValidatorRegistry);
     function vaultImplementation() external view returns (address);
     function agentImplementation() external view returns (address);
-    function vaultByStakingRewards(address stakingRewards) external view returns (address);
-    function isValidatorActive(address stakingRewards) external view returns (bool);
+    function isValidatorActive(address vault) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function intentOf(uint256 tokenId, address vault) external view returns (uint256);
@@ -89,21 +75,17 @@ interface IStakingController is IBaseVoter {
     function pendingOf(uint256 tokenId, address vault) external view returns (uint256);
 
     function setVe(address ve_) external;
-    function setRewardTokenWhitelisted(address token, bool whitelisted) external;
-
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
     function predictAgentAddress(uint256 tokenId) external view returns (address);
 
-    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed)
-        external
-        returns (address vault, address stakingRewards);
+    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed) external returns (address vault);
     function createValidator(
         bytes32 saltSeed,
         address expectedAuthAddress,
         bytes calldata payload,
         bytes calldata signedSecpMessage,
         bytes calldata signedBlsMessage
-    ) external returns (uint256 requestId, address vault, address stakingRewards);
+    ) external returns (uint256 requestId, address vault);
 
     function setCommission(uint256 commission_) external;
     function signingConfigFor(address requester, bytes32 saltSeed)

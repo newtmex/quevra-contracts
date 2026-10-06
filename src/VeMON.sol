@@ -10,10 +10,12 @@ import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
 /// @dev Concrete deployment wrapper around the shared voting escrow implementation.
 contract VeMON is VotingEscrow {
     address public immutable controller;
+    address public booster;
 
     error InvalidAddress();
     error InvalidValue();
     error NotController();
+    event BoosterSet(address indexed booster);
 
     constructor(address controller_, uint64 maxLockCycles_) VotingEscrow(maxLockCycles_, "Locked MON", "veMON") {
         if (controller_ == address(0)) revert InvalidAddress();
@@ -43,5 +45,15 @@ contract VeMON is VotingEscrow {
 
     function _requireController() internal view override {
         if (msg.sender != controller) revert NotController();
+    }
+
+    function setBooster(address booster_) external {
+        if (msg.sender != controller || booster != address(0) || booster_ == address(0)) revert NotController();
+        booster = booster_;
+        emit BoosterSet(booster_);
+    }
+
+    function _requireBooster() internal view override {
+        if (msg.sender != controller && msg.sender != booster) revert NotController();
     }
 }

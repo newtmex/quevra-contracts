@@ -5,13 +5,17 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
 import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
+import {BoostLibrary} from "./libraries/BoostLibrary.sol";
 import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {SafeCastLibrary} from "./libraries/SafeCastLibrary.sol";
 
 /// @title VotingEscrow
 /// @notice Abstract veNFT escrow implementation for Quevra voting power.
 /// @dev Power follows veBTC's linear bias/slope model, measured in Monad epochs.
 ///      Time-limited locks are specified in Quevra cycles and expire on cycle boundaries.
 abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscrow {
+    using SafeCastLibrary for uint256;
+    using SafeCastLibrary for int128;
     uint64 public immutable maxLockCycles;
     uint64 public immutable override maxLockEpochs;
 
@@ -61,7 +65,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         tokenId = nextId++;
         _deposit(_value, tokenId);
         IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(int128(uint128(_value)), unlockEpoch, false, 0);
+            IVotingEscrow.LockedBalance(_value.toInt128(), unlockEpoch, false, 0);
         _locked[tokenId] = newLock;
         _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
         emit LockCreated(tokenId, msg.sender, _value, unlockEpoch);
@@ -77,18 +81,22 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         if (amount == 0) revert InvalidAmount();
 
         IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
-        uint256 oldAmount = uint256(uint128(oldLock.amount));
+        uint256 oldAmount = oldLock.amount.toUint256();
         uint256 maxAmount = uint256(uint128(type(int128).max));
         if (amount > maxAmount - oldAmount) revert InvalidAmount();
 
         IVotingEscrow.LockedBalance memory newLock = oldLock;
-        newLock.amount = int128(uint128(oldAmount + amount));
+        newLock.amount = (oldAmount + amount).toInt128();
         _checkpointLock(tokenId, oldLock, newLock);
         _locked[tokenId] = newLock;
         emit LockAmountIncreased(tokenId, amount, oldAmount + amount);
     }
 
     function _requireController() internal view virtual;
+
+    function _requireBooster() internal view virtual {
+        _requireController();
+    }
 
     /// @dev Custody implementation supplied by the concrete escrow. The lock
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
@@ -104,7 +112,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(oldLock.amount, 0, true, oldLock.boost);
         _checkpointLock(tokenId, oldLock, newLock);
         _locked[tokenId] = newLock;
-        emit LockPermanent(msg.sender, tokenId, uint256(uint128(newLock.amount)), currentEpoch);
+        emit LockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
 
     function unlockPermanent(uint256 tokenId) external override nonReentrant {
@@ -117,7 +125,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
             IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles), false, oldLock.boost);
         _checkpointLock(tokenId, oldLock, newLock);
         _locked[tokenId] = newLock;
-        emit UnlockPermanent(msg.sender, tokenId, uint256(uint128(newLock.amount)), currentEpoch);
+        emit UnlockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
 
     /// @notice Advances global voting-power checkpoints to the current staking epoch.
@@ -129,18 +137,22 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     function votingPowerOf(uint256 tokenId) external view override returns (uint256) {
         if (ownershipChange[tokenId] == block.number) return 0;
         // The staking epoch precompile is CALL-only, so view methods use the latest checkpoint.
-        return _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
+        return BoostLibrary.boostedAmount(
+            _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch)), _locked[tokenId].boost
+        );
     }
 
     function votingPowerAndLockedAmount(uint256 tokenId) external view override returns (uint256 power, int128 amount) {
         if (ownershipChange[tokenId] == block.number) return (0, _locked[tokenId].amount);
-        power = _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
+        power = BoostLibrary.boostedAmount(
+            _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch)), _locked[tokenId].boost
+        );
         amount = _locked[tokenId].amount;
     }
 
     function votingPowerOfAt(uint256 tokenId, uint256 targetEpoch) external view override returns (uint256) {
         if (targetEpoch > type(uint64).max) revert EpochOutOfRange();
-        return _votingPowerOfAt(tokenId, uint64(targetEpoch));
+        return BoostLibrary.boostedAmount(_votingPowerOfAt(tokenId, uint64(targetEpoch)), _locked[tokenId].boost);
     }
 
     function totalVotingPower() external view override returns (uint256) {
@@ -150,6 +162,22 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     function totalVotingPowerAt(uint256 targetEpoch) external view override returns (uint256) {
         if (targetEpoch > type(uint64).max) revert EpochOutOfRange();
         return _totalVotingPowerAt(uint64(targetEpoch));
+    }
+
+    function unboostedVotingPowerOf(uint256 tokenId) external view override returns (uint256) {
+        if (ownershipChange[tokenId] == block.number) return 0;
+        return _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
+    }
+
+    function unboostedTotalVotingPower() external view override returns (uint256) {
+        return _totalVotingPowerAt(pointHistory[epoch].epoch);
+    }
+
+    function updateBoost(uint256 tokenId, uint256 boost) external override {
+        _requireBooster();
+        if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
+        if (boost < BoostLibrary.PRECISION || boost > 5 * BoostLibrary.PRECISION) revert InvalidAmount();
+        _locked[tokenId].boost = boost;
     }
 
     function userPointEpoch(uint256 tokenId) external view override returns (uint256) {
@@ -188,12 +216,12 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         Point memory newPoint = _lockPoint(newLock, currentEpoch);
         Point storage globalPoint = pointHistory[epoch];
         if (oldLock.isPermanent) {
-            uint256 amount = uint256(uint128(oldLock.amount));
+            uint256 amount = oldLock.amount.toUint256();
             permanentLockBalance -= amount;
             globalPoint.permanentBalance -= amount;
         }
         if (newLock.isPermanent) {
-            uint256 amount = uint256(uint128(newLock.amount));
+            uint256 amount = newLock.amount.toUint256();
             permanentLockBalance += amount;
             globalPoint.permanentBalance += amount;
         }
@@ -247,7 +275,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     {
         if (lock.amount <= 0) return Point(0, 0, atEpoch, 0);
         if (lock.isPermanent) {
-            return Point(int128(uint128(lock.amount)), 0, atEpoch, uint256(uint128(lock.amount)));
+            return Point(lock.amount, 0, atEpoch, lock.amount.toUint256());
         }
         if (lock.end <= atEpoch) return Point(0, 0, atEpoch, 0);
         point.slope = lock.amount / int128(uint128(maxLockEpochs));
@@ -268,12 +296,12 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         }
         if (low == 0) return 0;
         Point memory point = history[low - 1];
-        if (targetEpoch <= point.epoch) return uint256(uint128(point.bias));
+        if (targetEpoch <= point.epoch) return point.bias.toUint256();
         if (targetEpoch - point.epoch >= maxLockEpochs) {
-            return point.slope == 0 ? uint256(uint128(point.bias)) : 0;
+            return point.slope == 0 ? point.bias.toUint256() : 0;
         }
         int128 decayed = point.bias - point.slope * int128(uint128(targetEpoch - point.epoch));
-        return decayed > 0 ? uint256(uint128(decayed)) : 0;
+        return decayed > 0 ? decayed.toUint256() : 0;
     }
 
     function _totalVotingPowerAt(uint64 targetEpoch) private view returns (uint256) {
@@ -297,7 +325,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
             point.slope += slopeChanges[cursor];
             if (point.slope < 0) point.slope = 0;
         }
-        return point.bias > 0 ? uint256(uint128(point.bias)) : 0;
+        return point.bias > 0 ? point.bias.toUint256() : 0;
     }
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {

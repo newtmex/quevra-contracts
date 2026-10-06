@@ -118,14 +118,14 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        (, address stakingRewards) = controller.admitValidatorRequest(requestId, saltSeed);
+        address vault = controller.admitValidatorRequest(requestId, saltSeed);
         uint256 amount = validatorStake;
 
         vm.prank(operator);
         veMON.createLock{value: amount}(amount, lockDuration);
 
         address[] memory vaults = new address[](1);
-        vaults[0] = controller.vaultByStakingRewards(stakingRewards);
+        vaults[0] = vault;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
 
@@ -143,7 +143,6 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         controller.unstake(1, vaults, amounts);
         // Read the actual maturity epoch instead of assuming a fixed delay.
-        address vault = controller.vaultByStakingRewards(stakingRewards);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, vault, 0);
         _setEpochAfterLockExpiry(1, withdrawEpoch);
@@ -165,14 +164,14 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        (, address stakingRewards) = controller.admitValidatorRequest(requestId, saltSeed);
+        address vault = controller.admitValidatorRequest(requestId, saltSeed);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);
         veMON.createLock{value: total}(total, lockDuration);
 
         address[] memory vaults = new address[](1);
-        vaults[0] = controller.vaultByStakingRewards(stakingRewards);
+        vaults[0] = vault;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = validatorStake;
 
@@ -197,7 +196,6 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         controller.stake(1, vaults, amounts);
 
-        address vault = controller.vaultByStakingRewards(stakingRewards);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         StakingAgent agent = StakingAgent(payable(controller.agentByToken(1)));
         assertEq(controller.stakingCycleOf(1), 1);
@@ -218,12 +216,12 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        (, address stakingRewards) = controller.admitValidatorRequest(requestId, saltSeed);
+        address vault = controller.admitValidatorRequest(requestId, saltSeed);
 
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
         address[] memory vaults = new address[](1);
-        vaults[0] = controller.vaultByStakingRewards(stakingRewards);
+        vaults[0] = vault;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = validatorStake;
         vm.prank(operator);
@@ -237,13 +235,12 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         controller.stake(2, vaults, amounts);
 
-        address vault = controller.vaultByStakingRewards(stakingRewards);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         StakingAgent agent = StakingAgent(payable(controller.agentByToken(2)));
         assertEq(address(agent), controller.predictAgentAddress(2));
         assertEq(controller.balanceOf(2), 0);
         assertEq(agent.balanceOf(validatorId), agentAmount);
-        assertEq(controller.allocationOf(2, controller.vaultByStakingRewards(stakingRewards)), agentAmount);
+        assertEq(controller.allocationOf(2, vault), agentAmount);
 
         // The agent delegation activates one epoch after the controller stakes it.
         // Unstaking is only available in a later Quevra cycle.
@@ -252,7 +249,7 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         controller.unstake(2, vaults, amounts);
         assertEq(agent.balanceOf(validatorId), 0);
         assertEq(agent.pendingWithdrawal(validatorId), agentAmount);
-        assertEq(controller.pendingOf(2, controller.vaultByStakingRewards(stakingRewards)), agentAmount);
+        assertEq(controller.pendingOf(2, vault), agentAmount);
 
         (,, uint64 withdrawEpoch) = staking.getWithdrawalRequest(validatorId, address(agent), 0);
         _setEpochAfterLockExpiry(2, withdrawEpoch);
@@ -261,7 +258,7 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         veMON.withdraw(2);
 
         assertEq(agent.pendingWithdrawal(validatorId), 0);
-        assertEq(controller.pendingOf(2, controller.vaultByStakingRewards(stakingRewards)), 0);
+        assertEq(controller.pendingOf(2, vault), 0);
         assertEq(controller.balanceOf(2), 0);
         assertEq(operator.balance, beforeOwnerBalance + agentAmount);
         assertEq(veMON.balanceOf(operator), 1);
@@ -276,20 +273,19 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         vm.prank(operator);
         uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
         vm.prank(operator);
-        (, address stakingRewards) = controller.admitValidatorRequest(requestId, saltSeed);
+        address vault = controller.admitValidatorRequest(requestId, saltSeed);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);
         veMON.createLock{value: total}(total, lockDuration);
         address[] memory vaults = new address[](1);
-        vaults[0] = controller.vaultByStakingRewards(stakingRewards);
+        vaults[0] = vault;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = total;
 
         vm.prank(operator);
         controller.stake(1, vaults, amounts);
 
-        address vault = controller.vaultByStakingRewards(stakingRewards);
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         StakingAgent agent = StakingAgent(payable(controller.agentByToken(1)));
         assertEq(controller.balanceOf(1), 0);
