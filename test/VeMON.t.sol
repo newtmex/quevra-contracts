@@ -191,6 +191,24 @@ contract VeMONTest is VeMONFixture {
         assertEq(veMON.ownerOf(1), operator);
     }
 
+    function test_withdrawReturnsControllerBalanceWhenNeverStaked() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        assertEq(controller.balanceOf(1), validatorStake);
+        assertTrue(controller.isFullyUnstaked(1));
+
+        _setEpoch(20, false);
+        uint256 ownerBalanceBefore = operator.balance;
+
+        vm.prank(operator);
+        veMON.withdraw(1);
+
+        assertEq(operator.balance, ownerBalanceBefore + validatorStake);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(veMON.balanceOf(operator), 0);
+    }
+
     function test_withdrawRejectsPermanentLock() public {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
