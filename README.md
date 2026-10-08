@@ -22,6 +22,13 @@ through `setCommission` take effect at the start of cycle + 2. The stake amount
 is a contract constant. Commission uses 1e18 scaling and is capped at
 `MAX_COMMISSION` (100%), matching the staking precompile.
 
+After deploying `ValidatorsVoter`, bind it once with
+`StakingController.setBooster(validatorsVoter)`. Each veMON vote then replaces that
+token's staking intent with its locked principal split across the voted
+validator gauges and immediately pokes the controller. A vote reset clears the
+intent and begins undelegation; Monad withdrawal delays can require later
+permissionless calls to `StakingController.poke` to finish the transition.
+
 ## Usage
 
 ```shell

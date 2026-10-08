@@ -7,7 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IStakingController} from "../interfaces/IStakingController.sol";
 import {IVeValidator} from "../interfaces/IVeValidator.sol";
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
-import {IVeValidator} from "../interfaces/IVeValidator.sol";
+import {IVeMON} from "../interfaces/IVeMON.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -55,6 +55,12 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
     function setValidatorVe(address veValidator_) external override onlyOwner {
         if (validatorVe != address(0) || veValidator_ == address(0)) revert InvalidAddress();
         validatorVe = veValidator_;
+    }
+
+    /// @notice Bind the vote-syncing ValidatorsVoter through veMON.
+    function setBooster(address booster_) external override onlyOwner {
+        if (ve == address(0) || booster_ == address(0)) revert InvalidAddress();
+        IVeMON(ve).setBooster(booster_);
     }
 
     function validatorTokenIdOf(address vault) external view override returns (uint256) {

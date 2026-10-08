@@ -5,7 +5,7 @@ import {VotingEscrow} from "./VotingEscrow.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
-import {IBoostVoter} from "./interfaces/IBoostVoter.sol";
+import {IValidatorsVoter} from "./interfaces/IValidatorsVoter.sol";
 import {IVeValidator} from "./interfaces/IVeValidator.sol";
 import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
 import {SafeCastLibrary} from "./libraries/SafeCastLibrary.sol";
@@ -27,10 +27,10 @@ contract VeValidator is VotingEscrow, IVeValidator {
     }
 
     IStakingController public immutable controller;
-    IBoostVoter public immutable boostVoter;
+    IValidatorsVoter public immutable validatorsVoter;
     address public immutable gaugeRewardToken;
 
-    mapping(uint256 tokenId => ValidatorPosition) public validatorPosition;
+    mapping(uint256 tokenId => ValidatorPosition) public override validatorPosition;
     mapping(address vault => uint256 tokenId) public tokenIdForVault;
     mapping(uint256 tokenId => IVeValidator.ValidatorSubmission) private _validatorSubmissions;
 
@@ -40,14 +40,14 @@ contract VeValidator is VotingEscrow, IVeValidator {
     error ValidatorPositionExists();
     error InvalidValidatorPosition();
 
-    constructor(address controller_, address boostVoter_, address gaugeRewardToken_, uint64 maxLockCycles_)
+    constructor(address controller_, address validatorsVoter_, address gaugeRewardToken_, uint64 maxLockCycles_)
         VotingEscrow(maxLockCycles_, "Validator", "veValidator")
     {
-        if (controller_ == address(0) || boostVoter_ == address(0) || gaugeRewardToken_ == address(0)) {
+        if (controller_ == address(0) || validatorsVoter_ == address(0) || gaugeRewardToken_ == address(0)) {
             revert InvalidAddress();
         }
         controller = IStakingController(controller_);
-        boostVoter = IBoostVoter(boostVoter_);
+        validatorsVoter = IValidatorsVoter(validatorsVoter_);
         gaugeRewardToken = gaugeRewardToken_;
     }
 
@@ -63,8 +63,8 @@ contract VeValidator is VotingEscrow, IVeValidator {
         _validatorSubmissions[tokenId] =
             IVeValidator.ValidatorSubmission(payload, signedSecpMessage, signedBlsMessage, operator, false, 0);
         address vault = controller.deployValidatorVault(operator, tokenId, saltSeed, expectedAuthAddress);
-        address gauge = boostVoter.createBoostGauge(tokenId, gaugeRewardToken);
-        address bribe = boostVoter.gaugeToBribe(gauge);
+        address gauge = validatorsVoter.createBoostGauge(tokenId, gaugeRewardToken, vault);
+        address bribe = validatorsVoter.gaugeToBribe(gauge);
         _register(tokenId, operator, vault, gauge, bribe);
     }
 
@@ -79,8 +79,8 @@ contract VeValidator is VotingEscrow, IVeValidator {
         address vault = controller.deployValidatorVault(
             operator, tokenId, saltSeed, controller.predictVaultAddress(operator, saltSeed)
         );
-        address gauge = boostVoter.createBoostGauge(tokenId, gaugeRewardToken);
-        address bribe = boostVoter.gaugeToBribe(gauge);
+        address gauge = validatorsVoter.createBoostGauge(tokenId, gaugeRewardToken, vault);
+        address bribe = validatorsVoter.gaugeToBribe(gauge);
         _register(tokenId, operator, vault, gauge, bribe);
     }
 

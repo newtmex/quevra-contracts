@@ -5,6 +5,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {IVeMON} from "../interfaces/IVeMON.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
@@ -52,7 +53,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
     modifier onlyNewCycle(uint256 tokenId) {
         uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
-        if (_intentVaultLists[tokenId].length != 0 && currentCycle <= stakingCycleOf[tokenId]) {
+        if (_tokenVaultLists[tokenId].length() != 0 && currentCycle <= stakingCycleOf[tokenId]) {
             revert StakingCycleNotAdvanced();
         }
         // Keep the cycle marker in the modifier, like Tigris records
@@ -112,6 +113,30 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         _poke(tokenId);
         emit Staked(tokenId, total);
+    }
+
+    /// @notice Replace staking intent from the veMON gauge vote and immediately progress the rebalance.
+    /// @dev Only the ValidatorsVoter bound to veMON can call this. An empty list clears intent after a vote reset.
+    function setStakeIntentFromVotes(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        if (ve == address(0) || msg.sender != IVeMON(ve).booster()) revert NotIntentVoter();
+        if (vaults.length != amounts.length) revert LengthMismatch();
+
+        for (uint256 i; i < vaults.length; ++i) {
+            if (amounts[i] == 0) revert ZeroAmount();
+            if (!_isVault[vaults[i]]) revert InvalidVault();
+            for (uint256 j; j < i; ++j) {
+                if (vaults[j] == vaults[i]) revert DuplicateVault();
+            }
+        }
+
+        stakingCycleOf[tokenId] = ProtocolTimeLibrary.currentCycle();
+        _setIntent(tokenId, vaults, amounts);
+        bool satisfied = _poke(tokenId);
+        emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
     }
 
     /// @notice Progress a token's physical allocations toward its latest intent.
@@ -192,7 +217,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         nonReentrant
     {
         uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
-        if (_intentVaultLists[tokenId].length != 0 && currentCycle <= stakingCycleOf[tokenId]) {
+        if (_tokenVaultLists[tokenId].length() != 0 && currentCycle <= stakingCycleOf[tokenId]) {
             revert StakingCycleNotAdvanced();
         }
 
@@ -260,9 +285,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     function _poke(uint256 tokenId) internal returns (bool satisfied) {
-        if (_intentVaultLists[tokenId].length == 0) return true;
-
         EnumerableSet.AddressSet storage vaults = _tokenVaultLists[tokenId];
+        if (_intentVaultLists[tokenId].length == 0 && vaults.length() == 0) return true;
         PokeBatch memory batch = PokeBatch({
             agent: agentByToken[tokenId],
             liquid: balanceOf[tokenId],

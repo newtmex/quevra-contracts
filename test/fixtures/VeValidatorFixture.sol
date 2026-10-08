@@ -26,6 +26,15 @@ contract TestValidatorVe is IVeValidator {
         return _submissions[tokenId];
     }
 
+    function validatorPosition(uint256)
+        external
+        pure
+        override
+        returns (uint64 validatorId, address operator, address vault, address gauge, address bribeVotingRewards)
+    {
+        return (0, address(0), address(0), address(0), address(0));
+    }
+
     function setValidatorIdFromController(uint256, uint64) external pure override {}
 
     function deploy(

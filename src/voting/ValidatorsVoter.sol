@@ -2,26 +2,29 @@
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IBoostVoter} from "../interfaces/IBoostVoter.sol";
+import {IValidatorsVoter} from "../interfaces/IValidatorsVoter.sol";
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {IVeMON} from "../interfaces/IVeMON.sol";
 import {IVotingEscrowBooster} from "../interfaces/IVotingEscrowBooster.sol";
+import {IStakingController} from "../interfaces/IStakingController.sol";
 import {NonStakingGauge} from "../gauges/NonStakingGauge.sol";
 import {BribeVotingRewards} from "../rewards/BribeVotingRewards.sol";
 import {BoostLibrary} from "../libraries/BoostLibrary.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {NonStakingVoter} from "./NonStakingVoter.sol";
 
-/// @title BoostVoter
+/// @title ValidatorsVoter
 /// @notice Allocates voting veMON power to veMON positions and refreshes their boost.
 /// @dev Gauge creation and reward funding live in the voter. Gauges own reward
 ///      accounting and payout, while this contract only allocates boost power.
-contract BoostVoter is NonStakingVoter, IBoostVoter {
+contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
     uint256 public constant BOOST_PRECISION = BoostLibrary.PRECISION;
     uint256 public constant MAX_BOOST = 5 * BoostLibrary.PRECISION;
 
     address public override boostableVe;
 
     mapping(uint256 tokenId => address gauge) public override boostableTokenIdToGauge;
+    mapping(address gauge => address vault) public override gaugeToVault;
 
     event BoostGaugeCreated(uint256 indexed boostableTokenId, address indexed gauge, address indexed rewardToken);
     event BribeVotingRewardsCreated(uint256 indexed boostableTokenId, address indexed bribeVotingRewards);
@@ -33,11 +36,12 @@ contract BoostVoter is NonStakingVoter, IBoostVoter {
     error LockDoesNotExist();
     error LockExpired();
     error BoostableVeAlreadySet();
+    error GaugeVaultNotSet(address gauge);
 
     constructor(address votingVe_, address boostableVe_, address owner_) NonStakingVoter(votingVe_, owner_) {
         // `NonStakingVoter` validates the voting escrow and owner. The
         // boostable escrow may be bound after deployment to break the
-        // veValidator/BoostVoter deployment cycle.
+        // veValidator/ValidatorsVoter deployment cycle.
         boostableVe = boostableVe_;
     }
 
@@ -53,11 +57,24 @@ contract BoostVoter is NonStakingVoter, IBoostVoter {
         nonReentrant
         returns (address gauge)
     {
-        if (!IVotingEscrow(boostableVe).isApprovedOrOwner(msg.sender, boostableTokenId) && msg.sender != boostableVe) {
-            revert NotApprovedOrOwner();
-        }
+        _requireGaugeCreator(boostableTokenId);
         if (!isWhitelistedToken[rewardToken]) revert NotWhitelistedToken();
         gauge = _createBoostGauge(boostableTokenId, rewardToken);
+    }
+
+    /// @notice Create a validator gauge and bind it to the vault it represents.
+    function createBoostGauge(uint256 boostableTokenId, address rewardToken, address vault)
+        external
+        virtual
+        override
+        nonReentrant
+        returns (address gauge)
+    {
+        if (vault == address(0)) revert ZeroAddress();
+        _requireGaugeCreator(boostableTokenId);
+        if (!isWhitelistedToken[rewardToken]) revert NotWhitelistedToken();
+        gauge = _createBoostGauge(boostableTokenId, rewardToken);
+        gaugeToVault[gauge] = vault;
     }
 
     /// @notice Creates and registers the gauge and bribe rewards for a boostable position.
@@ -126,8 +143,66 @@ contract BoostVoter is NonStakingVoter, IBoostVoter {
         address target = boostableTokenIdToGauge[boostableTokenId];
         if (target == address(0)) return;
         delete boostableTokenIdToGauge[boostableTokenId];
+        delete gaugeToVault[target];
         _unregisterGauge(target);
         emit BoostableTokenBurned(boostableTokenId, target);
+    }
+
+    function _afterVoteUpdate(uint256 tokenId) internal virtual override {
+        _syncStakeIntent(tokenId);
+    }
+
+    function _syncStakeIntent(uint256 tokenId) internal {
+        address[] storage gauges = gaugeVote[tokenId];
+        uint256 length = gauges.length;
+        uint256 totalWeight = 0;
+        for (uint256 i; i < length; ++i) {
+            totalWeight += votes[tokenId][gauges[i]];
+        }
+
+        // forge-lint: disable-next-line(unused-return)
+        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
+        uint256 totalAmount = lockedAmount > 0 ? uint256(uint128(lockedAmount)) : 0;
+        if (length == 0 || totalWeight == 0 || totalAmount == 0) {
+            IStakingController(IVeMON(ve).controller())
+                .setStakeIntentFromVotes(tokenId, new address[](0), new uint256[](0));
+            return;
+        }
+
+        uint256[] memory distributed = new uint256[](length);
+        uint256 allocated = 0;
+        uint256 included = 0;
+        for (uint256 i; i < length; ++i) {
+            address gauge = gauges[i];
+            uint256 amount = i + 1 == length
+                ? totalAmount - allocated
+                : Math.mulDiv(totalAmount, votes[tokenId][gauge], totalWeight);
+            distributed[i] = amount;
+            allocated += amount;
+            if (amount != 0) ++included;
+        }
+
+        address[] memory vaults = new address[](included);
+        uint256[] memory amounts = new uint256[](included);
+        uint256 outputIndex = 0;
+        for (uint256 i; i < length; ++i) {
+            uint256 amount = distributed[i];
+            if (amount == 0) continue;
+            address gauge = gauges[i];
+            address vault = gaugeToVault[gauge];
+            if (vault == address(0)) revert GaugeVaultNotSet(gauge);
+            vaults[outputIndex] = vault;
+            amounts[outputIndex] = amount;
+            ++outputIndex;
+        }
+
+        IStakingController(IVeMON(ve).controller()).setStakeIntentFromVotes(tokenId, vaults, amounts);
+    }
+
+    function _requireGaugeCreator(uint256 boostableTokenId) internal view {
+        if (!IVotingEscrow(boostableVe).isApprovedOrOwner(msg.sender, boostableTokenId) && msg.sender != boostableVe) {
+            revert NotApprovedOrOwner();
+        }
     }
 
     function _pokeBoost(uint256 boostableTokenId) internal virtual {

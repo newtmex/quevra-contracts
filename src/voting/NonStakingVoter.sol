@@ -81,14 +81,19 @@ abstract contract NonStakingVoter is Ownable2Step, ReentrancyGuardTransient, INo
             emit Voted(msg.sender, targets[i], tokenId, amount);
         }
         lastVoted[tokenId] = cycle;
+        _afterVoteUpdate(tokenId);
     }
 
     function reset(uint256 tokenId) external virtual override nonReentrant {
         if (!IVotingEscrow(ve).isApprovedOrOwner(msg.sender, tokenId)) revert NotApprovedOrOwner();
         _reset(tokenId);
+        _afterVoteUpdate(tokenId);
     }
 
     // Internal state transitions
+
+    /// @dev Derived voters can react after a vote or reset has completed.
+    function _afterVoteUpdate(uint256 tokenId) internal virtual {}
 
     function _registerGauge(address gauge, address bribeVotingRewards) internal virtual {
         if (gauge == address(0) || bribeVotingRewards == address(0)) revert ZeroAddress();

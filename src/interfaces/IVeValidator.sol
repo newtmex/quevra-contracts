@@ -12,5 +12,9 @@ interface IVeValidator {
     }
 
     function validatorSubmission(uint256 tokenId) external view returns (ValidatorSubmission memory);
+    function validatorPosition(uint256 tokenId)
+        external
+        view
+        returns (uint64 validatorId, address operator, address vault, address gauge, address bribeVotingRewards);
     function setValidatorIdFromController(uint256 tokenId, uint64 validatorId) external;
 }
