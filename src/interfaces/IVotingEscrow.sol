@@ -20,12 +20,6 @@ interface IVotingEscrow is IERC721Metadata {
     }
 
     error LockDurationNotInFuture();
-    error LockDurationTooLong();
-    error LockExpired();
-    error LockNotExpired();
-    error NotApprovedOrOwner();
-    error NotPermanentLock();
-    error PermanentLock();
 
     /// @notice Check whether spender is owner or an approved user for a given veNFT
     /// @param _spender .
@@ -59,27 +53,17 @@ interface IVotingEscrow is IERC721Metadata {
     /// @notice Record global data to checkpoint
     function checkpoint() external;
 
-    /// @notice Create a veNFT for `msg.sender`.
-    /// @param _value Amount to lock.
-    /// @param _lockDuration Lock duration in Quevra cycles.
-    /// @return TokenId of the created veNFT.
-    function createLock(uint256 _value, uint256 _lockDuration) external payable returns (uint256);
-
     /// @notice Increase a lock by rewards compounded from its staking position.
     /// @dev Callable only by the configured staking controller.
     function increaseAmountFromController(uint256 tokenId, uint256 amount) external;
+
+    function decreaseAmountFromController(uint256 tokenId, uint256 amount) external;
 
     function updateBoost(uint256 tokenId, uint256 boost) external;
 
     function unboostedVotingPowerOf(uint256 tokenId) external view returns (uint256);
 
     function unboostedTotalVotingPower() external view returns (uint256);
-
-    /// @notice Permanently lock a normal veNFT.
-    function lockPermanent(uint256 _tokenId) external;
-
-    /// @notice Return a permanently locked veNFT to a time-limited lock.
-    function unlockPermanent(uint256 _tokenId) external;
 
     /// @notice Calculate total voting power at the current Monad epoch.
     function totalVotingPower() external view returns (uint256);
@@ -94,6 +78,4 @@ interface IVotingEscrow is IERC721Metadata {
     function votingPowerAndLockedAmount(uint256 tokenId) external view returns (uint256 power, int128 amount);
 
     function votingPowerOfAt(uint256 tokenId, uint256 epoch) external view returns (uint256);
-
-    function withdraw(uint256 tokenId) external;
 }

@@ -5,9 +5,9 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
-import {ValidatorRegistryFixture} from "./ValidatorRegistryFixture.sol";
+import {VeValidatorFixture} from "./VeValidatorFixture.sol";
 
-abstract contract StakingVaultFixture is ValidatorRegistryFixture {
+abstract contract StakingVaultFixture is VeValidatorFixture {
     StakingVault internal vault;
     StakingVault internal vaultImplementation;
 
@@ -17,10 +17,9 @@ abstract contract StakingVaultFixture is ValidatorRegistryFixture {
         bytes memory payload = abi.encodePacked(
             secpPubkey, blsPubkey, bytes20(address(vault)), bytes32(validatorStake), bytes32(commission)
         );
-        vm.prank(operator);
-        requestId = registry.requestValidator(payload, secpSig, blsSig);
+        tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
         vm.prank(owner);
-        vault.initialize(address(registry), requestId);
+        vault.initialize(address(validatorVe), tokenId, 0);
     }
 
     function _newVault() internal returns (StakingVault deployedVault) {

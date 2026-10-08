@@ -33,25 +33,21 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     mapping(uint256 tokenId => address[]) private _intentVaultLists;
     mapping(uint256 tokenId => mapping(address vault => uint256 indexPlusOne)) private _intentVaultIndex;
 
-    constructor(address registry_, address owner_, uint256 initialCommission_)
-        StakingAdmin(registry_, owner_, initialCommission_)
-    {}
+    constructor(address owner_, uint256 initialCommission_) StakingAdmin(owner_, initialCommission_) {}
 
     // -------------------------------------------------------------------------
     // Validator admission and cycle guards
     // -------------------------------------------------------------------------
 
-    /// @notice Submit a new validator request and create its validator vault.
-    /// @dev The controller is the registry requester; `msg.sender` is the operator
-    ///      whose salt determines the vault address and whose identity is registered.
-    function createValidator(
-        bytes32 saltSeed,
-        address expectedAuthAddress,
-        bytes calldata payload,
-        bytes calldata signedSecpMessage,
-        bytes calldata signedBlsMessage
-    ) external override nonReentrant returns (uint256 requestId, address vault) {
-        return _createValidator(msg.sender, saltSeed, expectedAuthAddress, payload, signedSecpMessage, signedBlsMessage);
+    /// @notice Deploy a vault for a validator request created by veValidator.
+    function deployValidatorVault(address operator, uint256 tokenId, bytes32 saltSeed, address expectedAuthAddress)
+        external
+        override
+        nonReentrant
+        returns (address vault)
+    {
+        if (msg.sender != validatorVe || operator == address(0)) revert InvalidValidatorState();
+        return _deployValidatorRequest(tokenId, operator, operator, operator, saltSeed, expectedAuthAddress);
     }
 
     modifier onlyNewCycle(uint256 tokenId) {
@@ -342,6 +338,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(
                 batch.delegateValidators[0], batch.delegateAmounts[0]
             );
+            _increaseValidatorBackingById(batch.delegateValidators[0], batch.delegateAmounts[0]);
         } else {
             uint64[] memory validators = batch.delegateValidators;
             uint256[] memory amounts = batch.delegateAmounts;
@@ -351,6 +348,9 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 mstore(amounts, count)
             }
             StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(validators, amounts);
+            for (uint256 i; i < count; ++i) {
+                _increaseValidatorBackingById(validators[i], amounts[i]);
+            }
         }
     }
 
@@ -377,6 +377,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             catch {
                 return false;
             }
+            _decreaseValidatorBacking(position.vault, fromAgent);
         }
 
         uint256 fromVault = amount - fromAgent;
@@ -386,6 +387,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         catch {
             return false;
         }
+        _decreaseValidatorBacking(position.vault, fromVault);
         return true;
     }
 
@@ -401,7 +403,15 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 toVault = amount < deficit ? amount : deficit;
         validatorId = position.validatorId;
         if (toVault != 0) {
+            uint64 previousValidatorId = StakingVault(payable(position.vault)).validatorId();
             validatorId = StakingVault(payable(position.vault)).deposit{value: toVault}(tokenId);
+            if (previousValidatorId == 0 && validatorId != 0) {
+                _vaultByValidatorId[validatorId] = position.vault;
+                _setValidatorId(position.vault, validatorId);
+                _setValidatorBacking(position.vault, StakingVault(payable(position.vault)).totalBalance());
+            } else if (previousValidatorId != 0) {
+                _setValidatorBacking(position.vault, _activeValidatorBacking[position.vault] + toVault);
+            }
         }
 
         remainder = amount - toVault;
@@ -430,13 +440,20 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
         if (fromAgent != 0) {
             StakingAgent(payable(agent)).undelegate(validatorId, fromAgent);
+            _decreaseValidatorBacking(vault, fromAgent);
         }
 
         uint256 fromVault = amount - fromAgent;
         if (fromVault != 0) {
             if (StakingVault(payable(vault)).balanceOf(tokenId) < fromVault) revert InvalidUnstakeAmount();
             StakingVault(payable(vault)).undelegate(tokenId, fromVault);
+            _decreaseValidatorBacking(vault, fromVault);
         }
+    }
+
+    function _increaseValidatorBackingById(uint64 validatorId, uint256 amount) internal {
+        address vault = _vaultByValidatorId[validatorId];
+        if (vault != address(0)) _setValidatorBacking(vault, _activeValidatorBacking[vault] + amount);
     }
 
     /// @dev Withdraws matured validator proceeds and credits them to the token balance.

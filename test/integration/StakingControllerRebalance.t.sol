@@ -506,10 +506,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
             bytes32(validatorStake),
             bytes32(commission)
         );
-        vm.prank(operator);
-        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        vm.prank(operator);
-        vault = controller.admitValidatorRequest(requestId, saltSeed);
+        uint256 tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        vault = validatorVe.deploy(controller, operator, tokenId, saltSeed, expectedAuthAddress);
     }
 
     function _secpPubkey(uint8 keyNumber) internal view returns (bytes memory) {

@@ -92,7 +92,7 @@ contract VeMONTest is VeMONFixture {
         veMON.createLock{value: 1 ether}(1 ether, 0);
 
         uint256 maxLockCycles = veMON.maxLockCycles();
-        vm.expectRevert(IVotingEscrow.LockDurationTooLong.selector);
+        vm.expectRevert(VeMON.LockDurationTooLong.selector);
         veMON.createLock{value: 1 ether}(1 ether, maxLockCycles + 1);
     }
 
@@ -176,7 +176,7 @@ contract VeMONTest is VeMONFixture {
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
         vm.prank(stranger);
-        vm.expectRevert(IVotingEscrow.NotApprovedOrOwner.selector);
+        vm.expectRevert(VeMON.NotApprovedOrOwner.selector);
         veMON.lockPermanent(1);
     }
 
@@ -185,7 +185,7 @@ contract VeMONTest is VeMONFixture {
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
         vm.prank(operator);
-        vm.expectRevert(IVotingEscrow.LockNotExpired.selector);
+        vm.expectRevert(VeMON.LockNotExpired.selector);
         veMON.withdraw(1);
 
         assertEq(veMON.ownerOf(1), operator);
@@ -198,7 +198,7 @@ contract VeMONTest is VeMONFixture {
         veMON.lockPermanent(1);
 
         vm.prank(operator);
-        vm.expectRevert(IVotingEscrow.PermanentLock.selector);
+        vm.expectRevert(VeMON.PermanentLock.selector);
         veMON.withdraw(1);
 
         assertEq(veMON.ownerOf(1), operator);

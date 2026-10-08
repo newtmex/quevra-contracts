@@ -11,10 +11,10 @@ import {StakeControlled} from "../src/staking/controlled/StakeControlled.sol";
 import {StakingVaultFixture} from "./fixtures/StakingVaultFixture.sol";
 
 contract StakingVaultTest is StakingVaultFixture {
-    function test_initializeBindsOwnerRegistryRequestAndStakingPrecompile() public view {
+    function test_initializeBindsValidatorTokenAndStakingPrecompile() public view {
         assertEq(vault.controller(), owner);
-        assertEq(address(vault.registry()), address(registry));
-        assertEq(vault.requestId(), requestId);
+        assertEq(address(vault.validatorVe()), address(validatorVe));
+        assertEq(vault.validatorTokenId(), tokenId);
         assertEq(vault.validatorId(), 0);
     }
 
@@ -22,17 +22,17 @@ contract StakingVaultTest is StakingVaultFixture {
         StakingVault implementation = new StakingVault();
         StakingVault clone = StakingVault(payable(Clones.clone(address(implementation))));
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        clone.initialize(address(0), requestId);
+        clone.initialize(address(0), tokenId, 0);
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        clone.initialize(address(registry), 0);
+        clone.initialize(address(validatorVe), 0, 0);
         vm.prank(stranger);
         vm.expectRevert(StakeControlled.OnlyController.selector);
-        clone.initialize(address(registry), requestId);
-        clone.initialize(address(registry), requestId);
+        clone.initialize(address(validatorVe), tokenId, 0);
+        clone.initialize(address(validatorVe), tokenId, 0);
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        clone.initialize(address(registry), requestId);
+        clone.initialize(address(validatorVe), tokenId, 0);
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        implementation.initialize(address(registry), requestId);
+        implementation.initialize(address(validatorVe), tokenId, 0);
     }
 
     function test_depositExecutesBoundRegistryRequestFromVaultAtMinimumStake() public {

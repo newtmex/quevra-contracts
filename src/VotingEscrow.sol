@@ -39,11 +39,9 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     error InvalidAmount();
     error NonexistentToken();
     error EpochOutOfRange();
-    event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
     event LockAmountIncreased(uint256 indexed tokenId, uint256 amount, uint256 newAmount);
+    event LockAmountDecreased(uint256 indexed tokenId, uint256 amount, uint256 newAmount);
     event Checkpoint(uint64 indexed epoch, uint256 indexed pointIndex);
-    event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
-    event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
 
     constructor(uint64 maxLockCycles_, string memory name_, string memory symbol_) ERC721(name_, symbol_) {
         if (maxLockCycles_ == 0) revert LockDurationNotInFuture();
@@ -51,31 +49,9 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         maxLockEpochs = maxLockCycles_ * ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
     }
 
-    function createLock(uint256 _value, uint256 _lockDuration)
-        external
-        payable
-        override
-        nonReentrant
-        returns (uint256 tokenId)
-    {
-        uint256 unlockEpoch = _unlockEpoch(_lockDuration);
-        if (_value == 0) revert InvalidAmount();
-        if (_value > uint256(uint128(type(int128).max))) revert InvalidAmount();
-
-        tokenId = nextId++;
-        _deposit(_value, tokenId);
-        IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(_value.toInt128(), unlockEpoch, false, 0);
-        _locked[tokenId] = newLock;
-        _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
-        emit LockCreated(tokenId, msg.sender, _value, unlockEpoch);
-
-        _safeMint(msg.sender, tokenId);
-    }
-
     /// @notice Credit compounded staking rewards to a veNFT's locked amount.
     /// @dev The controller accounts for the corresponding stake before calling.
-    function increaseAmountFromController(uint256 tokenId, uint256 amount) external override nonReentrant {
+    function increaseAmountFromController(uint256 tokenId, uint256 amount) external virtual override nonReentrant {
         _requireController();
         if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
         if (amount == 0) revert InvalidAmount();
@@ -92,6 +68,22 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         emit LockAmountIncreased(tokenId, amount, oldAmount + amount);
     }
 
+    function decreaseAmountFromController(uint256 tokenId, uint256 amount) external virtual override nonReentrant {
+        _requireController();
+        if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
+        if (amount == 0) revert InvalidAmount();
+
+        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        uint256 oldAmount = oldLock.amount.toUint256();
+        if (amount > oldAmount) revert InvalidAmount();
+
+        IVotingEscrow.LockedBalance memory newLock = oldLock;
+        newLock.amount = (oldAmount - amount).toInt128();
+        _checkpointLock(tokenId, oldLock, newLock);
+        _locked[tokenId] = newLock;
+        emit LockAmountDecreased(tokenId, amount, oldAmount - amount);
+    }
+
     function _requireController() internal view virtual;
 
     function _requireBooster() internal view virtual {
@@ -100,34 +92,6 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
 
     /// @dev Custody implementation supplied by the concrete escrow. The lock
     ///      accounting is token agnostic; VeMON forwards MON to its controller.
-    function _deposit(uint256 amount, uint256 tokenId) internal virtual;
-
-    function lockPermanent(uint256 tokenId) external override nonReentrant {
-        _requireApprovedOrOwner(msg.sender, tokenId);
-        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
-        if (oldLock.isPermanent) revert PermanentLock();
-        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
-        if (oldLock.end <= currentEpoch) revert LockExpired();
-
-        IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(oldLock.amount, 0, true, oldLock.boost);
-        _checkpointLock(tokenId, oldLock, newLock);
-        _locked[tokenId] = newLock;
-        emit LockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
-    }
-
-    function unlockPermanent(uint256 tokenId) external override nonReentrant {
-        _requireApprovedOrOwner(msg.sender, tokenId);
-        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
-        if (!oldLock.isPermanent) revert NotPermanentLock();
-
-        uint64 currentEpoch = _currentEpoch();
-        IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles), false, oldLock.boost);
-        _checkpointLock(tokenId, oldLock, newLock);
-        _locked[tokenId] = newLock;
-        emit UnlockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
-    }
-
     /// @notice Advances global voting-power checkpoints to the current staking epoch.
     function checkpoint() external override nonReentrant {
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
@@ -208,7 +172,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         uint256 tokenId,
         IVotingEscrow.LockedBalance memory oldLock,
         IVotingEscrow.LockedBalance memory newLock
-    ) private {
+    ) internal {
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
         _advanceGlobal(currentEpoch);
 
@@ -328,32 +292,8 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         return point.bias > 0 ? point.bias.toUint256() : 0;
     }
 
-    function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
+    function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address from) {
         from = super._update(to, tokenId, auth);
         if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
-    }
-
-    function _requireApprovedOrOwner(address account, uint256 tokenId) internal view {
-        address tokenOwner = _ownerOf(tokenId);
-        if (tokenOwner == address(0)) revert NonexistentToken();
-        if (account != tokenOwner && account != getApproved(tokenId) && !isApprovedForAll(tokenOwner, account)) {
-            revert NotApprovedOrOwner();
-        }
-    }
-
-    function _currentEpoch() private returns (uint64 currentEpoch) {
-        (currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
-    }
-
-    function _unlockEpoch(uint256 lockCycles) private returns (uint256 unlockEpoch) {
-        if (lockCycles == 0) revert LockDurationNotInFuture();
-        if (lockCycles > maxLockCycles) revert LockDurationTooLong();
-
-        (uint64 currentEpoch_,) = ProtocolTimeLibrary.currentEpoch();
-        unlockEpoch =
-            ProtocolTimeLibrary.cycleStart(currentEpoch_) + (lockCycles * ProtocolTimeLibrary.EPOCHS_PER_CYCLE);
-        if (unlockEpoch <= currentEpoch_) {
-            unlockEpoch += ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
-        }
     }
 }

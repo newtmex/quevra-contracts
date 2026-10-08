@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {StakeControlled} from "./StakeControlled.sol";
 
-import {IValidatorRegistry} from "../../interfaces/IValidatorRegistry.sol";
+import {IVeValidator} from "../../interfaces/IVeValidator.sol";
 
 /// @title StakingVault
 /// @notice MON vault bound to exactly one validator.
@@ -11,7 +11,7 @@ contract StakingVault is StakeControlled {
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant REWARD_PRECISION = 1e27;
 
-    IValidatorRegistry public registry;
+    IVeValidator public validatorVe;
     mapping(uint256 tokenId => uint256 amount) public balanceOf;
     mapping(uint256 tokenId => uint256 amount) public pendingWithdrawal;
     uint256 public totalBalance;
@@ -22,7 +22,7 @@ contract StakingVault is StakeControlled {
     mapping(uint256 tokenId => uint256 amount) public rewards;
 
     /// @notice The only validator request this vault can execute.
-    uint256 public requestId;
+    uint256 public validatorTokenId;
 
     /// @notice Whether this vault is building the minimum auth-address stake
     ///         required before a new validator can be created.
@@ -47,28 +47,17 @@ contract StakingVault is StakeControlled {
     event RewardPaid(uint256 indexed tokenId, address indexed recipient, uint256 amount);
 
     /// @notice Called by the controller immediately after cloning.
-    function initialize(address registry_, uint256 requestId_) external onlyController initializer {
-        if (registry_ == address(0) || requestId_ == 0) revert InvalidRequest();
-
-        registry = IValidatorRegistry(registry_);
-        requestId = requestId_;
-        requiresMinimumStake = true;
-    }
-
-    /// @notice Bind this vault to a Monad validator that already exists.
-    /// @dev Existing validators have no addValidator submission to execute, so
-    ///      their vault starts with the known ID and delegates on its first deposit.
-    function initializeExisting(address registry_, uint256 requestId_, uint64 validatorId_)
+    function initialize(address validatorVe_, uint256 tokenId_, uint64 validatorId_)
         external
         onlyController
         initializer
     {
-        if (registry_ == address(0) || requestId_ == 0 || validatorId_ == 0) revert InvalidRequest();
+        if (validatorVe_ == address(0) || tokenId_ == 0) revert InvalidRequest();
 
-        registry = IValidatorRegistry(registry_);
-        requestId = requestId_;
+        validatorVe = IVeValidator(validatorVe_);
+        validatorTokenId = tokenId_;
         validatorId = validatorId_;
-        requiresMinimumStake = false;
+        requiresMinimumStake = validatorId_ == 0;
     }
 
     function deficit() public view returns (uint256) {
@@ -95,7 +84,7 @@ contract StakingVault is StakeControlled {
         currentValidatorId = validatorId;
     }
 
-    /// @notice Accounts deposits and uses the registry to activate the validator.
+    /// @notice Accounts deposits and uses the validator escrow submission to activate the validator.
     /// @dev The controller caps the value forwarded here. The vault itself also
     ///      enforces the cap so it can never overfund validator creation.
     function deposit(uint256 tokenId) external payable onlyController returns (uint64 currentValidatorId) {
@@ -111,7 +100,7 @@ contract StakingVault is StakeControlled {
         if (validatorId != 0) {
             if (!STAKING.delegate{value: msg.value}(validatorId)) revert StakingCallFailed();
         } else {
-            IValidatorRegistry.Submission memory submission = registry.getSubmission(requestId);
+            IVeValidator.ValidatorSubmission memory submission = validatorVe.validatorSubmission(validatorTokenId);
             validatorId = STAKING.addValidator{value: availableBalance()}(
                 submission.payload, submission.signedSecpMessage, submission.signedBlsMessage
             );

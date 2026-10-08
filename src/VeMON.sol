@@ -2,19 +2,33 @@
 pragma solidity ^0.8.24;
 
 import {VotingEscrow} from "./VotingEscrow.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
+import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
 import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
+import {SafeCastLibrary} from "./libraries/SafeCastLibrary.sol";
 
 /// @title veMON
 /// @notice Quevra voting escrow for MON routed into validator staking.
 /// @dev Concrete deployment wrapper around the shared voting escrow implementation.
 contract VeMON is VotingEscrow {
+    using SafeCastLibrary for uint256;
+    using SafeCastLibrary for int128;
     address public immutable controller;
     address public booster;
 
     error InvalidAddress();
     error InvalidValue();
     error NotController();
+    error LockDurationTooLong();
+    error LockExpired();
+    error LockNotExpired();
+    error NotApprovedOrOwner();
+    error NotPermanentLock();
+    error PermanentLock();
+    event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
+    event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
+    event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
     event BoosterSet(address indexed booster);
 
     constructor(address controller_, uint64 maxLockCycles_) VotingEscrow(maxLockCycles_, "Locked MON", "veMON") {
@@ -22,14 +36,54 @@ contract VeMON is VotingEscrow {
         controller = controller_;
     }
 
-    function _deposit(uint256 amount, uint256 tokenId) internal override {
+    function createLock(uint256 value, uint256 lockDuration) external payable nonReentrant returns (uint256 tokenId) {
+        uint256 unlockEpoch = _unlockEpoch(lockDuration);
+        if (value == 0 || value > uint256(uint128(type(int128).max))) revert InvalidAmount();
+
+        tokenId = nextId++;
+        _deposit(value, tokenId);
+        IVotingEscrow.LockedBalance memory newLock =
+            IVotingEscrow.LockedBalance(value.toInt128(), unlockEpoch, false, 0);
+        _locked[tokenId] = newLock;
+        _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
+        emit LockCreated(tokenId, msg.sender, value, unlockEpoch);
+        _safeMint(msg.sender, tokenId);
+    }
+
+    function lockPermanent(uint256 tokenId) external nonReentrant {
+        _requireApprovedOrOwner(msg.sender, tokenId);
+        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        if (oldLock.isPermanent) revert PermanentLock();
+        (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
+        if (oldLock.end <= currentEpoch) revert LockExpired();
+
+        IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(oldLock.amount, 0, true, oldLock.boost);
+        _checkpointLock(tokenId, oldLock, newLock);
+        _locked[tokenId] = newLock;
+        emit LockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
+    }
+
+    function unlockPermanent(uint256 tokenId) external nonReentrant {
+        _requireApprovedOrOwner(msg.sender, tokenId);
+        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        if (!oldLock.isPermanent) revert NotPermanentLock();
+
+        uint64 currentEpoch = _currentEpoch();
+        IVotingEscrow.LockedBalance memory newLock =
+            IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles), false, oldLock.boost);
+        _checkpointLock(tokenId, oldLock, newLock);
+        _locked[tokenId] = newLock;
+        emit UnlockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
+    }
+
+    function _deposit(uint256 amount, uint256 tokenId) internal {
         if (msg.value != amount) revert InvalidValue();
 
         IStakingController(controller).deposit{value: amount}(tokenId);
     }
 
     /// @notice Withdraw a fully unstaked position's MON and burn its veNFT.
-    function withdraw(uint256 tokenId) external override nonReentrant {
+    function withdraw(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
 
         if (_locked[tokenId].isPermanent) revert PermanentLock();
@@ -45,6 +99,35 @@ contract VeMON is VotingEscrow {
 
     function _requireController() internal view override {
         if (msg.sender != controller) revert NotController();
+    }
+
+    function _requireApprovedOrOwner(address account, uint256 tokenId) internal view {
+        address tokenOwner = _ownerOf(tokenId);
+        if (tokenOwner == address(0)) revert NonexistentToken();
+        if (account != tokenOwner && account != getApproved(tokenId) && !isApprovedForAll(tokenOwner, account)) {
+            revert NotApprovedOrOwner();
+        }
+    }
+
+    function _currentEpoch() internal returns (uint64 currentEpoch) {
+        (currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
+    }
+
+    function _unlockEpoch(uint256 lockCycles) internal returns (uint256 unlockEpoch) {
+        if (lockCycles == 0) revert LockDurationNotInFuture();
+        if (lockCycles > maxLockCycles) revert LockDurationTooLong();
+
+        (uint64 currentEpoch_,) = ProtocolTimeLibrary.currentEpoch();
+        unlockEpoch =
+            ProtocolTimeLibrary.cycleStart(currentEpoch_) + (lockCycles * ProtocolTimeLibrary.EPOCHS_PER_CYCLE);
+        if (unlockEpoch <= currentEpoch_) {
+            unlockEpoch += ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
+        }
+    }
+
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
+        from = ERC721._update(to, tokenId, auth);
+        if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
     }
 
     function setBooster(address booster_) external {

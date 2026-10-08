@@ -5,7 +5,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {StakingController} from "../../src/staking/StakingController.sol";
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
 import {VeMON} from "../../src/VeMON.sol";
-import {ValidatorRegistryFixture} from "../fixtures/ValidatorRegistryFixture.sol";
+import {TestValidatorVe, VeValidatorFixture} from "../fixtures/VeValidatorFixture.sol";
 
 contract ConsensusBoundVault is StakingVault {
     function bindValidator(uint64 validatorId_) external onlyController {
@@ -14,21 +14,25 @@ contract ConsensusBoundVault is StakingVault {
 }
 
 contract ConsensusBoundController is StakingController {
-    constructor(address registry_, address owner_) StakingController(registry_, owner_, 0) {}
+    constructor(address owner_) StakingController(owner_, 0) {}
 
-    function attachConsensusValidator(uint64 validatorId) external onlyOwner returns (address vault) {
-        uint256 requestId = registry.requestExistingValidator(validatorId);
+    function attachConsensusValidator(TestValidatorVe validatorVe, uint64 validatorId)
+        external
+        onlyOwner
+        returns (address vault)
+    {
+        uint256 tokenId = validatorVe.registerExisting(address(this), validatorId);
 
         ConsensusBoundVault implementation = new ConsensusBoundVault();
         vault = Clones.clone(address(implementation));
-        ConsensusBoundVault(payable(vault)).initialize(address(registry), requestId);
+        ConsensusBoundVault(payable(vault)).initialize(address(validatorVe), tokenId, 0);
         ConsensusBoundVault(payable(vault)).bindValidator(validatorId);
 
         _isVault[vault] = true;
     }
 }
 
-contract ForkNativeRewardsTest is ValidatorRegistryFixture {
+contract ForkNativeRewardsTest is VeValidatorFixture {
     uint256 private constant FIRST_STAKE = 100_000 ether;
     uint256 private constant REPLACEMENT_STAKE = 20_000 ether;
 
@@ -54,10 +58,11 @@ contract ForkNativeRewardsTest is ValidatorRegistryFixture {
         assertGt(validators.length, 0, "fork has no consensus validators");
         validatorId = validators[0];
 
-        forkController = new ConsensusBoundController(address(registry), address(this));
+        forkController = new ConsensusBoundController(address(this));
         forkVe = new VeMON(address(forkController), 4);
         forkController.setVe(address(forkVe));
-        vaultAddress = forkController.attachConsensusValidator(validatorId);
+        forkController.setValidatorVe(address(validatorVe));
+        vaultAddress = forkController.attachConsensusValidator(validatorVe, validatorId);
         forkVault = StakingVault(payable(vaultAddress));
 
         vm.deal(operator, FIRST_STAKE + 1 ether);

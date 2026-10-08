@@ -12,8 +12,7 @@ import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
-    function test_constructorSetsRegistryAndImplementations() public view {
-        assertEq(address(controller.registry()), address(registry));
+    function test_constructorSetsImplementations() public view {
         assertEq(controller.owner(), address(this));
         assertTrue(address(veMON) != address(controller));
         assertTrue(controller.vaultImplementation() != address(0));
@@ -30,17 +29,17 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_constructorSetsInitialCommissionImmediately() public {
-        StakingController configured = new StakingController(address(registry), address(this), commission);
+        StakingController configured = new StakingController(address(this), commission);
         assertEq(configured.commission(), commission);
     }
 
     function test_constructorRejectsCommissionAboveMaximum() public {
         vm.expectRevert(IStakingController.InvalidCommission.selector);
-        new StakingController(address(registry), address(this), 1e18 + 1);
+        new StakingController(address(this), 1e18 + 1);
     }
 
     function test_veIsOwnerSetOnce() public {
-        StakingController configured = new StakingController(address(registry), address(this), 0);
+        StakingController configured = new StakingController(address(this), 0);
         address replacement = makeAddr("replacement-ve");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, operator));
@@ -115,10 +114,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         bytes memory payload = abi.encodePacked(
             secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
         );
-        vm.prank(operator);
-        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        vm.prank(operator);
-        address vault = controller.admitValidatorRequest(requestId, saltSeed);
+        uint256 tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        address vault = validatorVe.deploy(controller, operator, tokenId, saltSeed, expectedAuthAddress);
         uint256 amount = validatorStake;
 
         vm.prank(operator);
@@ -161,10 +158,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         bytes memory payload = abi.encodePacked(
             secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
         );
-        vm.prank(operator);
-        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        vm.prank(operator);
-        address vault = controller.admitValidatorRequest(requestId, saltSeed);
+        uint256 tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        address vault = validatorVe.deploy(controller, operator, tokenId, saltSeed, expectedAuthAddress);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);
@@ -213,10 +208,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         bytes memory payload = abi.encodePacked(
             secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
         );
-        vm.prank(operator);
-        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        vm.prank(operator);
-        address vault = controller.admitValidatorRequest(requestId, saltSeed);
+        uint256 tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        address vault = validatorVe.deploy(controller, operator, tokenId, saltSeed, expectedAuthAddress);
 
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
@@ -270,10 +263,8 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         bytes memory payload = abi.encodePacked(
             secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
         );
-        vm.prank(operator);
-        uint256 requestId = registry.requestValidator(payload, secpSig, blsSig);
-        vm.prank(operator);
-        address vault = controller.admitValidatorRequest(requestId, saltSeed);
+        uint256 tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        address vault = validatorVe.deploy(controller, operator, tokenId, saltSeed, expectedAuthAddress);
 
         uint256 total = validatorStake + delegationAmount;
         vm.prank(operator);

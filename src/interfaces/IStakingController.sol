@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IValidatorRegistry} from "./IValidatorRegistry.sol";
-import {IBaseVoter} from "./IBaseVoter.sol";
-
-interface IStakingController is IBaseVoter {
+interface IStakingController {
     struct Position {
         address vault;
         address agent;
@@ -47,10 +44,9 @@ interface IStakingController is IBaseVoter {
     error StakingCycleNotAdvanced();
     error DuplicateVault();
     error InvalidValidatorRequest();
-    error InvalidValidatorRegistry();
 
     event VeSet(address indexed ve);
-    event VaultRegistered(uint256 indexed requestId, address indexed vault, address operator);
+    event VaultRegistered(uint256 indexed tokenId, address indexed vault, address operator);
     event ValidatorCommissionSet(uint256 commission);
     event ValidatorCommissionScheduled(uint256 commission, uint64 effectiveCycle);
     event MONDeposited(uint256 indexed tokenId, uint256 amount);
@@ -63,7 +59,7 @@ interface IStakingController is IBaseVoter {
     event Withdrawn(uint256 indexed tokenId, uint256 amount);
     event RewardsClaimed(uint256 indexed tokenId, uint256 amount);
 
-    function registry() external view returns (IValidatorRegistry);
+    function ve() external view returns (address);
     function vaultImplementation() external view returns (address);
     function agentImplementation() external view returns (address);
     function isValidatorActive(address vault) external view returns (bool);
@@ -75,17 +71,16 @@ interface IStakingController is IBaseVoter {
     function pendingOf(uint256 tokenId, address vault) external view returns (uint256);
 
     function setVe(address ve_) external;
+    function setValidatorVe(address veValidator_) external;
+    function registerValidatorPosition(address vault, uint256 tokenId) external;
+    function validatorVe() external view returns (address);
+    function validatorTokenIdOf(address vault) external view returns (uint256);
     function predictVaultAddress(address requester, bytes32 saltSeed) external view returns (address);
     function predictAgentAddress(uint256 tokenId) external view returns (address);
 
-    function admitValidatorRequest(uint256 requestId, bytes32 saltSeed) external returns (address vault);
-    function createValidator(
-        bytes32 saltSeed,
-        address expectedAuthAddress,
-        bytes calldata payload,
-        bytes calldata signedSecpMessage,
-        bytes calldata signedBlsMessage
-    ) external returns (uint256 requestId, address vault);
+    function deployValidatorVault(address operator, uint256 tokenId, bytes32 saltSeed, address expectedAuthAddress)
+        external
+        returns (address vault);
 
     function setCommission(uint256 commission_) external;
     function signingConfigFor(address requester, bytes32 saltSeed)
