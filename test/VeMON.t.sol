@@ -18,6 +18,7 @@ contract VeMONTest is VeMONFixture {
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
         assertEq(address(controller).balance, validatorStake);
+        assertEq(controller.veMONPrincipalOf(1), validatorStake);
         assertEq(veMON.ownerOf(1), operator);
         assertEq(veMON.balanceOf(operator), 1);
 
@@ -53,7 +54,7 @@ contract VeMONTest is VeMONFixture {
         assertEq(end, 35);
     }
 
-    function test_controllerCreditsCompoundedRewardsToLockedAmount() public {
+    function test_escrowRejectsAmountUpdateWithoutControllerPrincipalUpdate() public {
         vm.prank(operator);
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
@@ -63,11 +64,12 @@ contract VeMONTest is VeMONFixture {
 
         uint256 compoundedRewards = 20 ether;
         vm.prank(address(controller));
-        veMON.increaseAmountFromController(1, compoundedRewards);
+        vm.expectRevert(VotingEscrow.InvalidAmount.selector);
+        veMON.syncAmountFromController(1, validatorStake, validatorStake + compoundedRewards);
 
         (int128 amountAfter,,,) = veMON.locked(1);
-        assertEq(int256(amountAfter), int256(validatorStake + compoundedRewards));
-        assertEq(veMON.votingPowerOfAt(1, 4), 80_000 ether);
+        assertEq(int256(amountAfter), int256(validatorStake));
+        assertEq(controller.veMONPrincipalOf(1), validatorStake);
     }
 
     function test_onlyControllerCanCreditCompoundedRewards() public {
@@ -76,7 +78,7 @@ contract VeMONTest is VeMONFixture {
 
         vm.prank(stranger);
         vm.expectRevert(VeMON.NotController.selector);
-        veMON.increaseAmountFromController(1, 1 ether);
+        veMON.syncAmountFromController(1, validatorStake, validatorStake + 1 ether);
     }
 
     function test_createLockRejectsZeroOrMismatchedValue() public {
@@ -206,6 +208,7 @@ contract VeMONTest is VeMONFixture {
 
         assertEq(operator.balance, ownerBalanceBefore + validatorStake);
         assertEq(controller.balanceOf(1), 0);
+        assertEq(controller.veMONPrincipalOf(1), 0);
         assertEq(veMON.balanceOf(operator), 0);
     }
 

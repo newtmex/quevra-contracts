@@ -85,6 +85,9 @@ contract VeValidatorTest is VeValidatorFixture {
 
         (int128 activeAmount,,,) = veValidator.locked(validatorTokenId);
         assertEq(activeAmount, int128(uint128(validatorStake)));
+        assertEq(controller.validatorBackingOf(validatorTokenId), validatorStake);
+        assertEq(veValidator.votingPowerOf(validatorTokenId), validatorStake);
+        assertEq(veValidator.totalVotingPower(), validatorStake);
         (uint64 validatorId,,,,) = veValidator.validatorPosition(validatorTokenId);
         assertGt(validatorId, 0);
 
@@ -93,6 +96,11 @@ contract VeValidatorTest is VeValidatorFixture {
         controller.unstake(veTokenId, _one(vault), _oneAmount(validatorStake));
         (activeAmount,,,) = veValidator.locked(validatorTokenId);
         assertEq(activeAmount, 0);
+        assertEq(controller.validatorBackingOf(validatorTokenId), 0);
+        assertEq(veValidator.votingPowerOf(validatorTokenId), 0);
+        assertEq(veValidator.totalVotingPower(), 0);
+        assertEq(veValidator.votingPowerOfAt(validatorTokenId, 0), validatorStake);
+        assertEq(veValidator.votingPowerOfAt(validatorTokenId, 5), 0);
     }
 
     function test_voteDistributesLockedPrincipalAcrossValidatorGauges() public {

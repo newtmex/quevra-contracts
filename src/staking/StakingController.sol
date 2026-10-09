@@ -72,6 +72,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (ve == address(0) || msg.sender != ve) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
         balanceOf[tokenId] += msg.value;
+        veMONPrincipalOf[tokenId] += msg.value;
         emit MONDeposited(tokenId, msg.value);
     }
 
@@ -174,12 +175,12 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         // The harvested MON is now a token-specific liquid principal balance.
         balanceOf[tokenId] += amount;
+        _increaseVeMONPrincipal(tokenId, amount);
         for (uint256 i; i < vaults.length; ++i) {
             uint256 reward = vaultRewards[i];
             if (reward == 0) continue;
             _recordCompoundedReward(tokenId, vaults[i], reward);
         }
-        IVotingEscrow(ve).increaseAmountFromController(tokenId, amount);
         _poke(tokenId);
 
         emit Compounded(tokenId, amount);
@@ -434,7 +435,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 _setValidatorBacking(position.vault, StakingVault(payable(position.vault)).totalBalance());
                 _notifyVaultStakeWeights(position.vault);
             } else if (previousValidatorId != 0) {
-                _setValidatorBacking(position.vault, _activeValidatorBacking[position.vault] + toVault);
+                uint256 validatorTokenId = _validatorTokenId[position.vault];
+                _setValidatorBacking(position.vault, validatorBackingOf[validatorTokenId] + toVault);
             }
         }
 
@@ -477,7 +479,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
     function _increaseValidatorBackingById(uint64 validatorId, uint256 amount) internal {
         address vault = _vaultByValidatorId[validatorId];
-        if (vault != address(0)) _setValidatorBacking(vault, _activeValidatorBacking[vault] + amount);
+        if (vault != address(0)) {
+            uint256 tokenId = _validatorTokenId[vault];
+            _setValidatorBacking(vault, validatorBackingOf[tokenId] + amount);
+        }
     }
 
     /// @dev Withdraws matured validator proceeds and credits them to the token balance.
@@ -568,6 +573,11 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         amount += _claimTokenRewards(tokenId, _tokenRewardVaultLists[tokenId].values());
 
+        // The escrow calls this only after its finite lock expires. Its voting
+        // power has already decayed to zero, and it burns the NFT immediately
+        // after this call, so do not call back into the escrow while its
+        // withdrawal reentrancy guard is held.
+        veMONPrincipalOf[tokenId] = 0;
         balanceOf[tokenId] = 0;
         tokenId.clearVaultLists(_tokenVaultLists);
         tokenId.clearVaultLists(_tokenRewardVaultLists);
@@ -650,6 +660,13 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         tokenId.recordReward(
             vault, amount, _tokenVaultLists, _tokenRewardVaultLists, _intentVaultLists, _intentVaultIndex, intentOf
         );
+    }
+
+    function _increaseVeMONPrincipal(uint256 tokenId, uint256 amount) internal {
+        uint256 oldAmount = veMONPrincipalOf[tokenId];
+        uint256 newAmount = oldAmount + amount;
+        veMONPrincipalOf[tokenId] = newAmount;
+        IVotingEscrow(ve).syncAmountFromController(tokenId, oldAmount, newAmount);
     }
 
     // -------------------------------------------------------------------------

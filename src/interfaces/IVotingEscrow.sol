@@ -53,11 +53,9 @@ interface IVotingEscrow is IERC721Metadata {
     /// @notice Record global data to checkpoint
     function checkpoint() external;
 
-    /// @notice Increase a lock by rewards compounded from its staking position.
-    /// @dev Callable only by the configured staking controller.
-    function increaseAmountFromController(uint256 tokenId, uint256 amount) external;
-
-    function decreaseAmountFromController(uint256 tokenId, uint256 amount) external;
+    /// @notice Checkpoint a controller-owned principal change for voting power.
+    /// @dev The escrow verifies `newAmount` against the controller's canonical balance.
+    function syncAmountFromController(uint256 tokenId, uint256 oldAmount, uint256 newAmount) external;
 
     function updateBoost(uint256 tokenId, uint256 boost) external;
 

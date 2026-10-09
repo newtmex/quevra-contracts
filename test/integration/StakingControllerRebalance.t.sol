@@ -238,6 +238,8 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         (int128 secondLockedAfter,,,) = veMON.locked(2);
         assertEq(int256(firstLockedAfter), int256(firstLockedBefore) + 80 ether);
         assertEq(int256(secondLockedAfter), int256(secondLockedBefore));
+        assertEq(controller.veMONPrincipalOf(1), uint256(uint128(firstLockedAfter)));
+        assertEq(controller.veMONPrincipalOf(2), uint256(uint128(secondLockedAfter)));
         assertEq(StakingVault(payable(vaultA)).balanceOf(2), secondShare);
         assertEq(controller.allocationOf(1, vaultA), firstShare + 80 ether);
         assertEq(controller.allocationOf(2, vaultA), secondShare);

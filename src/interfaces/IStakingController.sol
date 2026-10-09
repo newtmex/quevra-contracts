@@ -64,6 +64,10 @@ interface IStakingController {
     function agentImplementation() external view returns (address);
     function isValidatorActive(address vault) external view returns (bool);
     function balanceOf(uint256 tokenId) external view returns (uint256);
+    /// @notice Canonical locked principal for a veMON position, including staked MON.
+    function veMONPrincipalOf(uint256 tokenId) external view returns (uint256);
+    /// @notice Canonical active backing for a veValidator position.
+    function validatorBackingOf(uint256 tokenId) external view returns (uint256);
     function stakingCycleOf(uint256 tokenId) external view returns (uint64);
     function intentOf(uint256 tokenId, address vault) external view returns (uint256);
     function agentByToken(uint256 tokenId) external view returns (address);

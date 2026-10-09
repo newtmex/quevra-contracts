@@ -42,37 +42,47 @@ contract VeMON is VotingEscrow {
 
         tokenId = nextId++;
         _deposit(value, tokenId);
-        IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(value.toInt128(), unlockEpoch, false, 0);
-        _locked[tokenId] = newLock;
-        _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
-        emit LockCreated(tokenId, msg.sender, value, unlockEpoch);
+        _lockData[tokenId] = LockData(unlockEpoch, false, 0);
+        int128 principal = _amountOf(tokenId);
+        if (principal.toUint256() != value) revert InvalidValue();
+        _checkpointLock(
+            tokenId,
+            IVotingEscrow.LockedBalance(0, 0, false, 0),
+            IVotingEscrow.LockedBalance(principal, unlockEpoch, false, 0)
+        );
+        emit LockCreated(tokenId, msg.sender, principal.toUint256(), unlockEpoch);
         _safeMint(msg.sender, tokenId);
     }
 
     function lockPermanent(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
-        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        uint256 amount = uint256(uint128(_amountOf(tokenId)));
+        LockData memory oldData = _lockData[tokenId];
+        IVotingEscrow.LockedBalance memory oldLock =
+            IVotingEscrow.LockedBalance(int128(uint128(amount)), oldData.end, oldData.isPermanent, oldData.boost);
         if (oldLock.isPermanent) revert PermanentLock();
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
         if (oldLock.end <= currentEpoch) revert LockExpired();
 
         IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(oldLock.amount, 0, true, oldLock.boost);
+        _lockData[tokenId] = LockData(0, true, oldData.boost);
         _checkpointLock(tokenId, oldLock, newLock);
-        _locked[tokenId] = newLock;
         emit LockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
 
     function unlockPermanent(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
-        IVotingEscrow.LockedBalance memory oldLock = _locked[tokenId];
+        uint256 amount = uint256(uint128(_amountOf(tokenId)));
+        LockData memory oldData = _lockData[tokenId];
+        IVotingEscrow.LockedBalance memory oldLock =
+            IVotingEscrow.LockedBalance(int128(uint128(amount)), oldData.end, oldData.isPermanent, oldData.boost);
         if (!oldLock.isPermanent) revert NotPermanentLock();
 
         uint64 currentEpoch = _currentEpoch();
         IVotingEscrow.LockedBalance memory newLock =
             IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles), false, oldLock.boost);
+        _lockData[tokenId] = LockData(newLock.end, false, oldData.boost);
         _checkpointLock(tokenId, oldLock, newLock);
-        _locked[tokenId] = newLock;
         emit UnlockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
 
@@ -86,10 +96,10 @@ contract VeMON is VotingEscrow {
     function withdraw(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
 
-        if (_locked[tokenId].isPermanent) revert PermanentLock();
+        if (_lockData[tokenId].isPermanent) revert PermanentLock();
 
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
-        if (_locked[tokenId].end > currentEpoch) revert LockNotExpired();
+        if (_lockData[tokenId].end > currentEpoch) revert LockNotExpired();
 
         // Withdrawal proceeds are forwarded to the controller and do not need to be read here.
         // forge-lint: disable-next-line(unused-return)
@@ -99,6 +109,10 @@ contract VeMON is VotingEscrow {
 
     function _requireController() internal view override {
         if (msg.sender != controller) revert NotController();
+    }
+
+    function _amountOf(uint256 tokenId) internal view override returns (int128) {
+        return uint256(IStakingController(controller).veMONPrincipalOf(tokenId)).toInt128();
     }
 
     function _requireApprovedOrOwner(address account, uint256 tokenId) internal view {

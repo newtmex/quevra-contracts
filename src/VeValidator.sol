@@ -96,25 +96,6 @@ contract VeValidator is VotingEscrow, IVeValidator {
         revert ValidatorTokenNonTransferable();
     }
 
-    function increaseAmountFromController(uint256 tokenId, uint256 amount) external override nonReentrant {
-        _requireController();
-        if (_ownerOf(tokenId) == address(0) || amount == 0) revert InvalidValidatorPosition();
-        uint256 oldAmount = _locked[tokenId].amount.toUint256();
-        uint256 newAmount = oldAmount + amount;
-        _locked[tokenId].amount = newAmount.toInt128();
-        emit LockAmountIncreased(tokenId, amount, newAmount);
-    }
-
-    function decreaseAmountFromController(uint256 tokenId, uint256 amount) external override nonReentrant {
-        _requireController();
-        if (_ownerOf(tokenId) == address(0) || amount == 0) revert InvalidValidatorPosition();
-        uint256 oldAmount = _locked[tokenId].amount.toUint256();
-        if (amount > oldAmount) revert InvalidValidatorPosition();
-        uint256 newAmount = oldAmount - amount;
-        _locked[tokenId].amount = newAmount.toInt128();
-        emit LockAmountDecreased(tokenId, amount, newAmount);
-    }
-
     function setValidatorIdFromController(uint256 tokenId, uint64 validatorId) external override {
         _requireController();
         ValidatorPosition storage position = validatorPosition[tokenId];
@@ -128,12 +109,16 @@ contract VeValidator is VotingEscrow, IVeValidator {
         if (msg.sender != address(controller)) revert NotController();
     }
 
+    function _amountOf(uint256 tokenId) internal view override returns (int128) {
+        return controller.validatorBackingOf(tokenId).toInt128();
+    }
+
     function _mintPermanentPosition(address to) internal returns (uint256 tokenId) {
         if (to == address(0)) revert InvalidValidatorPosition();
         tokenId = nextId++;
         IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(0, 0, true, 0);
         _checkpointLock(tokenId, IVotingEscrow.LockedBalance(0, 0, false, 0), newLock);
-        _locked[tokenId] = newLock;
+        _lockData[tokenId] = LockData(0, true, 0);
         _safeMint(to, tokenId);
     }
 

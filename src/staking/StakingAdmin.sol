@@ -25,7 +25,8 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
     mapping(address => bool) internal _isVault;
     mapping(address => bool) internal _isAgent;
     mapping(address vault => uint256 tokenId) internal _validatorTokenId;
-    mapping(address vault => uint256 amount) internal _activeValidatorBacking;
+    mapping(uint256 tokenId => uint256 amount) public override validatorBackingOf;
+    mapping(uint256 tokenId => uint256 amount) public override veMONPrincipalOf;
     mapping(uint64 validatorId => address vault) internal _vaultByValidatorId;
     uint256 internal _commission;
     uint256 internal _pendingCommission;
@@ -75,15 +76,11 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
     }
 
     function _setValidatorBacking(address vault, uint256 backing) internal {
-        uint256 current = _activeValidatorBacking[vault];
         uint256 tokenId = _validatorTokenId[vault];
         if (tokenId == 0 || validatorVe == address(0)) return;
-        if (backing > current) {
-            IVotingEscrow(validatorVe).increaseAmountFromController(tokenId, backing - current);
-        } else if (current > backing) {
-            IVotingEscrow(validatorVe).decreaseAmountFromController(tokenId, current - backing);
-        }
-        _activeValidatorBacking[vault] = backing;
+        uint256 current = validatorBackingOf[tokenId];
+        validatorBackingOf[tokenId] = backing;
+        if (current != backing) IVotingEscrow(validatorVe).syncAmountFromController(tokenId, current, backing);
     }
 
     function _setValidatorId(address vault, uint64 validatorId) internal {
@@ -93,7 +90,8 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
     }
 
     function _decreaseValidatorBacking(address vault, uint256 amount) internal {
-        uint256 current = _activeValidatorBacking[vault];
+        uint256 tokenId = _validatorTokenId[vault];
+        uint256 current = tokenId == 0 ? 0 : validatorBackingOf[tokenId];
         _setValidatorBacking(vault, amount >= current ? 0 : current - amount);
     }
 
