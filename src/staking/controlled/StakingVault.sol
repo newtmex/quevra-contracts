@@ -136,18 +136,31 @@ contract StakingVault is StakeControlled {
         if (balanceOf[tokenId] == 0) _tokenIds.remove(tokenId);
     }
 
-    /// @notice Finalize a matured withdrawal and return this token's share.
-    function withdraw(uint256 tokenId) external onlyController returns (uint256 amount) {
-        amount = pendingWithdrawal[tokenId];
+    /// @notice Return liquid pre-activation funds or finalize a matured validator withdrawal.
+    /// @dev For unregistered validators, the amount is returned from the vault's
+    ///      liquid balance. Registered validator withdrawals use the matured
+    ///      precompile withdrawal request.
+    function withdraw(uint256 tokenId, uint256 amount) external onlyController returns (uint256) {
         if (amount == 0) revert InvalidAmount();
 
-        if (availableBalance() - rewardReserve < amount) {
-            if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
+        if (validatorId == 0) {
+            if (balanceOf[tokenId] < amount) revert InvalidAmount();
+            if (availableBalance() < totalBalance + rewardReserve) revert InvalidAmount();
+
+            balanceOf[tokenId] -= amount;
+            totalBalance -= amount;
+            if (balanceOf[tokenId] == 0) _tokenIds.remove(tokenId);
+        } else {
+            if (pendingWithdrawal[tokenId] != amount) revert InvalidAmount();
+            if (availableBalance() - rewardReserve < amount) {
+                if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) return 0;
+            }
+            delete pendingWithdrawal[tokenId];
         }
-        delete pendingWithdrawal[tokenId];
 
         (bool success,) = payable(controller).call{value: amount}("");
         if (!success) revert TransferFailed();
+        return amount;
     }
 
     /// @notice Claim a single veMON position's accrued MON rewards.

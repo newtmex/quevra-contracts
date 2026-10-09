@@ -70,6 +70,28 @@ contract StakingVaultTest is StakingVaultFixture {
         assertEq(vault.validatorId(), 0);
     }
 
+    function test_withdrawRequiresControllerAndValidUnactivatedAmount() public {
+        uint256 amount = 10_000 ether;
+        vm.prank(owner);
+        vault.deposit{value: amount}(1);
+
+        vm.prank(stranger);
+        vm.expectRevert(StakeControlled.OnlyController.selector);
+        vault.withdraw(1, amount);
+
+        vm.prank(owner);
+        vm.expectRevert(StakingVault.InvalidAmount.selector);
+        vault.withdraw(1, amount + 1);
+    }
+
+    function test_withdrawRejectsRegisteredValidatorWithoutPendingAmount() public {
+        _addVaultValidator();
+
+        vm.prank(owner);
+        vm.expectRevert(StakingVault.InvalidAmount.selector);
+        vault.withdraw(0, validatorStake);
+    }
+
     function test_depositUndelegateWithdrawReturnsTokenValueToController() public {
         uint256 tokenId = 7;
         uint256 amount = validatorStake;
@@ -94,7 +116,7 @@ contract StakingVaultTest is StakingVaultFixture {
         uint256 beforeBalance = owner.balance;
 
         vm.prank(owner);
-        uint256 withdrawn = vault.withdraw(tokenId);
+        uint256 withdrawn = vault.withdraw(tokenId, amount);
 
         assertEq(withdrawn, amount);
         assertEq(vault.pendingWithdrawal(tokenId), 0);

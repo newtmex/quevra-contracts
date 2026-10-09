@@ -108,6 +108,83 @@ contract StakingControllerTest is StakingControllerFixture {
 }
 
 contract StakingControllerUnstakeTest is StakingControllerFixture {
+    function test_unstakeReturnsFundsFromVaultBeforeValidatorActivation() public {
+        uint256 amount = 50_000 ether;
+        bytes32 saltSeed = keccak256("underfunded-validator");
+        address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
+        bytes memory payload = abi.encodePacked(
+            secpPubkey, blsPubkey, bytes20(expectedAuthAddress), bytes32(validatorStake), bytes32(commission)
+        );
+        uint256 validatorTokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
+        address vault = validatorVe.deploy(controller, operator, validatorTokenId, saltSeed, expectedAuthAddress);
+
+        vm.prank(operator);
+        veMON.createLock{value: amount}(amount, lockDuration);
+        vm.prank(operator);
+        controller.stake(1, _oneVault(vault), _oneAmount(amount));
+
+        assertEq(StakingVault(payable(vault)).validatorId(), 0);
+        assertEq(StakingVault(payable(vault)).balanceOf(1), amount);
+        assertEq(controller.balanceOf(1), 0);
+
+        _setEpoch(5, false);
+        vm.prank(operator);
+        controller.unstake(1, _oneVault(vault), _oneAmount(amount));
+
+        assertEq(StakingVault(payable(vault)).balanceOf(1), 0);
+        assertEq(StakingVault(payable(vault)).totalBalance(), 0);
+        assertEq(controller.balanceOf(1), amount);
+        assertEq(controller.allocationOf(1, vault), 0);
+
+        _setEpochAfterLockExpiry(1, 0);
+        uint256 ownerBalanceBefore = operator.balance;
+        vm.prank(operator);
+        veMON.withdraw(1);
+        assertEq(operator.balance, ownerBalanceBefore + amount);
+    }
+
+    function test_pokeReallocatesFundsFromVaultBeforeValidatorActivation() public {
+        uint256 preActivationAmount = 50_000 ether;
+        bytes32 saltA = keccak256("underfunded-rebalance-a");
+        bytes32 saltB = keccak256("underfunded-rebalance-b");
+        address authA = controller.predictVaultAddress(operator, saltA);
+        address authB = controller.predictVaultAddress(operator, saltB);
+        bytes memory payloadA =
+            abi.encodePacked(secpPubkey, blsPubkey, bytes20(authA), bytes32(validatorStake), bytes32(commission));
+        bytes memory payloadB =
+            abi.encodePacked(secpPubkey, blsPubkey, bytes20(authB), bytes32(validatorStake), bytes32(commission));
+        uint256 validatorTokenA = validatorVe.registerNew(operator, payloadA, secpSig, blsSig);
+        uint256 validatorTokenB = validatorVe.registerNew(operator, payloadB, secpSig, blsSig);
+        address vaultA = validatorVe.deploy(controller, operator, validatorTokenA, saltA, authA);
+        address vaultB = validatorVe.deploy(controller, operator, validatorTokenB, saltB, authB);
+
+        vm.prank(operator);
+        veMON.createLock{value: preActivationAmount}(preActivationAmount, lockDuration);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(operator);
+        controller.stake(1, _oneVault(vaultA), _oneAmount(preActivationAmount));
+        vm.prank(operator);
+        controller.stake(2, _oneVault(vaultB), _oneAmount(validatorStake));
+
+        assertEq(StakingVault(payable(vaultA)).validatorId(), 0);
+        assertGt(StakingVault(payable(vaultB)).validatorId(), 0);
+
+        _setEpoch(5, false);
+        vm.prank(operator);
+        controller.stake(1, _oneVault(vaultB), _oneAmount(preActivationAmount));
+
+        assertEq(StakingVault(payable(vaultA)).balanceOf(1), 0);
+        assertEq(StakingVault(payable(vaultA)).totalBalance(), 0);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(controller.allocationOf(1, vaultA), 0);
+        assertEq(controller.allocationOf(1, vaultB), preActivationAmount);
+        assertEq(
+            StakingAgent(payable(controller.agentByToken(1))).balanceOf(StakingVault(payable(vaultB)).validatorId()),
+            preActivationAmount
+        );
+    }
+
     function test_stakeThenUnstakeAndWithdrawRestoresMONWithoutMocks() public {
         bytes32 saltSeed = keccak256("validator-0");
         address expectedAuthAddress = controller.predictVaultAddress(operator, saltSeed);
@@ -323,5 +400,15 @@ contract StakingControllerUnstakeTest is StakingControllerFixture {
         uint64 targetEpoch = withdrawalEpoch + 1;
         if (lockEnd > targetEpoch) targetEpoch = uint64(lockEnd);
         _setEpoch(targetEpoch, false);
+    }
+
+    function _oneVault(address vault) internal pure returns (address[] memory vaults) {
+        vaults = new address[](1);
+        vaults[0] = vault;
+    }
+
+    function _oneAmount(uint256 amount) internal pure returns (uint256[] memory amounts) {
+        amounts = new uint256[](1);
+        amounts[0] = amount;
     }
 }

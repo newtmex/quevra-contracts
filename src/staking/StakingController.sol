@@ -210,7 +210,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             if (!_isVault[vault]) revert InvalidVault();
             if (_pendingOf(tokenId, vault) != 0) _withdraw(tokenId, vault);
             tokenId.rememberVault(vault, _tokenVaultLists, _tokenRewardVaultLists);
-            _undelegate(tokenId, vault, amounts[i]);
+            balanceOf[tokenId] += _undelegate(tokenId, vault, amounts[i]);
             tokenId.reduceIntent(vault, amounts[i], intentOf);
             _syncStakeAllocation(tokenId, vault);
         }
@@ -315,14 +315,16 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 current = position.vaultAllocation + position.agentAllocation;
         uint256 target = intentOf[tokenId][vault];
         if (current > target) {
-            // A new withdrawal is not liquid until a later poke.
+            // Registered validator withdrawals become liquid on a later poke.
             if (position.validatorId == 0) {
                 position.validatorId = StakingVault(payable(position.vault)).validatorId();
             }
-            _tryUndelegate(tokenId, position, current - target);
-            uint256 currentAfterUndelegate = _allocationOf(tokenId, vault);
-            if (current > currentAfterUndelegate) {}
-            return false;
+            (bool success, uint256 reclaimed) = _tryUndelegate(tokenId, position, current - target);
+            batch.liquid += reclaimed;
+            if (!success || _pendingOf(tokenId, vault) != 0) return false;
+
+            current = _allocationOf(tokenId, vault);
+            if (current > target) return false;
         }
 
         satisfied = true;
@@ -381,29 +383,46 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // Internal position movement and withdrawal settlement
     // -------------------------------------------------------------------------
 
-    function _tryUndelegate(uint256 tokenId, Position memory position, uint256 amount) internal returns (bool success) {
-        if (amount == 0) return true;
+    function _tryUndelegate(uint256 tokenId, Position memory position, uint256 amount)
+        internal
+        returns (bool success, uint256 reclaimed)
+    {
+        if (amount == 0) {
+            success = true;
+            return (success, reclaimed);
+        }
 
-        uint256 agentAmount = position.agent == address(0) || position.validatorId == 0 ? 0 : position.agentAllocation;
+        if (position.validatorId == 0) {
+            if (position.vaultAllocation < amount) return (success, reclaimed);
+            reclaimed = StakingVault(payable(position.vault)).withdraw(tokenId, amount);
+            success = reclaimed == amount;
+            return (success, reclaimed);
+        }
+
+        uint256 agentAmount = position.agent == address(0) ? 0 : position.agentAllocation;
         uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
 
         if (fromAgent != 0) {
             try StakingAgent(payable(position.agent)).undelegate(position.validatorId, fromAgent) {}
             catch {
-                return false;
+                return (success, reclaimed);
             }
             _decreaseValidatorBacking(position.vault, fromAgent);
         }
 
         uint256 fromVault = amount - fromAgent;
-        if (fromVault == 0) return true;
-        if (position.vaultAllocation < fromVault) return false;
+        if (fromVault == 0) {
+            success = true;
+            return (success, reclaimed);
+        }
+        if (position.vaultAllocation < fromVault) return (success, reclaimed);
         try StakingVault(payable(position.vault)).undelegate(tokenId, fromVault) {}
         catch {
-            return false;
+            return (success, reclaimed);
         }
         _decreaseValidatorBacking(position.vault, fromVault);
-        return true;
+        success = true;
+        return (success, reclaimed);
     }
 
     /// @dev Routes a token's allocation through its validator vault first, then
@@ -448,11 +467,15 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     /// @dev Undelegates from the token-bound agent first, then from the
     ///      validator vault. The caller must validate the amount, vault, and
     ///      any existing pending withdrawal before calling this function.
-    function _undelegate(uint256 tokenId, address vault, uint256 amount) internal {
+    function _undelegate(uint256 tokenId, address vault, uint256 amount) internal returns (uint256 reclaimed) {
         uint64 validatorId = StakingVault(payable(vault)).validatorId();
         address agent = agentByToken[tokenId];
-        uint256 agentAmount =
-            agent == address(0) || validatorId == 0 ? 0 : StakingAgent(payable(agent)).balanceOf(validatorId);
+        if (validatorId == 0) {
+            if (StakingVault(payable(vault)).balanceOf(tokenId) < amount) revert InvalidUnstakeAmount();
+            return StakingVault(payable(vault)).withdraw(tokenId, amount);
+        }
+
+        uint256 agentAmount = agent == address(0) ? 0 : StakingAgent(payable(agent)).balanceOf(validatorId);
         uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
         if (fromAgent != 0) {
             StakingAgent(payable(agent)).undelegate(validatorId, fromAgent);
@@ -490,7 +513,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         uint256 beforeBalance = address(this).balance;
         complete = true;
         if (position.vaultPending != 0) {
-            if (StakingVault(payable(position.vault)).withdraw(tokenId) == 0) complete = false;
+            if (StakingVault(payable(position.vault)).withdraw(tokenId, position.vaultPending) == 0) complete = false;
         }
         if (position.agentPending != 0) {
             try StakingAgent(payable(position.agent)).withdraw(position.validatorId) {}
