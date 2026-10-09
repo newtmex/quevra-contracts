@@ -97,7 +97,7 @@ interface IStakingController {
     function stake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts) external;
     function poke(uint256 tokenId) external returns (bool satisfied);
     function unstake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts) external;
-    function compound(uint256 tokenId) external returns (uint256 amount);
+    function compound(uint256 tokenId, address[] calldata vaults) external returns (uint256 amount);
     function withdraw(uint256 tokenId) external returns (uint256 amount);
     function isFullyUnstaked(uint256 tokenId) external view returns (bool);
     function claimRewards(uint256 tokenId, address[] calldata vaults) external;

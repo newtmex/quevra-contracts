@@ -111,7 +111,7 @@ contract ForkNativeRewardsTest is VeValidatorFixture {
     function _compoundAndClaimRewards() private {
         uint256 firstBalance = operator.balance;
         vm.prank(operator);
-        uint256 compounded = forkController.compound(1);
+        uint256 compounded = forkController.compound(1, _oneVault(vaultAddress));
         assertEq(compounded, expectedCompound);
         assertEq(operator.balance, firstBalance);
         (int128 lockedAfterCompound,,,) = forkVe.locked(1);

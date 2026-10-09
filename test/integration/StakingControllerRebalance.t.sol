@@ -80,7 +80,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         (int128 amountBeforeCompound,,,) = veMON.locked(1);
         assertEq(int256(amountBeforeCompound), int256(lockedAmount));
         vm.prank(operator);
-        uint256 compounded = controller.compound(1);
+        uint256 compounded = controller.compound(1, vaults);
 
         assertEq(compounded, 0);
         _assertBacking(lockedAmount);
@@ -158,7 +158,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         _setEpoch(30, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 6);
         vm.prank(operator);
-        uint256 firstCompound = controller.compound(1);
+        uint256 firstCompound = controller.compound(1, vaults);
         assertEq(firstCompound, 0);
         lockedAmount += firstCompound;
         _assertBacking(lockedAmount);
@@ -174,7 +174,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         _setEpoch(40, false);
         assertEq(ProtocolTimeLibrary.currentCycle(), 8);
         vm.prank(operator);
-        uint256 secondCompound = controller.compound(1);
+        uint256 secondCompound = controller.compound(1, vaults);
         assertEq(secondCompound, 0);
         lockedAmount += secondCompound;
         _assertBacking(lockedAmount);
@@ -233,7 +233,7 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         (int128 firstLockedBefore,,,) = veMON.locked(1);
         (int128 secondLockedBefore,,,) = veMON.locked(2);
         vm.prank(operator);
-        assertEq(controller.compound(1), 80 ether);
+        assertEq(controller.compound(1, _singleVault(vaultA)), 80 ether);
         (int128 firstLockedAfter,,,) = veMON.locked(1);
         (int128 secondLockedAfter,,,) = veMON.locked(2);
         assertEq(int256(firstLockedAfter), int256(firstLockedBefore) + 80 ether);
@@ -249,6 +249,68 @@ contract StakingControllerRebalanceIntegrationTest is StakingControllerFixture {
         vm.prank(stranger);
         controller.claimRewards(2, _singleVault(vaultA));
         assertEq(stranger.balance - strangerBalanceBefore, 20 ether);
+    }
+
+    function test_compoundSelectsVaultsAndLeavesOtherRewardsClaimable() public {
+        vaultA = _deployValidator(keccak256("selective-compound-a"), 1);
+        vaultB = _deployValidator(keccak256("selective-compound-b"), 2);
+        vaultC = _deployValidator(keccak256("selective-compound-not-participant"), 3);
+
+        uint256 initialPerVault = 100_000 ether;
+        uint256 lockedAmount = 2 * initialPerVault;
+        vm.prank(operator);
+        veMON.createLock{value: lockedAmount}(lockedAmount, lockDuration);
+        address[] memory participantVaults = new address[](2);
+        participantVaults[0] = vaultA;
+        participantVaults[1] = vaultB;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = initialPerVault;
+        amounts[1] = initialPerVault;
+        vm.prank(operator);
+        controller.stake(1, participantVaults, amounts);
+
+        address[] memory duplicateVaults = new address[](2);
+        duplicateVaults[0] = vaultA;
+        duplicateVaults[1] = vaultA;
+        vm.prank(operator);
+        vm.expectRevert(IStakingController.DuplicateVault.selector);
+        controller.compound(1, duplicateVaults);
+        vm.prank(operator);
+        vm.expectRevert(IStakingController.NotVaultParticipant.selector);
+        controller.compound(1, _singleVault(vaultC));
+        vm.prank(stranger);
+        vm.expectRevert(IStakingController.NotTokenOwner.selector);
+        controller.compound(1, _singleVault(vaultA));
+        vm.prank(operator);
+        vm.expectRevert(IStakingController.EmptyArray.selector);
+        controller.compound(1, new address[](0));
+
+        uint64 validatorIdA_ = StakingVault(payable(vaultA)).validatorId();
+        uint64 validatorIdB_ = StakingVault(payable(vaultB)).validatorId();
+        uint256 rewardA = 10 ether;
+        uint256 rewardB = 20 ether;
+        vm.deal(vaultA, rewardA);
+        vm.deal(vaultB, rewardB);
+        _mockVaultRewards(vaultA, validatorIdA_, rewardA);
+        _mockVaultRewards(vaultB, validatorIdB_, rewardB);
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.claimRewards, (validatorIdA_)), abi.encode(true));
+        vm.mockCall(address(staking), abi.encodeCall(IMonadStaking.claimRewards, (validatorIdB_)), abi.encode(true));
+
+        uint256 ownerBalanceBefore = operator.balance;
+        vm.prank(operator);
+        assertEq(controller.compound(1, _singleVault(vaultA)), rewardA);
+        assertEq(operator.balance, ownerBalanceBefore);
+        assertEq(controller.allocationOf(1, vaultA), initialPerVault + rewardA);
+        assertEq(controller.allocationOf(1, vaultB), initialPerVault);
+        (int128 lockedAmountAfter,,,) = veMON.locked(1);
+        assertEq(uint256(uint128(lockedAmountAfter)), lockedAmount + rewardA);
+
+        vm.prank(operator);
+        controller.claimRewards(1, _singleVault(vaultB));
+        assertEq(operator.balance, ownerBalanceBefore + rewardB);
+        assertEq(controller.allocationOf(1, vaultB), initialPerVault);
+        (lockedAmountAfter,,,) = veMON.locked(1);
+        assertEq(uint256(uint128(lockedAmountAfter)), lockedAmount + rewardA);
     }
 
     function test_lateVaultDepositDoesNotSharePreviouslyAccruedRewards() public {

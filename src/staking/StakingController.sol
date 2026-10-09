@@ -126,11 +126,16 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
     }
 
-    /// @notice Compound only this token's accrued vault and agent rewards.
-    function compound(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+    /// @notice Compound only this token's accrued rewards from selected vaults.
+    function compound(uint256 tokenId, address[] calldata vaults)
+        external
+        override
+        nonReentrant
+        returns (uint256 amount)
+    {
         _requireTokenOwner(tokenId);
-        address[] memory vaults = _tokenRewardVaultLists[tokenId].values();
         if (vaults.length == 0) revert EmptyArray();
+        _validateRewardVaults(tokenId, vaults);
 
         uint256 beforeBalance = address(this).balance;
         uint256[] memory vaultRewards = new uint256[](vaults.length);
@@ -141,8 +146,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
-            if (!_isVault[vault]) revert InvalidVault();
-
             StakingVault vaultContract = StakingVault(payable(vault));
             uint64 validatorId = vaultContract.validatorId();
             if (validatorId == 0) continue;
@@ -590,17 +593,10 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     function _claimTokenRewardsToOwner(uint256 tokenId, address[] calldata vaults) internal {
         address tokenOwner = IVotingEscrow(_ve()).ownerOf(tokenId);
         if (tokenOwner != msg.sender) revert NotTokenOwner();
+        _validateRewardVaults(tokenId, vaults);
         uint256 beforeBalance = address(this).balance;
         for (uint256 i; i < vaults.length; ++i) {
             address vault = vaults[i];
-            if (!_isVault[vault]) revert InvalidVault();
-            for (uint256 j; j < i; ++j) {
-                if (vaults[j] == vault) revert DuplicateVault();
-            }
-
-            if (!_tokenRewardVaultLists[tokenId].contains(vault)) {
-                revert NotVaultParticipant();
-            }
             _claimVaultRewards(tokenId, vault);
         }
 
@@ -611,6 +607,17 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         }
         _pruneTokenRewardVaultLists(tokenId, vaults);
         emit RewardsClaimed(tokenId, amount);
+    }
+
+    function _validateRewardVaults(uint256 tokenId, address[] calldata vaults) internal view {
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            if (!_isVault[vault]) revert InvalidVault();
+            for (uint256 j; j < i; ++j) {
+                if (vaults[j] == vault) revert DuplicateVault();
+            }
+            if (!_tokenRewardVaultLists[tokenId].contains(vault)) revert NotVaultParticipant();
+        }
     }
 
     // -------------------------------------------------------------------------
