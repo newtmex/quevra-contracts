@@ -26,8 +26,6 @@ contract VeValidator is VotingEscrow, IVeValidator {
         address bribeVotingRewards;
     }
 
-    IStakingController public immutable controller;
-    IValidatorsVoter public immutable validatorsVoter;
     address public immutable gaugeRewardToken;
 
     mapping(uint256 tokenId => ValidatorPosition) public override validatorPosition;
@@ -35,19 +33,16 @@ contract VeValidator is VotingEscrow, IVeValidator {
     mapping(uint256 tokenId => IVeValidator.ValidatorSubmission) private _validatorSubmissions;
 
     error InvalidAddress();
-    error NotController();
     error ValidatorTokenNonTransferable();
     error ValidatorPositionExists();
     error InvalidValidatorPosition();
 
     constructor(address controller_, address validatorsVoter_, address gaugeRewardToken_, uint64 maxLockCycles_)
-        VotingEscrow(maxLockCycles_, "Validator", "veValidator")
+        VotingEscrow(maxLockCycles_, "Validator", "veValidator", controller_, validatorsVoter_)
     {
         if (controller_ == address(0) || validatorsVoter_ == address(0) || gaugeRewardToken_ == address(0)) {
             revert InvalidAddress();
         }
-        controller = IStakingController(controller_);
-        validatorsVoter = IValidatorsVoter(validatorsVoter_);
         gaugeRewardToken = gaugeRewardToken_;
     }
 
@@ -62,9 +57,10 @@ contract VeValidator is VotingEscrow, IVeValidator {
         tokenId = _mintPermanentPosition(operator);
         _validatorSubmissions[tokenId] =
             IVeValidator.ValidatorSubmission(payload, signedSecpMessage, signedBlsMessage, operator, false, 0);
-        address vault = controller.deployValidatorVault(operator, tokenId, saltSeed, expectedAuthAddress);
-        address gauge = validatorsVoter.createBoostGauge(tokenId, gaugeRewardToken, vault);
-        address bribe = validatorsVoter.gaugeToBribe(gauge);
+        address vault =
+            IStakingController(controller).deployValidatorVault(operator, tokenId, saltSeed, expectedAuthAddress);
+        address gauge = IValidatorsVoter(voter).createBoostGauge(tokenId, gaugeRewardToken, vault);
+        address bribe = IValidatorsVoter(voter).gaugeToBribe(gauge);
         _register(tokenId, operator, vault, gauge, bribe);
     }
 
@@ -76,11 +72,12 @@ contract VeValidator is VotingEscrow, IVeValidator {
         address operator = msg.sender;
         tokenId = _mintPermanentPosition(operator);
         _validatorSubmissions[tokenId] = IVeValidator.ValidatorSubmission("", "", "", operator, true, validatorId);
-        address vault = controller.deployValidatorVault(
-            operator, tokenId, saltSeed, controller.predictVaultAddress(operator, saltSeed)
-        );
-        address gauge = validatorsVoter.createBoostGauge(tokenId, gaugeRewardToken, vault);
-        address bribe = validatorsVoter.gaugeToBribe(gauge);
+        address vault = IStakingController(controller)
+            .deployValidatorVault(
+                operator, tokenId, saltSeed, IStakingController(controller).predictVaultAddress(operator, saltSeed)
+            );
+        address gauge = IValidatorsVoter(voter).createBoostGauge(tokenId, gaugeRewardToken, vault);
+        address bribe = IValidatorsVoter(voter).gaugeToBribe(gauge);
         _register(tokenId, operator, vault, gauge, bribe);
     }
 
@@ -105,12 +102,8 @@ contract VeValidator is VotingEscrow, IVeValidator {
         position.validatorId = validatorId;
     }
 
-    function _requireController() internal view override {
-        if (msg.sender != address(controller)) revert NotController();
-    }
-
     function _amountOf(uint256 tokenId) internal view override returns (int128) {
-        return controller.validatorBackingOf(tokenId).toInt128();
+        return IStakingController(controller).validatorBackingOf(tokenId).toInt128();
     }
 
     function _mintPermanentPosition(address to) internal returns (uint256 tokenId) {
@@ -135,6 +128,6 @@ contract VeValidator is VotingEscrow, IVeValidator {
         validatorPosition[tokenId] =
             ValidatorPosition(_validatorSubmissions[tokenId].validatorId, operator, vault, gauge, bribe);
         tokenIdForVault[vault] = tokenId;
-        controller.registerValidatorPosition(vault, tokenId);
+        IStakingController(controller).registerValidatorPosition(vault, tokenId);
     }
 }

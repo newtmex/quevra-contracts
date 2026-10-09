@@ -7,6 +7,7 @@ import {BaseTest} from "./BaseTest.sol";
 
 contract TestValidatorVe is IVeValidator {
     uint256 public nextTokenId = 1;
+    address public voter;
     mapping(uint256 tokenId => ValidatorSubmission) private _submissions;
 
     function registerNew(address operator, bytes calldata payload, bytes calldata secp, bytes calldata bls)

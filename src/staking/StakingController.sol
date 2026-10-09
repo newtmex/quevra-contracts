@@ -5,7 +5,6 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
-import {IVeMON} from "../interfaces/IVeMON.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
@@ -296,15 +295,15 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     }
 
     function _notifyStakeWeight(uint256 tokenId, address vault) internal {
-        if (ve == address(0)) return;
-        address voter = IVeMON(ve).booster();
+        if (validatorVe == address(0)) return;
+        address voter = IVotingEscrow(validatorVe).voter();
         if (voter == address(0)) return;
         IValidatorsVoter(voter).syncStakeWeight(tokenId, vault);
     }
 
     function _notifyVaultStakeWeights(address vault) internal {
-        if (ve == address(0)) return;
-        address voter = IVeMON(ve).booster();
+        if (validatorVe == address(0)) return;
+        address voter = IVotingEscrow(validatorVe).voter();
         if (voter == address(0)) return;
         uint256[] memory tokenIds = StakingVault(payable(vault)).tokenIds();
         for (uint256 i; i < tokenIds.length; ++i) {

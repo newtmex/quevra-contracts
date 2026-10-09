@@ -5,6 +5,7 @@ import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {ValidatorsVoter} from "../src/voting/ValidatorsVoter.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
+import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
 import {VeMON} from "../src/VeMON.sol";
 import {VeValidator} from "../src/VeValidator.sol";
 import {VeValidatorFixture} from "./fixtures/VeValidatorFixture.sol";
@@ -23,7 +24,6 @@ contract VeValidatorTest is VeValidatorFixture {
         controller.setVe(address(veMON));
 
         validatorsVoter = new ValidatorsVoter(address(veMON), address(0), address(this));
-        controller.setBooster(address(validatorsVoter));
         gaugeRewardToken = new ERC20Mock();
         veValidator = new VeValidator(address(controller), address(validatorsVoter), address(gaugeRewardToken), 4);
         validatorsVoter.setBoostableVe(address(veValidator));
@@ -68,6 +68,30 @@ contract VeValidatorTest is VeValidatorFixture {
         vm.prank(operator);
         vm.expectRevert(VeValidator.ValidatorTokenNonTransferable.selector);
         veValidator.approve(stranger, tokenId);
+    }
+
+    function test_escrowsExposeTheirConfiguredVoter() public view {
+        assertEq(veMON.controller(), address(controller));
+        assertEq(veValidator.controller(), address(controller));
+        assertEq(veMON.voter(), address(0));
+        assertEq(veValidator.voter(), address(validatorsVoter));
+    }
+
+    function test_configuredVoterCanUpdateVeValidatorBoost() public {
+        uint256 tokenId = _createValidator(keccak256("boost-authorization"));
+
+        validatorsVoter.poke(tokenId);
+
+        (,,, uint256 boost) = veValidator.locked(tokenId);
+        assertEq(boost, 1 ether);
+    }
+
+    function test_unconfiguredCallerCannotUpdateVeValidatorBoost() public {
+        uint256 tokenId = _createValidator(keccak256("unauthorized-boost"));
+
+        vm.expectRevert(IVotingEscrow.NotVoter.selector);
+        vm.prank(stranger);
+        veValidator.updateBoost(tokenId, 1 ether);
     }
 
     function test_activeBackingFollowsStakeAndImmediateUnstake() public {

@@ -18,6 +18,8 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     using SafeCastLibrary for int128;
     uint64 public immutable maxLockCycles;
     uint64 public immutable override maxLockEpochs;
+    address public immutable override controller;
+    address public immutable override voter;
 
     struct Point {
         int128 bias;
@@ -49,16 +51,19 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     event LockAmountDecreased(uint256 indexed tokenId, uint256 amount, uint256 newAmount);
     event Checkpoint(uint64 indexed epoch, uint256 indexed pointIndex);
 
-    constructor(uint64 maxLockCycles_, string memory name_, string memory symbol_) ERC721(name_, symbol_) {
+    constructor(uint64 maxLockCycles_, string memory name_, string memory symbol_, address controller_, address voter_)
+        ERC721(name_, symbol_)
+    {
         if (maxLockCycles_ == 0) revert LockDurationNotInFuture();
         maxLockCycles = maxLockCycles_;
         maxLockEpochs = maxLockCycles_ * ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
+        controller = controller_;
+        voter = voter_;
     }
 
     /// @notice Checkpoint a controller-owned principal change for voting power.
     function syncAmountFromController(uint256 tokenId, uint256 oldAmount, uint256 newAmount)
         external
-        virtual
         override
         nonReentrant
     {
@@ -78,17 +83,15 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         }
     }
 
-    /// @dev The controller owns the current principal; this escrow keeps lock metadata and history.
+    /// @dev The escrow reads principal from its concrete accounting source and keeps lock metadata/history.
     function _amountOf(uint256 tokenId) internal view virtual returns (int128);
 
-    function _requireController() internal view virtual;
-
-    function _requireBooster() internal view virtual {
-        _requireController();
+    function _requireController() internal view {
+        if (msg.sender != controller) revert NotController();
     }
 
     /// @dev Custody implementation supplied by the concrete escrow. The lock
-    ///      accounting is token agnostic; VeMON forwards MON to its controller.
+    ///      accounting is token agnostic; concrete escrows define custody and accounting.
     /// @notice Advances global voting-power checkpoints to the current staking epoch.
     function checkpoint() external override nonReentrant {
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
@@ -135,7 +138,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     }
 
     function updateBoost(uint256 tokenId, uint256 boost) external override {
-        _requireBooster();
+        if (msg.sender != voter) revert NotVoter();
         if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
         if (boost < BoostLibrary.PRECISION || boost > 5 * BoostLibrary.PRECISION) revert InvalidAmount();
         _lockData[tokenId].boost = boost;

@@ -76,7 +76,6 @@ interface IStakingController {
 
     function setVe(address ve_) external;
     function setValidatorVe(address veValidator_) external;
-    function setBooster(address booster_) external;
     function registerValidatorPosition(address vault, uint256 tokenId) external;
     function validatorVe() external view returns (address);
     function validatorTokenIdOf(address vault) external view returns (uint256);

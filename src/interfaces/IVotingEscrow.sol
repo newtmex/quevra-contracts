@@ -20,6 +20,8 @@ interface IVotingEscrow is IERC721Metadata {
     }
 
     error LockDurationNotInFuture();
+    error NotVoter();
+    error NotController();
 
     /// @notice Check whether spender is owner or an approved user for a given veNFT
     /// @param _spender .
@@ -30,6 +32,8 @@ interface IVotingEscrow is IERC721Metadata {
     function epoch() external view returns (uint256);
 
     function maxLockEpochs() external view returns (uint64);
+
+    function controller() external view returns (address);
 
     /// @notice Summarized voting power of all permanently locked veNFTs.
     ///         For example, if there are 3 veNFTs with 100 tokens each,
@@ -58,6 +62,7 @@ interface IVotingEscrow is IERC721Metadata {
     function syncAmountFromController(uint256 tokenId, uint256 oldAmount, uint256 newAmount) external;
 
     function updateBoost(uint256 tokenId, uint256 boost) external;
+    function voter() external view returns (address);
 
     function unboostedVotingPowerOf(uint256 tokenId) external view returns (uint256);
 

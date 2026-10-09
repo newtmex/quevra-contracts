@@ -77,7 +77,7 @@ contract VeMONTest is VeMONFixture {
         veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
         vm.prank(stranger);
-        vm.expectRevert(VeMON.NotController.selector);
+        vm.expectRevert(IVotingEscrow.NotController.selector);
         veMON.syncAmountFromController(1, validatorStake, validatorStake + 1 ether);
     }
 

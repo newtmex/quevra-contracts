@@ -14,12 +14,8 @@ import {SafeCastLibrary} from "./libraries/SafeCastLibrary.sol";
 contract VeMON is VotingEscrow {
     using SafeCastLibrary for uint256;
     using SafeCastLibrary for int128;
-    address public immutable controller;
-    address public booster;
-
     error InvalidAddress();
     error InvalidValue();
-    error NotController();
     error LockDurationTooLong();
     error LockExpired();
     error LockNotExpired();
@@ -29,11 +25,11 @@ contract VeMON is VotingEscrow {
     event LockCreated(uint256 indexed tokenId, address indexed account, uint256 amount, uint256 unlockEpoch);
     event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
     event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
-    event BoosterSet(address indexed booster);
 
-    constructor(address controller_, uint64 maxLockCycles_) VotingEscrow(maxLockCycles_, "Locked MON", "veMON") {
+    constructor(address controller_, uint64 maxLockCycles_)
+        VotingEscrow(maxLockCycles_, "Locked MON", "veMON", controller_, address(0))
+    {
         if (controller_ == address(0)) revert InvalidAddress();
-        controller = controller_;
     }
 
     function createLock(uint256 value, uint256 lockDuration) external payable nonReentrant returns (uint256 tokenId) {
@@ -107,10 +103,6 @@ contract VeMON is VotingEscrow {
         _burn(tokenId);
     }
 
-    function _requireController() internal view override {
-        if (msg.sender != controller) revert NotController();
-    }
-
     function _amountOf(uint256 tokenId) internal view override returns (int128) {
         return uint256(IStakingController(controller).veMONPrincipalOf(tokenId)).toInt128();
     }
@@ -142,15 +134,5 @@ contract VeMON is VotingEscrow {
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = ERC721._update(to, tokenId, auth);
         if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
-    }
-
-    function setBooster(address booster_) external {
-        if (msg.sender != controller || booster != address(0) || booster_ == address(0)) revert NotController();
-        booster = booster_;
-        emit BoosterSet(booster_);
-    }
-
-    function _requireBooster() internal view override {
-        if (msg.sender != controller && msg.sender != booster) revert NotController();
     }
 }
