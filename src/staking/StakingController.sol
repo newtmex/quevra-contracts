@@ -9,6 +9,7 @@ import {IVeMON} from "../interfaces/IVeMON.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
+import {IValidatorsVoter} from "../interfaces/IValidatorsVoter.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {StakingControllerRewardsLibrary} from "../libraries/StakingControllerRewardsLibrary.sol";
@@ -115,30 +116,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Staked(tokenId, total);
     }
 
-    /// @notice Replace staking intent from the veMON gauge vote and immediately progress the rebalance.
-    /// @dev Only the ValidatorsVoter bound to veMON can call this. An empty list clears intent after a vote reset.
-    function setStakeIntentFromVotes(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
-        external
-        override
-        nonReentrant
-    {
-        if (ve == address(0) || msg.sender != IVeMON(ve).booster()) revert NotIntentVoter();
-        if (vaults.length != amounts.length) revert LengthMismatch();
-
-        for (uint256 i; i < vaults.length; ++i) {
-            if (amounts[i] == 0) revert ZeroAmount();
-            if (!_isVault[vaults[i]]) revert InvalidVault();
-            for (uint256 j; j < i; ++j) {
-                if (vaults[j] == vaults[i]) revert DuplicateVault();
-            }
-        }
-
-        stakingCycleOf[tokenId] = ProtocolTimeLibrary.currentCycle();
-        _setIntent(tokenId, vaults, amounts);
-        bool satisfied = _poke(tokenId);
-        emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
-    }
-
     /// @notice Progress a token's physical allocations toward its latest intent.
     /// @dev Anyone may call this. Monad withdrawal delays make rebalancing
     ///      multi-step: matured withdrawals become liquid first, then surplus
@@ -233,6 +210,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             tokenId.rememberVault(vault, _tokenVaultLists, _tokenRewardVaultLists);
             _undelegate(tokenId, vault, amounts[i]);
             tokenId.reduceIntent(vault, amounts[i], intentOf);
+            _notifyStakeWeight(tokenId, vault);
         }
         emit Unstaked(tokenId, _sum(amounts));
     }
@@ -287,6 +265,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     function _poke(uint256 tokenId) internal returns (bool satisfied) {
         EnumerableSet.AddressSet storage vaults = _tokenVaultLists[tokenId];
         if (_intentVaultLists[tokenId].length == 0 && vaults.length() == 0) return true;
+        address[] memory trackedVaults = vaults.values();
         PokeBatch memory batch = PokeBatch({
             agent: agentByToken[tokenId],
             liquid: balanceOf[tokenId],
@@ -307,6 +286,26 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         _executeDelegateBatch(batch);
 
         balanceOf[tokenId] = batch.liquid;
+        for (uint256 snapshotIndex; snapshotIndex < trackedVaults.length; ++snapshotIndex) {
+            _notifyStakeWeight(tokenId, trackedVaults[snapshotIndex]);
+        }
+    }
+
+    function _notifyStakeWeight(uint256 tokenId, address vault) internal {
+        if (ve == address(0)) return;
+        address voter = IVeMON(ve).booster();
+        if (voter == address(0)) return;
+        IValidatorsVoter(voter).syncStakeWeight(tokenId, vault);
+    }
+
+    function _notifyVaultStakeWeights(address vault) internal {
+        if (ve == address(0)) return;
+        address voter = IVeMON(ve).booster();
+        if (voter == address(0)) return;
+        uint256[] memory tokenIds = StakingVault(payable(vault)).tokenIds();
+        for (uint256 i; i < tokenIds.length; ++i) {
+            IValidatorsVoter(voter).syncStakeWeight(tokenIds[i], vault);
+        }
     }
 
     function _processPokeVault(uint256 tokenId, address vault, PokeBatch memory batch)
@@ -433,6 +432,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 _vaultByValidatorId[validatorId] = position.vault;
                 _setValidatorId(position.vault, validatorId);
                 _setValidatorBacking(position.vault, StakingVault(payable(position.vault)).totalBalance());
+                _notifyVaultStakeWeights(position.vault);
             } else if (previousValidatorId != 0) {
                 _setValidatorBacking(position.vault, _activeValidatorBacking[position.vault] + toVault);
             }

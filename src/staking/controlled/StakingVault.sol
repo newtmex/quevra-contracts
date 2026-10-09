@@ -2,18 +2,22 @@
 pragma solidity ^0.8.24;
 
 import {StakeControlled} from "./StakeControlled.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {IVeValidator} from "../../interfaces/IVeValidator.sol";
 
 /// @title StakingVault
 /// @notice MON vault bound to exactly one validator.
 contract StakingVault is StakeControlled {
+    using EnumerableSet for EnumerableSet.UintSet;
+
     uint256 public constant MIN_AUTH_ADDRESS_STAKE = 100_000 ether;
     uint256 public constant REWARD_PRECISION = 1e27;
 
     IVeValidator public validatorVe;
     mapping(uint256 tokenId => uint256 amount) public balanceOf;
     mapping(uint256 tokenId => uint256 amount) public pendingWithdrawal;
+    EnumerableSet.UintSet private _tokenIds;
     uint256 public totalBalance;
     uint256 public rewardPerShareStored;
     uint256 public accountedUnclaimedRewards;
@@ -84,6 +88,10 @@ contract StakingVault is StakeControlled {
         currentValidatorId = validatorId;
     }
 
+    function tokenIds() external view returns (uint256[] memory) {
+        return _tokenIds.values();
+    }
+
     /// @notice Accounts deposits and uses the validator escrow submission to activate the validator.
     /// @dev The controller caps the value forwarded here. The vault itself also
     ///      enforces the cap so it can never overfund validator creation.
@@ -92,6 +100,7 @@ contract StakingVault is StakeControlled {
 
         _updateReward(tokenId);
 
+        _tokenIds.add(tokenId);
         balanceOf[tokenId] += msg.value;
         totalBalance += msg.value;
 
@@ -124,6 +133,7 @@ contract StakingVault is StakeControlled {
         balanceOf[tokenId] -= amount;
         totalBalance -= amount;
         pendingWithdrawal[tokenId] = amount;
+        if (balanceOf[tokenId] == 0) _tokenIds.remove(tokenId);
     }
 
     /// @notice Finalize a matured withdrawal and return this token's share.

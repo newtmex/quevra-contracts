@@ -25,6 +25,8 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
 
     mapping(uint256 tokenId => address gauge) public override boostableTokenIdToGauge;
     mapping(address gauge => address vault) public override gaugeToVault;
+    mapping(address vault => address gauge) public vaultToGauge;
+    mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public stakeRewardWeight;
 
     event BoostGaugeCreated(uint256 indexed boostableTokenId, address indexed gauge, address indexed rewardToken);
     event BribeVotingRewardsCreated(uint256 indexed boostableTokenId, address indexed bribeVotingRewards);
@@ -37,6 +39,7 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
     error LockExpired();
     error BoostableVeAlreadySet();
     error GaugeVaultNotSet(address gauge);
+    error NotStakingController();
 
     constructor(address votingVe_, address boostableVe_, address owner_) NonStakingVoter(votingVe_, owner_) {
         // `NonStakingVoter` validates the voting escrow and owner. The
@@ -75,6 +78,7 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         if (!isWhitelistedToken[rewardToken]) revert NotWhitelistedToken();
         gauge = _createBoostGauge(boostableTokenId, rewardToken);
         gaugeToVault[gauge] = vault;
+        vaultToGauge[vault] = gauge;
     }
 
     /// @notice Creates and registers the gauge and bribe rewards for a boostable position.
@@ -143,60 +147,30 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         address target = boostableTokenIdToGauge[boostableTokenId];
         if (target == address(0)) return;
         delete boostableTokenIdToGauge[boostableTokenId];
+        address vault = gaugeToVault[target];
         delete gaugeToVault[target];
+        delete vaultToGauge[vault];
         _unregisterGauge(target);
         emit BoostableTokenBurned(boostableTokenId, target);
     }
 
-    function _afterVoteUpdate(uint256 tokenId) internal virtual override {
-        _syncStakeIntent(tokenId);
-    }
+    /// @notice Syncs this token's bribe weight after its controller allocation changes.
+    function syncStakeWeight(uint256 tokenId, address vault) external override {
+        if (msg.sender != IVeMON(ve).controller()) revert NotStakingController();
+        address gauge = vaultToGauge[vault];
+        if (gauge == address(0)) revert GaugeVaultNotSet(vault);
 
-    function _syncStakeIntent(uint256 tokenId) internal {
-        address[] storage gauges = gaugeVote[tokenId];
-        uint256 length = gauges.length;
-        uint256 totalWeight = 0;
-        for (uint256 i; i < length; ++i) {
-            totalWeight += votes[tokenId][gauges[i]];
+        IStakingController controller = IStakingController(msg.sender);
+        uint256 newWeight = controller.isValidatorActive(vault) && controller.allocationOf(tokenId, vault) != 0
+            ? votes[tokenId][gauge]
+            : 0;
+        uint256 oldWeight = stakeRewardWeight[tokenId][gauge];
+        if (newWeight > oldWeight) {
+            _notifyGaugeWeight(gauge, newWeight - oldWeight, tokenId);
+        } else if (oldWeight > newWeight) {
+            _withdrawGaugeWeight(gauge, oldWeight - newWeight, tokenId);
         }
-
-        // forge-lint: disable-next-line(unused-return)
-        (int128 lockedAmount,,,) = IVotingEscrow(ve).locked(tokenId);
-        uint256 totalAmount = lockedAmount > 0 ? uint256(uint128(lockedAmount)) : 0;
-        if (length == 0 || totalWeight == 0 || totalAmount == 0) {
-            IStakingController(IVeMON(ve).controller())
-                .setStakeIntentFromVotes(tokenId, new address[](0), new uint256[](0));
-            return;
-        }
-
-        uint256[] memory distributed = new uint256[](length);
-        uint256 allocated = 0;
-        uint256 included = 0;
-        for (uint256 i; i < length; ++i) {
-            address gauge = gauges[i];
-            uint256 amount = i + 1 == length
-                ? totalAmount - allocated
-                : Math.mulDiv(totalAmount, votes[tokenId][gauge], totalWeight);
-            distributed[i] = amount;
-            allocated += amount;
-            if (amount != 0) ++included;
-        }
-
-        address[] memory vaults = new address[](included);
-        uint256[] memory amounts = new uint256[](included);
-        uint256 outputIndex = 0;
-        for (uint256 i; i < length; ++i) {
-            uint256 amount = distributed[i];
-            if (amount == 0) continue;
-            address gauge = gauges[i];
-            address vault = gaugeToVault[gauge];
-            if (vault == address(0)) revert GaugeVaultNotSet(gauge);
-            vaults[outputIndex] = vault;
-            amounts[outputIndex] = amount;
-            ++outputIndex;
-        }
-
-        IStakingController(IVeMON(ve).controller()).setStakeIntentFromVotes(tokenId, vaults, amounts);
+        stakeRewardWeight[tokenId][gauge] = newWeight;
     }
 
     function _requireGaugeCreator(uint256 boostableTokenId) internal view {

@@ -4,9 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {ValidatorsVoter} from "../src/voting/ValidatorsVoter.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
-import {IStakingController} from "../src/interfaces/IStakingController.sol";
-import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
-import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
+import {IReward} from "../src/interfaces/IReward.sol";
 import {VeMON} from "../src/VeMON.sol";
 import {VeValidator} from "../src/VeValidator.sol";
 import {VeValidatorFixture} from "./fixtures/VeValidatorFixture.sol";
@@ -119,25 +117,26 @@ contract VeValidatorTest is VeValidatorFixture {
 
         uint256 totalVoteWeight =
             validatorsVoter.votes(veTokenId, firstGauge) + validatorsVoter.votes(veTokenId, secondGauge);
-        uint256 expectedFirst = principal * validatorsVoter.votes(veTokenId, firstGauge) / totalVoteWeight;
-        uint256 expectedSecond = principal - expectedFirst;
-        assertEq(controller.intentOf(veTokenId, firstVault), expectedFirst);
-        assertEq(controller.intentOf(veTokenId, secondVault), expectedSecond);
-        assertEq(controller.allocationOf(veTokenId, firstVault), expectedFirst);
-        assertEq(controller.allocationOf(veTokenId, secondVault), expectedSecond);
+        assertEq(totalVoteWeight, veMON.votingPowerOf(veTokenId));
+        assertEq(controller.intentOf(veTokenId, firstVault), 0);
+        assertEq(controller.intentOf(veTokenId, secondVault), 0);
+        assertEq(controller.allocationOf(veTokenId, firstVault), 0);
+        assertEq(controller.allocationOf(veTokenId, secondVault), 0);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(firstGauge)).balanceOf(veTokenId), 0);
+        assertEq(IReward(validatorsVoter.gaugeToBribe(secondGauge)).balanceOf(veTokenId), 0);
 
-        // Both shares remain below the per-validator activation minimum, so
-        // they are held in their vaults without active validator backing yet.
+        // Voting power is recorded by the voter without changing controller allocations.
         (int128 firstBacking,,,) = veValidator.locked(firstValidator);
         (int128 secondBacking,,,) = veValidator.locked(secondValidator);
         assertEq(firstBacking, 0);
         assertEq(secondBacking, 0);
     }
 
-    function test_votePokesVaultAndAgentAllocation() public {
+    function test_bribeWeightFollowsControllerStakeAndUndelegation() public {
         _setEpoch(5, false);
         uint256 validatorTokenId = _createValidator(keccak256("agent-vote-target"));
         (,, address vault, address gauge,) = veValidator.validatorPosition(validatorTokenId);
+        IReward bribe = IReward(validatorsVoter.gaugeToBribe(gauge));
         uint256 principal = validatorStake + 10 ether;
         vm.prank(operator);
         uint256 veTokenId = veMON.createLock{value: principal}(principal, lockDuration);
@@ -145,48 +144,71 @@ contract VeValidatorTest is VeValidatorFixture {
         vm.prank(operator);
         validatorsVoter.vote(veTokenId, _one(gauge), _oneAmount(1));
 
-        (uint64 validatorId,,,,) = veValidator.validatorPosition(validatorTokenId);
-        address agent = controller.agentByToken(veTokenId);
-        assertEq(controller.intentOf(veTokenId, vault), principal);
-        assertEq(controller.allocationOf(veTokenId, vault), principal);
-        assertEq(StakingVault(payable(vault)).balanceOf(veTokenId), validatorStake);
-        assertEq(StakingAgent(payable(agent)).balanceOf(validatorId), 10 ether);
+        assertEq(validatorsVoter.votes(veTokenId, gauge), veMON.votingPowerOf(veTokenId));
+        assertEq(bribe.balanceOf(veTokenId), 0);
+        assertEq(controller.balanceOf(veTokenId), principal);
+        assertEq(controller.intentOf(veTokenId, vault), 0);
+        assertEq(controller.allocationOf(veTokenId, vault), 0);
+        assertEq(controller.agentByToken(veTokenId), address(0));
         (int128 activeBacking,,,) = veValidator.locked(validatorTokenId);
-        assertEq(uint256(uint128(activeBacking)), principal);
+        assertEq(activeBacking, 0);
+
+        vm.prank(operator);
+        controller.stake(veTokenId, _one(vault), _oneAmount(principal));
+        uint256 voteWeight = validatorsVoter.votes(veTokenId, gauge);
+        assertEq(bribe.balanceOf(veTokenId), voteWeight);
+        assertEq(validatorsVoter.stakeRewardWeight(veTokenId, gauge), voteWeight);
 
         _setEpoch(10, false);
         vm.prank(operator);
         validatorsVoter.reset(veTokenId);
 
-        assertEq(controller.intentOf(veTokenId, vault), 0);
+        assertEq(validatorsVoter.votes(veTokenId, gauge), 0);
+        assertEq(validatorsVoter.usedWeights(veTokenId), 0);
+        // The bribe weight remains while the MON is still allocated to the validator.
+        assertEq(bribe.balanceOf(veTokenId), voteWeight);
+
+        vm.prank(operator);
+        controller.unstake(veTokenId, _one(vault), _oneAmount(principal));
+
+        assertEq(bribe.balanceOf(veTokenId), 0);
+        assertEq(validatorsVoter.stakeRewardWeight(veTokenId, gauge), 0);
         assertEq(controller.pendingOf(veTokenId, vault), principal);
         (activeBacking,,,) = veValidator.locked(validatorTokenId);
         assertEq(activeBacking, 0);
     }
 
-    function test_voteIntentSyncChecksCallerAndAllocationInputs() public {
+    function test_validatorActivationDepositsBribeWeightForExistingVaultBackers() public {
         _setEpoch(5, false);
-        uint256 validatorTokenId = _createValidator(keccak256("intent-validation"));
-        (,, address vault,,) = veValidator.validatorPosition(validatorTokenId);
+        uint256 validatorTokenId = _createValidator(keccak256("shared-vault-votes"));
+        (,, address vault, address gauge,) = veValidator.validatorPosition(validatorTokenId);
+        IReward bribe = IReward(validatorsVoter.gaugeToBribe(gauge));
 
-        vm.expectRevert(IStakingController.NotIntentVoter.selector);
-        controller.setStakeIntentFromVotes(1, new address[](0), new uint256[](0));
+        vm.prank(operator);
+        uint256 firstTokenId = veMON.createLock{value: validatorStake / 2}(validatorStake / 2, lockDuration);
+        vm.prank(stranger);
+        uint256 secondTokenId = veMON.createLock{value: validatorStake / 2}(validatorStake / 2, lockDuration);
+        vm.prank(operator);
+        validatorsVoter.vote(firstTokenId, _one(gauge), _oneAmount(1));
+        vm.prank(stranger);
+        validatorsVoter.vote(secondTokenId, _one(gauge), _oneAmount(1));
 
-        vm.prank(address(validatorsVoter));
-        vm.expectRevert(IStakingController.LengthMismatch.selector);
-        controller.setStakeIntentFromVotes(1, _one(vault), new uint256[](0));
+        vm.prank(operator);
+        controller.stake(firstTokenId, _one(vault), _oneAmount(validatorStake / 2));
+        assertEq(bribe.balanceOf(firstTokenId), 0);
+        assertEq(bribe.balanceOf(secondTokenId), 0);
 
-        vm.prank(address(validatorsVoter));
-        vm.expectRevert(IStakingController.ZeroAmount.selector);
-        controller.setStakeIntentFromVotes(1, _one(vault), _oneAmount(0));
+        vm.prank(stranger);
+        controller.stake(secondTokenId, _one(vault), _oneAmount(validatorStake / 2));
 
-        vm.prank(address(validatorsVoter));
-        vm.expectRevert(IStakingController.InvalidVault.selector);
-        controller.setStakeIntentFromVotes(1, _one(address(0xdead)), _oneAmount(1));
+        assertEq(bribe.balanceOf(firstTokenId), validatorsVoter.votes(firstTokenId, gauge));
+        assertEq(bribe.balanceOf(secondTokenId), validatorsVoter.votes(secondTokenId, gauge));
+    }
 
-        vm.prank(address(validatorsVoter));
-        vm.expectRevert(IStakingController.DuplicateVault.selector);
-        controller.setStakeIntentFromVotes(1, _two(vault, vault), _twoAmounts(1, 1));
+    function test_onlyControllerCanSyncStakeRewardWeight() public {
+        vm.expectRevert(ValidatorsVoter.NotStakingController.selector);
+        vm.prank(operator);
+        validatorsVoter.syncStakeWeight(1, address(0xdead));
     }
 
     function _createValidator(bytes32 saltSeed) private returns (uint256 tokenId) {
@@ -210,17 +232,5 @@ contract VeValidatorTest is VeValidatorFixture {
     function _oneAmount(uint256 value) private pure returns (uint256[] memory values) {
         values = new uint256[](1);
         values[0] = value;
-    }
-
-    function _two(address first, address second) private pure returns (address[] memory values) {
-        values = new address[](2);
-        values[0] = first;
-        values[1] = second;
-    }
-
-    function _twoAmounts(uint256 first, uint256 second) private pure returns (uint256[] memory values) {
-        values = new uint256[](2);
-        values[0] = first;
-        values[1] = second;
     }
 }

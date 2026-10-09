@@ -44,7 +44,6 @@ interface IStakingController {
     error StakingCycleNotAdvanced();
     error DuplicateVault();
     error InvalidValidatorRequest();
-    error NotIntentVoter();
 
     event VeSet(address indexed ve);
     event VaultRegistered(uint256 indexed tokenId, address indexed vault, address operator);
@@ -74,7 +73,6 @@ interface IStakingController {
     function setVe(address ve_) external;
     function setValidatorVe(address veValidator_) external;
     function setBooster(address booster_) external;
-    function setStakeIntentFromVotes(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts) external;
     function registerValidatorPosition(address vault, uint256 tokenId) external;
     function validatorVe() external view returns (address);
     function validatorTokenIdOf(address vault) external view returns (uint256);

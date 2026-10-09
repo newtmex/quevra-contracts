@@ -20,4 +20,5 @@ interface IValidatorsVoter is INonStakingVoter {
     function pokeMany(uint256[] calldata boostableTokenIds) external;
     function getBoost(uint256 boostableTokenId) external view returns (uint256);
     function notifyBoostableBurned(uint256 boostableTokenId) external;
+    function syncStakeWeight(uint256 tokenId, address vault) external;
 }
