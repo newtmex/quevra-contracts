@@ -56,9 +56,8 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         if (_tokenVaultLists[tokenId].length() != 0 && currentCycle <= stakingCycleOf[tokenId]) {
             revert StakingCycleNotAdvanced();
         }
-        // Keep the cycle marker in the modifier, like Tigris records
-        // `lastVoted` for a successful vote. A revert in the body rolls this
-        // assignment back, so invalid requests do not consume the cycle.
+        // A revert in the body rolls this assignment back, so invalid requests
+        // do not consume the cycle.
         stakingCycleOf[tokenId] = currentCycle;
         _;
     }
@@ -213,7 +212,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
             tokenId.rememberVault(vault, _tokenVaultLists, _tokenRewardVaultLists);
             _undelegate(tokenId, vault, amounts[i]);
             tokenId.reduceIntent(vault, amounts[i], intentOf);
-            _notifyStakeWeight(tokenId, vault);
+            _syncStakeAllocation(tokenId, vault);
         }
         emit Unstaked(tokenId, _sum(amounts));
     }
@@ -290,25 +289,15 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
 
         balanceOf[tokenId] = batch.liquid;
         for (uint256 snapshotIndex; snapshotIndex < trackedVaults.length; ++snapshotIndex) {
-            _notifyStakeWeight(tokenId, trackedVaults[snapshotIndex]);
+            _syncStakeAllocation(tokenId, trackedVaults[snapshotIndex]);
         }
     }
 
-    function _notifyStakeWeight(uint256 tokenId, address vault) internal {
+    function _syncStakeAllocation(uint256 tokenId, address vault) internal {
         if (validatorVe == address(0)) return;
         address voter = IVotingEscrow(validatorVe).voter();
         if (voter == address(0)) return;
-        IValidatorsVoter(voter).syncStakeWeight(tokenId, vault);
-    }
-
-    function _notifyVaultStakeWeights(address vault) internal {
-        if (validatorVe == address(0)) return;
-        address voter = IVotingEscrow(validatorVe).voter();
-        if (voter == address(0)) return;
-        uint256[] memory tokenIds = StakingVault(payable(vault)).tokenIds();
-        for (uint256 i; i < tokenIds.length; ++i) {
-            IValidatorsVoter(voter).syncStakeWeight(tokenIds[i], vault);
-        }
+        IValidatorsVoter(voter).syncStakeAllocation(tokenId, vault, _allocationOf(tokenId, vault));
     }
 
     function _processPokeVault(uint256 tokenId, address vault, PokeBatch memory batch)
@@ -435,7 +424,6 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
                 _vaultByValidatorId[validatorId] = position.vault;
                 _setValidatorId(position.vault, validatorId);
                 _setValidatorBacking(position.vault, StakingVault(payable(position.vault)).totalBalance());
-                _notifyVaultStakeWeights(position.vault);
             } else if (previousValidatorId != 0) {
                 uint256 validatorTokenId = _validatorTokenId[position.vault];
                 _setValidatorBacking(position.vault, validatorBackingOf[validatorTokenId] + toVault);

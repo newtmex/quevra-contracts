@@ -6,6 +6,10 @@ import {INonStakingVoter} from "./INonStakingVoter.sol";
 /// @title IValidatorsVoter
 /// @notice Voter surface for allocating one ve collection's power to boost targets.
 interface IValidatorsVoter is INonStakingVoter {
+    event StakeVoteSynced(
+        uint256 indexed tokenId, address indexed gauge, uint256 allocation, uint256 oldWeight, uint256 newWeight
+    );
+
     function boostableVe() external view returns (address);
     function setBoostableVe(address boostableVe_) external;
     function boostableTokenIdToGauge(uint256 tokenId) external view returns (address);
@@ -20,5 +24,6 @@ interface IValidatorsVoter is INonStakingVoter {
     function pokeMany(uint256[] calldata boostableTokenIds) external;
     function getBoost(uint256 boostableTokenId) external view returns (uint256);
     function notifyBoostableBurned(uint256 boostableTokenId) external;
-    function syncStakeWeight(uint256 tokenId, address vault) external;
+    /// @notice Syncs the veMON vote for a vault from the token's current physical MON allocation.
+    function syncStakeAllocation(uint256 tokenId, address vault, uint256 allocation) external;
 }
