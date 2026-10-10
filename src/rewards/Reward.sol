@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Adapted from Tigris Reward.sol by velodrome.finance, @figs999, and @pegahcarter.
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -10,29 +11,39 @@ import {IReward} from "../interfaces/IReward.sol";
 import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 
 /// @title Reward
+/// @author Adapted from Tigris by velodrome.finance, @figs999, and @pegahcarter
 /// @notice Base cycle-scoped reward accounting for veMON positions.
-/// @dev Ported from Tigris's Reward contract. Tigris timestamps are replaced
-///      with Monad staking epochs, and reward periods are Quevra cycles.
+/// @dev Quevra replaces Tigris timestamp periods with Monad staking epochs and cycle checkpoints.
 abstract contract Reward is IReward, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
     uint256 internal constant CYCLE_EPOCHS = ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
 
+    /// @inheritdoc IReward
     address public immutable override voter;
+    /// @inheritdoc IReward
     address public immutable override ve;
+    /// @inheritdoc IReward
     address public override authorized;
 
+    /// @inheritdoc IReward
     uint256 public override totalSupply;
+    /// @inheritdoc IReward
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
+    /// @inheritdoc IReward
     mapping(address token => mapping(uint256 cycle => uint256 amount)) public override tokenRewardsPerCycle;
+    /// @inheritdoc IReward
     mapping(address token => mapping(uint256 tokenId => uint256 epoch)) public override lastEarnEpoch;
 
     address[] public rewardTokens;
+    /// @inheritdoc IReward
     mapping(address token => bool registered) public override isReward;
 
     mapping(uint256 tokenId => mapping(uint256 index => Checkpoint)) public checkpoints;
+    /// @inheritdoc IReward
     mapping(uint256 tokenId => uint256 count) public override numCheckpoints;
     mapping(uint256 index => SupplyCheckpoint) public supplyCheckpoints;
+    /// @inheritdoc IReward
     uint256 public override supplyNumCheckpoints;
 
     constructor(address voter_) {
@@ -41,6 +52,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         ve = IBaseVoter(voter_).ve();
     }
 
+    /// @inheritdoc IReward
     function getPriorBalanceIndex(uint256 tokenId, uint256 cycle) public view override returns (uint256) {
         uint256 count = numCheckpoints[tokenId];
         if (count == 0) return 0;
@@ -59,6 +71,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         return lower;
     }
 
+    /// @inheritdoc IReward
     function getPriorSupplyIndex(uint256 cycle) public view override returns (uint256) {
         uint256 count = supplyNumCheckpoints;
         if (count == 0) return 0;
@@ -101,14 +114,17 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         }
     }
 
+    /// @inheritdoc IReward
     function rewardsListLength() external view override returns (uint256) {
         return rewardTokens.length;
     }
 
+    /// @inheritdoc IReward
     function duration() external pure override returns (uint256) {
         return CYCLE_EPOCHS;
     }
 
+    /// @inheritdoc IReward
     function earned(address token, uint256 tokenId) public override returns (uint256) {
         if (numCheckpoints[tokenId] == 0) return 0;
 
@@ -133,6 +149,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         return reward;
     }
 
+    /// @inheritdoc IReward
     function _deposit(uint256 amount, uint256 tokenId) external override {
         if (msg.sender != authorized) revert NotAuthorized();
         totalSupply += amount;
@@ -142,6 +159,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         emit Deposit(msg.sender, tokenId, amount);
     }
 
+    /// @inheritdoc IReward
     function _withdraw(uint256 amount, uint256 tokenId) external override {
         if (msg.sender != authorized) revert NotAuthorized();
         totalSupply -= amount;
@@ -151,6 +169,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         emit Withdraw(msg.sender, tokenId, amount);
     }
 
+    /// @inheritdoc IReward
     function getReward(uint256, address[] memory) external virtual override nonReentrant {}
 
     function _getReward(address recipient, uint256 tokenId, address[] memory tokens) internal {
@@ -163,6 +182,7 @@ abstract contract Reward is IReward, ReentrancyGuardTransient {
         }
     }
 
+    /// @inheritdoc IReward
     function notifyRewardAmount(address, uint256) external virtual override nonReentrant {}
 
     function _notifyRewardAmount(address token, uint256 amount) internal {

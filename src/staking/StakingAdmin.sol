@@ -17,14 +17,20 @@ import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 /// @title StakingAdmin
 /// @notice Administrative and validator-deployment layer for staking controllers.
 abstract contract StakingAdmin is Ownable2Step, IStakingController {
+    /// @inheritdoc IStakingController
     address public override ve;
+    /// @inheritdoc IStakingController
     address public override validatorVe;
+    /// @inheritdoc IStakingController
     address public immutable override vaultImplementation;
+    /// @inheritdoc IStakingController
     address public immutable override agentImplementation;
     mapping(address => bool) internal _isVault;
     mapping(address => bool) internal _isAgent;
     mapping(address vault => uint256 tokenId) internal _validatorTokenId;
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => uint256 amount) public override validatorBackingOf;
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => uint256 amount) public override veMONPrincipalOf;
     mapping(uint64 validatorId => address vault) internal _vaultByValidatorId;
     uint256 internal _commission;
@@ -44,7 +50,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         agentImplementation = address(new StakingAgent());
     }
 
-    /// @notice Bind veMON once. The owner sets this after both contracts are deployed.
+    /// @inheritdoc IStakingController
     function setVe(address ve_) external override onlyOwner {
         if (ve != address(0)) revert VeAlreadySet();
         if (ve_ == address(0)) revert InvalidAddress();
@@ -52,15 +58,18 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         emit VeSet(ve_);
     }
 
+    /// @inheritdoc IStakingController
     function setValidatorVe(address veValidator_) external override onlyOwner {
         if (validatorVe != address(0) || veValidator_ == address(0)) revert InvalidAddress();
         validatorVe = veValidator_;
     }
 
+    /// @inheritdoc IStakingController
     function validatorTokenIdOf(address vault) external view override returns (uint256) {
         return _validatorTokenId[vault];
     }
 
+    /// @inheritdoc IStakingController
     function registerValidatorPosition(address vault, uint256 tokenId) external override {
         if (msg.sender != validatorVe || !_isVault[vault] || tokenId == 0 || _validatorTokenId[vault] != 0) {
             revert InvalidValidatorState();
@@ -132,10 +141,12 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         emit VaultRegistered(tokenId, vault, requester);
     }
 
+    /// @inheritdoc IStakingController
     function predictVaultAddress(address requester, bytes32 saltSeed) public view override returns (address) {
         return Clones.predictDeterministicAddress(vaultImplementation, _vaultSalt(requester, saltSeed), address(this));
     }
 
+    /// @inheritdoc IStakingController
     function predictAgentAddress(uint256 tokenId) public view override returns (address) {
         return Clones.predictDeterministicAddress(agentImplementation, bytes32(tokenId), address(this));
     }
@@ -144,7 +155,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         return keccak256(abi.encode(requester, saltSeed));
     }
 
-    /// @notice Schedule commission for the cycle two cycles after the current cycle.
+    /// @inheritdoc IStakingController
     function setCommission(uint256 commission_) external override onlyOwner {
         if (commission_ > MAX_COMMISSION) revert InvalidCommission();
         uint64 effectiveCycle = ProtocolTimeLibrary.currentCycle() + 2;
@@ -154,8 +165,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         emit ValidatorCommissionScheduled(commission_, effectiveCycle);
     }
 
-    /// @notice Configuration to sign BEFORE requesting a validator.
-    /// @dev Submit the returned authAddress as expectedAuthAddress.
+    /// @inheritdoc IStakingController
     function signingConfigFor(address requester, bytes32 saltSeed)
         external
         override
@@ -177,6 +187,7 @@ abstract contract StakingAdmin is Ownable2Step, IStakingController {
         return _commission;
     }
 
+    /// @inheritdoc IStakingController
     function commission() external override returns (uint256) {
         return _effectiveCommission();
     }

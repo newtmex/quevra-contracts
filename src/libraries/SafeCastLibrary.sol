@@ -1,7 +1,9 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
+// Adapted from Tigris SafeCastLibrary.sol (BUSL-1.1).
 pragma solidity ^0.8.24;
 
 /// @title SafeCastLibrary
+/// @author Adapted from Tigris by velodrome.finance
 /// @notice Checked conversions for the signed lock amounts used by veMON.
 library SafeCastLibrary {
     error SafeCastOverflow();

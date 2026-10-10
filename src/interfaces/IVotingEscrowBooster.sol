@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Derived from Tigris IVotingEscrowBooster.sol.
 pragma solidity ^0.8.24;
 
 /// @title IVotingEscrowBooster

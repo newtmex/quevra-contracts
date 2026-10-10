@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
+import {IReward} from "../interfaces/IReward.sol";
 import {VotingReward} from "./VotingReward.sol";
 
 /// @title BribeVotingRewards
@@ -11,6 +12,8 @@ import {VotingReward} from "./VotingReward.sol";
 contract BribeVotingRewards is VotingReward {
     constructor(address voter_, address[] memory rewardTokens_) VotingReward(voter_, rewardTokens_) {}
 
+    /// @inheritdoc IReward
+    /// @dev Anyone may fund a whitelisted reward token for the current cycle.
     function notifyRewardAmount(address token, uint256 amount) external override nonReentrant {
         if (!isReward[token]) {
             if (!IBaseVoter(voter).isWhitelistedToken(token)) revert NotWhitelisted();

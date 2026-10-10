@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Adapted from Tigris ProtocolTimeLibrary.sol for Monad staking epochs.
 pragma solidity ^0.8.24;
 
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";

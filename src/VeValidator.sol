@@ -28,6 +28,7 @@ contract VeValidator is VotingEscrow, IVeValidator {
 
     address public immutable gaugeRewardToken;
 
+    /// @inheritdoc IVeValidator
     mapping(uint256 tokenId => ValidatorPosition) public override validatorPosition;
     mapping(address vault => uint256 tokenId) public tokenIdForVault;
     mapping(uint256 tokenId => IVeValidator.ValidatorSubmission) private _validatorSubmissions;
@@ -81,6 +82,7 @@ contract VeValidator is VotingEscrow, IVeValidator {
         _register(tokenId, operator, vault, gauge, bribe);
     }
 
+    /// @inheritdoc IVeValidator
     function validatorSubmission(uint256 tokenId) external view override returns (ValidatorSubmission memory) {
         return _validatorSubmissions[tokenId];
     }
@@ -93,6 +95,7 @@ contract VeValidator is VotingEscrow, IVeValidator {
         revert ValidatorTokenNonTransferable();
     }
 
+    /// @inheritdoc IVeValidator
     function setValidatorIdFromController(uint256 tokenId, uint64 validatorId) external override {
         _requireController();
         ValidatorPosition storage position = validatorPosition[tokenId];

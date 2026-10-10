@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
+// Adapted from Tigris ValidatorsVoter.sol (BUSL-1.1).
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -13,6 +14,7 @@ import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
 import {NonStakingVoter} from "./NonStakingVoter.sol";
 
 /// @title ValidatorsVoter
+/// @author Adapted from Tigris contributors
 /// @notice Allocates veMON voting power to validator gauges in proportion to
 ///         each veMON NFT's active MON stake and distributes gauge bribes.
 /// @dev StakingController synchronizes physical allocation changes; holders do
@@ -21,9 +23,12 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
     uint256 public constant BOOST_PRECISION = BoostLibrary.PRECISION;
     uint256 public constant MAX_BOOST = 5 * BoostLibrary.PRECISION;
 
+    /// @inheritdoc IValidatorsVoter
     address public override boostableVe;
 
+    /// @inheritdoc IValidatorsVoter
     mapping(uint256 tokenId => address gauge) public override boostableTokenIdToGauge;
+    /// @inheritdoc IValidatorsVoter
     mapping(address gauge => address vault) public override gaugeToVault;
     mapping(address vault => address gauge) public vaultToGauge;
     mapping(uint256 tokenId => mapping(address gauge => uint256 indexPlusOne)) private _gaugeVoteIndex;
@@ -48,11 +53,13 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         boostableVe = boostableVe_;
     }
 
+    /// @inheritdoc IValidatorsVoter
     function setBoostableVe(address boostableVe_) external override onlyOwner {
         if (boostableVe != address(0) || boostableVe_ == address(0)) revert BoostableVeAlreadySet();
         boostableVe = boostableVe_;
     }
 
+    /// @inheritdoc IValidatorsVoter
     function createBoostGauge(uint256 boostableTokenId, address rewardToken)
         external
         virtual
@@ -65,7 +72,7 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         gauge = _createBoostGauge(boostableTokenId, rewardToken);
     }
 
-    /// @notice Create a validator gauge and bind it to the vault it represents.
+    /// @inheritdoc IValidatorsVoter
     function createBoostGauge(uint256 boostableTokenId, address rewardToken, address vault)
         external
         virtual
@@ -101,26 +108,31 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         emit BribeVotingRewardsCreated(boostableTokenId, bribeVotingRewards);
     }
 
+    /// @inheritdoc IValidatorsVoter
     function poke(uint256 boostableTokenId) external override nonReentrant {
         _pokeBoost(boostableTokenId);
     }
 
+    /// @inheritdoc IValidatorsVoter
     function pokeBoost(uint256 boostableTokenId) external override nonReentrant {
         _pokeBoost(boostableTokenId);
     }
 
+    /// @inheritdoc IValidatorsVoter
     function pokeMany(uint256[] calldata boostableTokenIds) external override nonReentrant {
         for (uint256 i; i < boostableTokenIds.length; ++i) {
             _pokeBoost(boostableTokenIds[i]);
         }
     }
 
+    /// @inheritdoc IValidatorsVoter
     function pokeBoosts(uint256[] calldata boostableTokenIds) external override nonReentrant {
         for (uint256 i; i < boostableTokenIds.length; ++i) {
             _pokeBoost(boostableTokenIds[i]);
         }
     }
 
+    /// @inheritdoc IValidatorsVoter
     function getBoost(uint256 boostableTokenId) public view virtual override returns (uint256) {
         return _getBoost(boostableTokenId);
     }
@@ -142,6 +154,7 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         return Math.min(MAX_BOOST, boost);
     }
 
+    /// @inheritdoc IValidatorsVoter
     function notifyBoostableBurned(uint256 boostableTokenId) external virtual override {
         if (msg.sender != boostableVe) revert NotBoostableVe();
         address target = boostableTokenIdToGauge[boostableTokenId];
@@ -154,8 +167,7 @@ contract ValidatorsVoter is NonStakingVoter, IValidatorsVoter {
         emit BoostableTokenBurned(boostableTokenId, target);
     }
 
-    /// @notice Syncs this token's vote and bribe weight after a physical
-    ///         allocation change. Vault deposits count even before activation.
+    /// @inheritdoc IValidatorsVoter
     function syncStakeAllocation(uint256 tokenId, address vault, uint256 allocation) external override nonReentrant {
         if (msg.sender != IVeMON(ve).controller()) revert NotStakingController();
         address gauge = vaultToGauge[vault];

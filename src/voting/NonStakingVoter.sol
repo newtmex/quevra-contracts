@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
+// Adapted from Tigris NonStakingVoter.sol (BUSL-1.1).
 pragma solidity ^0.8.24;
 
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -6,24 +7,32 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IBaseVoter} from "../interfaces/IBaseVoter.sol";
 import {INonStakingVoter} from "../interfaces/INonStakingVoter.sol";
 import {IGauge} from "../interfaces/IGauge.sol";
 import {IReward} from "../interfaces/IReward.sol";
 
-/// @title NonStakingVoter
-/// @notice Shared gauge, bribe, and reward token administration for non-staking voters.
-/// @dev Derived voters provide gauge creation and weight allocation behavior.
+/// @dev Tigris-derived abstract layer for token whitelisting and reward funding. Concrete voters
+///      provide gauge creation and vote-weight transitions.
 abstract contract NonStakingVoter is Ownable2Step, ReentrancyGuardTransient, INonStakingVoter {
     using SafeERC20 for IERC20;
 
+    /// @inheritdoc IBaseVoter
     address public immutable override ve;
+    /// @inheritdoc IBaseVoter
     mapping(address token => bool) public override isWhitelistedToken;
 
+    /// @inheritdoc INonStakingVoter
     mapping(address gauge => bool) public override isGauge;
+    /// @inheritdoc INonStakingVoter
     mapping(address gauge => address bribeVotingRewards) public override gaugeToBribe;
+    /// @inheritdoc INonStakingVoter
     mapping(address gauge => uint256 amount) public override weights;
+    /// @inheritdoc INonStakingVoter
     mapping(uint256 tokenId => mapping(address gauge => uint256 amount)) public override votes;
+    /// @inheritdoc INonStakingVoter
     mapping(uint256 tokenId => uint256 amount) public override usedWeights;
+    /// @inheritdoc INonStakingVoter
     mapping(uint256 tokenId => address[]) public gaugeVote;
 
     constructor(address votingVe_, address owner_) Ownable(owner_) {
@@ -33,12 +42,14 @@ abstract contract NonStakingVoter is Ownable2Step, ReentrancyGuardTransient, INo
 
     // External state-changing API
 
+    /// @inheritdoc INonStakingVoter
     function whitelistToken(address token, bool whitelisted) external virtual override onlyOwner {
         if (token == address(0) || token.code.length == 0) revert ZeroAddress();
         isWhitelistedToken[token] = whitelisted;
         emit WhitelistToken(msg.sender, token, whitelisted);
     }
 
+    /// @inheritdoc INonStakingVoter
     function notifyGaugeReward(address gauge, uint256 amount) external virtual override nonReentrant {
         if (!isGauge[gauge]) revert GaugeDoesNotExist(gauge);
         address token = IGauge(gauge).rewardToken();

@@ -5,6 +5,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {IStakingController} from "../interfaces/IStakingController.sol";
 import {StakingVault} from "./controlled/StakingVault.sol";
 import {StakingAgent} from "./controlled/StakingAgent.sol";
 import {StakingAdmin} from "./StakingAdmin.sol";
@@ -24,10 +25,14 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     using EnumerableSet for EnumerableSet.AddressSet;
     using StakingControllerRewardsLibrary for uint256;
 
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => uint256 amount) public override balanceOf;
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => address agent) public override agentByToken;
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => uint64 cycle) public override stakingCycleOf;
 
+    /// @inheritdoc IStakingController
     mapping(uint256 tokenId => mapping(address vault => uint256 amount)) public override intentOf;
     mapping(uint256 tokenId => EnumerableSet.AddressSet) private _tokenVaultLists;
     mapping(uint256 tokenId => EnumerableSet.AddressSet) private _tokenRewardVaultLists;
@@ -40,7 +45,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // Validator admission and cycle guards
     // -------------------------------------------------------------------------
 
-    /// @notice Deploy a vault for a validator request created by veValidator.
+    /// @inheritdoc IStakingController
     function deployValidatorVault(address operator, uint256 tokenId, bytes32 saltSeed, address expectedAuthAddress)
         external
         override
@@ -66,6 +71,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // External state-changing API
     // -------------------------------------------------------------------------
 
+    /// @inheritdoc IStakingController
     function deposit(uint256 tokenId) external payable override nonReentrant {
         if (ve == address(0) || msg.sender != ve) revert NotVe();
         if (msg.value == 0) revert InvalidDepositAmount();
@@ -83,10 +89,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // External state-changing API: intent and rebalancing
     // -------------------------------------------------------------------------
 
-    /// @notice Set the token's validator allocation intent for this cycle.
-    /// @dev The first call allocates from `balanceOf(tokenId)`. Later calls
-    ///      replace the prior intent and begin a physical rebalance. A later
-    ///      cycle does not require a caller-side `unstake` first.
+    /// @inheritdoc IStakingController
     function stake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
         external
         override
@@ -115,16 +118,13 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Staked(tokenId, total);
     }
 
-    /// @notice Progress a token's physical allocations toward its latest intent.
-    /// @dev Anyone may call this. Monad withdrawal delays make rebalancing
-    ///      multi-step: matured withdrawals become liquid first, then surplus
-    ///      is undelegated and available MON is delegated toward deficits.
+    /// @inheritdoc IStakingController
     function poke(uint256 tokenId) external override nonReentrant returns (bool satisfied) {
         satisfied = _poke(tokenId);
         emit StakingPoked(tokenId, stakingCycleOf[tokenId], satisfied);
     }
 
-    /// @notice Compound only this token's accrued rewards from selected vaults.
+    /// @inheritdoc IStakingController
     function compound(uint256 tokenId, address[] calldata vaults)
         external
         override
@@ -187,9 +187,7 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Compounded(tokenId, amount);
     }
 
-    /// @notice Begin reclaiming MON previously allocated by `stake` for a token.
-    /// @dev Monad requires undelegation and withdrawal to happen in different
-    ///      epochs.
+    /// @inheritdoc IStakingController
     function unstake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
         external
         override
@@ -217,12 +215,12 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
         emit Unstaked(tokenId, _sum(amounts));
     }
 
-    /// @notice Withdraw every matured validator position and send the liquid balance to the NFT owner.
+    /// @inheritdoc IStakingController
     function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
         return _withdrawToken(tokenId);
     }
 
-    /// @notice Claim native rewards earned by this token's validator positions.
+    /// @inheritdoc IStakingController
     function claimRewards(uint256 tokenId, address[] calldata vaults) external override nonReentrant {
         _claimTokenRewardsToOwner(tokenId, vaults);
     }
@@ -231,18 +229,22 @@ contract StakingController is StakingAdmin, ReentrancyGuardTransient {
     // External and public read API
     // -------------------------------------------------------------------------
 
+    /// @inheritdoc IStakingController
     function allocationOf(uint256 tokenId, address vault) external view override returns (uint256 allocation) {
         allocation = _allocationOf(tokenId, vault);
     }
 
+    /// @inheritdoc IStakingController
     function isValidatorActive(address vault) external view override returns (bool) {
         return _isVault[vault] && StakingVault(payable(vault)).validatorId() != 0;
     }
 
+    /// @inheritdoc IStakingController
     function pendingOf(uint256 tokenId, address vault) external view returns (uint256 pending) {
         pending = _pendingOf(tokenId, vault);
     }
 
+    /// @inheritdoc IStakingController
     function isFullyUnstaked(uint256 tokenId) external view override returns (bool) {
         return _isFullyUnstaked(tokenId);
     }

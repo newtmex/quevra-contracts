@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
+// Adapted from Tigris VotingEscrow.sol (BUSL-1.1).
 pragma solidity ^0.8.24;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -10,15 +11,22 @@ import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
 import {SafeCastLibrary} from "./libraries/SafeCastLibrary.sol";
 
 /// @title VotingEscrow
+/// @author Modified from Solidly (https://github.com/solidlyexchange/solidly/blob/master/contracts/ve.sol)
+/// @author Modified from Curve (https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy)
+/// @author Tigris contributors: velodrome.finance, @figs999, and @pegahcarter
 /// @notice Abstract veNFT escrow implementation for Quevra voting power.
-/// @dev Power follows veBTC's linear bias/slope model, measured in Monad epochs.
-///      Time-limited locks are specified in Quevra cycles and expire on cycle boundaries.
+/// @dev Quevra adapts Tigris's escrow model to native MON principal accounting and Monad epochs.
+///      Finite locks are specified in Quevra cycles and expire on cycle boundaries; the concrete
+///      escrow defines how principal is custodied and synchronized with the staking controller.
 abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscrow {
     using SafeCastLibrary for uint256;
     using SafeCastLibrary for int128;
     uint64 public immutable maxLockCycles;
+    /// @inheritdoc IVotingEscrow
     uint64 public immutable override maxLockEpochs;
+    /// @inheritdoc IVotingEscrow
     address public immutable override controller;
+    /// @inheritdoc IVotingEscrow
     address public immutable override voter;
 
     struct Point {
@@ -37,11 +45,13 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
     }
 
     mapping(uint256 tokenId => LockData lock) internal _lockData;
+    /// @inheritdoc IVotingEscrow
     uint256 public override epoch;
     mapping(uint256 index => Point) public pointHistory;
     mapping(uint256 tokenId => Point[]) private _userPointHistory;
     mapping(uint64 unlockEpoch => int128 slopeChange) public slopeChanges;
     mapping(uint256 tokenId => uint256 blockNumber) public ownershipChange;
+    /// @inheritdoc IVotingEscrow
     uint256 public override permanentLockBalance;
 
     error InvalidAmount();
@@ -61,7 +71,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         voter = voter_;
     }
 
-    /// @notice Checkpoint a controller-owned principal change for voting power.
+    /// @inheritdoc IVotingEscrow
     function syncAmountFromController(uint256 tokenId, uint256 oldAmount, uint256 newAmount)
         external
         override
@@ -90,14 +100,13 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         if (msg.sender != controller) revert NotController();
     }
 
-    /// @dev Custody implementation supplied by the concrete escrow. The lock
-    ///      accounting is token agnostic; concrete escrows define custody and accounting.
-    /// @notice Advances global voting-power checkpoints to the current staking epoch.
+    /// @inheritdoc IVotingEscrow
     function checkpoint() external override nonReentrant {
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
         _advanceGlobal(currentEpoch);
     }
 
+    /// @inheritdoc IVotingEscrow
     function votingPowerOf(uint256 tokenId) external view override returns (uint256) {
         if (ownershipChange[tokenId] == block.number) return 0;
         // The staking epoch precompile is CALL-only, so view methods use the latest checkpoint.
@@ -106,6 +115,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         );
     }
 
+    /// @inheritdoc IVotingEscrow
     function votingPowerAndLockedAmount(uint256 tokenId) external view override returns (uint256 power, int128 amount) {
         amount = _amountOf(tokenId);
         if (ownershipChange[tokenId] == block.number) return (0, amount);
@@ -114,29 +124,35 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         );
     }
 
+    /// @inheritdoc IVotingEscrow
     function votingPowerOfAt(uint256 tokenId, uint256 targetEpoch) external view override returns (uint256) {
         if (targetEpoch > type(uint64).max) revert EpochOutOfRange();
         return BoostLibrary.boostedAmount(_votingPowerOfAt(tokenId, uint64(targetEpoch)), _lockData[tokenId].boost);
     }
 
+    /// @inheritdoc IVotingEscrow
     function totalVotingPower() external view override returns (uint256) {
         return _totalVotingPowerAt(pointHistory[epoch].epoch);
     }
 
+    /// @inheritdoc IVotingEscrow
     function totalVotingPowerAt(uint256 targetEpoch) external view override returns (uint256) {
         if (targetEpoch > type(uint64).max) revert EpochOutOfRange();
         return _totalVotingPowerAt(uint64(targetEpoch));
     }
 
+    /// @inheritdoc IVotingEscrow
     function unboostedVotingPowerOf(uint256 tokenId) external view override returns (uint256) {
         if (ownershipChange[tokenId] == block.number) return 0;
         return _votingPowerOfAt(tokenId, uint64(pointHistory[epoch].epoch));
     }
 
+    /// @inheritdoc IVotingEscrow
     function unboostedTotalVotingPower() external view override returns (uint256) {
         return _totalVotingPowerAt(pointHistory[epoch].epoch);
     }
 
+    /// @inheritdoc IVotingEscrow
     function updateBoost(uint256 tokenId, uint256 boost) external override {
         if (msg.sender != voter) revert NotVoter();
         if (_ownerOf(tokenId) == address(0)) revert NonexistentToken();
@@ -144,10 +160,12 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         _lockData[tokenId].boost = boost;
     }
 
+    /// @inheritdoc IVotingEscrow
     function userPointEpoch(uint256 tokenId) external view override returns (uint256) {
         return _userPointHistory[tokenId].length;
     }
 
+    /// @inheritdoc IVotingEscrow
     function locked(uint256 tokenId)
         external
         view
@@ -162,6 +180,7 @@ abstract contract VotingEscrow is ERC721, ReentrancyGuardTransient, IVotingEscro
         return _userPointHistory[tokenId][index];
     }
 
+    /// @inheritdoc IVotingEscrow
     function isApprovedOrOwner(address spender, uint256 tokenId) external view override returns (bool) {
         address tokenOwner = _ownerOf(tokenId);
         return tokenOwner != address(0)
