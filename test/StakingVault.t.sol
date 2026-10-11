@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
@@ -20,19 +21,20 @@ contract StakingVaultTest is StakingVaultFixture {
 
     function test_initializeRejectsInvalidRegistryOrRequest() public {
         StakingVault implementation = new StakingVault();
-        StakingVault clone = StakingVault(payable(Clones.clone(address(implementation))));
+        UpgradeableBeacon beacon = new UpgradeableBeacon(address(implementation), address(this));
+        StakingVault clone = StakingVault(payable(address(new BeaconProxy(address(beacon), bytes("")))));
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        clone.initialize(address(0), tokenId, 0);
+        clone.initialize(address(this), address(0), tokenId, 0);
         vm.expectRevert(StakingVault.InvalidRequest.selector);
-        clone.initialize(address(validatorVe), 0, 0);
+        clone.initialize(address(this), address(validatorVe), 0, 0);
         vm.prank(stranger);
-        vm.expectRevert(StakeControlled.OnlyController.selector);
-        clone.initialize(address(validatorVe), tokenId, 0);
-        clone.initialize(address(validatorVe), tokenId, 0);
+        vm.expectRevert(StakeControlled.InvalidController.selector);
+        clone.initialize(address(this), address(validatorVe), tokenId, 0);
+        clone.initialize(address(this), address(validatorVe), tokenId, 0);
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        clone.initialize(address(validatorVe), tokenId, 0);
+        clone.initialize(address(this), address(validatorVe), tokenId, 0);
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        implementation.initialize(address(validatorVe), tokenId, 0);
+        implementation.initialize(address(this), address(validatorVe), tokenId, 0);
     }
 
     function test_depositExecutesBoundRegistryRequestFromVaultAtMinimumStake() public {

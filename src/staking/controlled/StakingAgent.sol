@@ -6,9 +6,37 @@ import {StakeControlled} from "./StakeControlled.sol";
 /// @title StakingAgent
 /// @notice A token-bound agent that delegates MON to Monad validators.
 contract StakingAgent is StakeControlled {
-    mapping(uint64 validatorId => uint256 amount) public balanceOf;
-    mapping(uint64 validatorId => uint256 amount) public pendingWithdrawal;
-    mapping(uint64 validatorId => bool usedValidator) public usedValidator;
+    /// @custom:storage-location erc7201:quevra.StakingAgent
+    struct StakingAgentStorage {
+        uint256 veTokenId;
+        mapping(uint64 validatorId => uint256 amount) balanceOf;
+        mapping(uint64 validatorId => uint256 amount) pendingWithdrawal;
+        mapping(uint64 validatorId => bool usedValidator) usedValidator;
+    }
+
+    bytes32 private constant STAKING_AGENT_STORAGE_SLOT =
+        0x1dc5e65e4debe88f7e1b7a9953c8914f24180bc42e7268be37dabc54256ace00;
+
+    function _agentStorage() private pure returns (StakingAgentStorage storage $) {
+        bytes32 slot = STAKING_AGENT_STORAGE_SLOT;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    function veTokenId() public view returns (uint256) {
+        return _agentStorage().veTokenId;
+    }
+
+    function balanceOf(uint64 validatorId) public view returns (uint256) {
+        return _agentStorage().balanceOf[validatorId];
+    }
+
+    function pendingWithdrawal(uint64 validatorId) public view returns (uint256) {
+        return _agentStorage().pendingWithdrawal[validatorId];
+    }
+
+    function usedValidator(uint64 validatorId) public view returns (bool) {
+        return _agentStorage().usedValidator[validatorId];
+    }
 
     error EmptyArray();
     error LengthMismatch();
@@ -20,9 +48,15 @@ contract StakingAgent is StakeControlled {
     error InsufficientBalance();
     error WithdrawalPending(uint64 validatorId);
 
+    function initialize(address controller_, uint256 tokenId_) external initializer {
+        if (controller_ == address(0) || tokenId_ == 0) revert ZeroAmount();
+        __StakeControlled_init(controller_);
+        _agentStorage().veTokenId = tokenId_;
+    }
+
     function positionOf(uint64 validatorId) external view returns (uint256 allocation, uint256 pending) {
-        allocation = balanceOf[validatorId];
-        pending = pendingWithdrawal[validatorId];
+        allocation = _agentStorage().balanceOf[validatorId];
+        pending = _agentStorage().pendingWithdrawal[validatorId];
     }
 
     function _validateArrays(uint256 validatorCount, uint256 amountCount) private pure {
@@ -32,22 +66,22 @@ contract StakingAgent is StakeControlled {
 
     function _delegate(uint64 validatorId, uint256 amount) internal {
         if (!STAKING.delegate{value: amount}(validatorId)) revert StakingCallFailed();
-        balanceOf[validatorId] += amount;
-        usedValidator[validatorId] = true;
+        _agentStorage().balanceOf[validatorId] += amount;
+        _agentStorage().usedValidator[validatorId] = true;
     }
 
     function _undelegate(uint64 validatorId, uint256 amount) internal {
-        if (pendingWithdrawal[validatorId] != 0) revert WithdrawalPending(validatorId);
+        if (_agentStorage().pendingWithdrawal[validatorId] != 0) revert WithdrawalPending(validatorId);
         if (amount == 0) revert ZeroAmount();
-        if (balanceOf[validatorId] < amount) revert InsufficientBalance();
+        if (_agentStorage().balanceOf[validatorId] < amount) revert InsufficientBalance();
         if (!STAKING.undelegate(validatorId, amount, WITHDRAW_ID)) revert StakingCallFailed();
-        balanceOf[validatorId] -= amount;
-        pendingWithdrawal[validatorId] = amount;
+        _agentStorage().balanceOf[validatorId] -= amount;
+        _agentStorage().pendingWithdrawal[validatorId] = amount;
     }
 
     function _withdraw(uint64 validatorId) internal {
         if (!STAKING.withdraw(validatorId, WITHDRAW_ID)) revert StakingCallFailed();
-        delete pendingWithdrawal[validatorId];
+        delete _agentStorage().pendingWithdrawal[validatorId];
     }
 
     function delegate(uint64[] calldata validatorIds, uint256[] calldata amounts) external payable onlyController {
@@ -86,7 +120,7 @@ contract StakingAgent is StakeControlled {
 
         uint256 balance = availableBalance();
         if (balance != 0) {
-            (bool success,) = payable(controller).call{value: balance}("");
+            (bool success,) = payable(controller()).call{value: balance}("");
             if (!success) revert TransferFailed();
         }
     }
@@ -95,7 +129,7 @@ contract StakingAgent is StakeControlled {
         _withdraw(validatorId);
         uint256 balance = availableBalance();
         if (balance != 0) {
-            (bool success,) = payable(controller).call{value: balance}("");
+            (bool success,) = payable(controller()).call{value: balance}("");
             if (!success) revert TransferFailed();
         }
     }
@@ -113,7 +147,7 @@ contract StakingAgent is StakeControlled {
         }
         uint256 claimed = availableBalance() - beforeBalance;
         if (claimed != 0) {
-            (bool success,) = payable(controller).call{value: claimed}("");
+            (bool success,) = payable(controller()).call{value: claimed}("");
             if (!success) revert TransferFailed();
         }
     }

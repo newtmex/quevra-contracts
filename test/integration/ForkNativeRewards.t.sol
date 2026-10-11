@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {StakingController} from "../../src/staking/StakingController.sol";
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
 import {VeMON} from "../../src/VeMON.sol";
 import {TestValidatorVe, VeValidatorFixture} from "../fixtures/VeValidatorFixture.sol";
+import {StakingAgent} from "../../src/staking/controlled/StakingAgent.sol";
 
 contract ConsensusBoundVault is StakingVault {
     function bindValidator(uint64 validatorId_) external onlyController {
-        validatorId = validatorId_;
+        _vaultStorage().currentValidatorId = validatorId_;
     }
 }
 
 contract ConsensusBoundController is StakingController {
-    constructor(address owner_) StakingController(owner_, 0) {}
-
     function attachConsensusValidator(TestValidatorVe validatorVe, uint64 validatorId)
         external
         onlyOwner
@@ -23,12 +24,11 @@ contract ConsensusBoundController is StakingController {
     {
         uint256 tokenId = validatorVe.registerExisting(address(this), validatorId);
 
-        ConsensusBoundVault implementation = new ConsensusBoundVault();
-        vault = Clones.clone(address(implementation));
-        ConsensusBoundVault(payable(vault)).initialize(address(validatorVe), tokenId, 0);
+        vault = address(new BeaconProxy{salt: bytes32(tokenId)}(vaultBeacon(), bytes("")));
+        ConsensusBoundVault(payable(vault)).initialize(address(this), address(validatorVe), tokenId, 0);
         ConsensusBoundVault(payable(vault)).bindValidator(validatorId);
 
-        _isVault[vault] = true;
+        _adminStorage().isVault[vault] = true;
     }
 }
 
@@ -58,8 +58,30 @@ contract ForkNativeRewardsTest is VeValidatorFixture {
         assertGt(validators.length, 0, "fork has no consensus validators");
         validatorId = validators[0];
 
-        forkController = new ConsensusBoundController(address(this));
-        forkVe = new VeMON(address(forkController), 4);
+        ConsensusBoundVault vaultImplementation = new ConsensusBoundVault();
+        StakingAgent agentImplementation = new StakingAgent();
+        UpgradeableBeacon vaultBeacon = new UpgradeableBeacon(address(vaultImplementation), address(this));
+        UpgradeableBeacon agentBeacon = new UpgradeableBeacon(address(agentImplementation), address(this));
+        ConsensusBoundController controllerImplementation = new ConsensusBoundController();
+        forkController = ConsensusBoundController(
+            payable(address(
+                    new ERC1967Proxy(
+                        address(controllerImplementation),
+                        abi.encodeCall(
+                            StakingController.initialize, (address(this), 0, address(vaultBeacon), address(agentBeacon))
+                        )
+                    )
+                ))
+        );
+        VeMON veImplementation = new VeMON();
+        forkVe = VeMON(
+            address(
+                new ERC1967Proxy(
+                    address(veImplementation),
+                    abi.encodeCall(VeMON.initialize, (address(forkController), 4, address(this)))
+                )
+            )
+        );
         forkController.setVe(address(forkVe));
         forkController.setValidatorVe(address(validatorVe));
         vaultAddress = forkController.attachConsensusValidator(validatorVe, validatorId);

@@ -63,10 +63,10 @@ interface IStakingController {
 
     /// @notice veMON contract whose token IDs own deposited principal.
     function ve() external view returns (address);
-    /// @notice Implementation used to clone validator-bound staking vaults.
-    function vaultImplementation() external view returns (address);
-    /// @notice Implementation used to clone token-bound staking agents.
-    function agentImplementation() external view returns (address);
+    /// @notice Beacon governing all validator-bound staking vaults.
+    function vaultBeacon() external view returns (address);
+    /// @notice Beacon governing all token-bound staking agents.
+    function agentBeacon() external view returns (address);
     /// @notice Whether `vault` is a registered validator vault.
     function isValidatorActive(address vault) external view returns (bool);
     /// @notice Liquid MON credited to a veMON token and not currently allocated or pending withdrawal.

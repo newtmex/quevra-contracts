@@ -1,152 +1,220 @@
-# Quevra Contracts
+<div align="center">
 
-Foundry package for Quevra's validator staking, voting, gauge, and reward contracts on Monad. The contracts coordinate native MON staking through Monad's staking precompile at `0x1000` and use Monad staking epochs as the protocol clock.
+# Quevra
 
-## Architecture
+### Stake together. Back independent validators. Keep your options open.
+
+**A validator-capital and incentive coordination layer for Monad.**
+
+Quevra lets MON holders pool the capital needed to support validators, decide where their stake goes, earn staking rewards and additional incentives, and move that support as their preferences change — **without starting over with a new lock**.
+
+[Explore the contracts](./src) · [How it works](#how-it-works) · [Run the tests](#run-it-yourself) · [What's implemented](#what-is-built-today)
+
+</div>
+
+---
+
+## The problem: who gets to become a validator?
+
+Monad can execute transactions at high speed. But a healthy network also needs a broad, competitive group of validators.
+
+Starting a validator takes more than technical expertise: it takes capital. Monad currently requires **100,000 MON in validator-auth-address stake to register/qualify on that dimension**, while active-set eligibility also depends on **at least 10 million MON in total stake** and a place among the **top 200 validators by stake**. Meeting one threshold does not guarantee a validator will join the active set. [Monad staking documentation](https://docs.monad.xyz/monad-arch/consensus/staking)
+
+That creates a coordination problem:
+
+- **Potential validators** need supporters before they can compete.
+- **MON holders** want staking returns but may not have the capital or conviction to back one operator indefinitely.
+- **Validators and protocols** need a transparent way to compete for delegated capital beyond reputation alone.
+
+**Quevra turns those separate decisions into one on-chain marketplace for validator support.** Capital follows holders' allocations; incentives give validators a way to attract it.
+
+> **The big idea:** A validator shouldn't have to bring every MON itself. And a holder shouldn't have to unlock and rebuild a position every time they want to support someone else.
+
+## One example, without the jargon
+
+Imagine a new validator operator who has the infrastructure and consensus keys, but not enough MON to register. Three supporters direct **40,000 + 35,000 + 25,000 MON** toward that operator's Quevra vault.
+
+When the vault reaches the configured **100,000 MON registration amount**, Quevra can submit the signed validator-registration request to Monad's native staking system.
+
+Those supporters retain individual, on-chain records of their locked positions. Their allocations also determine their validator voting weight. Later, one supporter can choose a different validator in a subsequent Quevra cycle; the protocol manages the required undelegation, waiting period, withdrawal and redelegation.
+
+If a validator or sponsor offers an approved ERC-20 incentive, supporters who allocated voting weight to that validator during the rewarded cycle can become eligible to claim a share in the following cycle.
+
+**Important:** Registration is not the same as active-set admission. A registered validator still needs to satisfy Monad's broader active-set rules before it can earn consensus rewards.
+
+## How it works
 
 ```mermaid
-flowchart LR
-    Operator[Validator operator] --> VeValidator[VeValidator]
-    VeValidator --> Controller[StakingController]
-    Controller --> Vault[Validator StakingVault]
-    Vault --> Precompile[Monad staking precompile 0x1000]
+flowchart TB
+    H[MON holder] -->|Locks native MON| VE[veMON position NFT]
+    VE -->|Chooses validator allocations| C[StakingController]
 
-    Holder[MON holder] --> VeMON[VeMON / VotingEscrow]
-    VeMON --> Controller
-    Controller --> Agent[Per-position StakingAgent]
-    Agent --> Precompile
+    O[Validator applicant] -->|New signed request or existing ID| VV[veValidator identity NFT]
+    VV --> VA[Validator-specific StakingVault]
+    VV --> GA[Gauge + bribe rewards]
 
-    Controller -->|allocation changes| Voter[ValidatorsVoter]
-    Voter --> Gauge[Validator gauge]
-    Voter --> Bribe[BribeVotingRewards]
-    Gauge -->|ERC-20 incentives| Holder
-    Bribe -->|cycle-accounted incentives| Holder
+    C -->|Funds registration / validator backing| VA
+    C -->|Delegates remaining stake| AG[Per-position StakingAgent]
+    VA --> P[Monad staking precompile 0x1000]
+    AG --> P
+
+    C -->|Synchronizes allocated voting power| V[ValidatorsVoter]
+    V --> GA
+    P -->|Native MON staking rewards| C
+    S[Incentive sponsors] -->|Approved ERC-20 tokens| GA
+    C -->|MON claim or compound| H
+    GA -->|Cycle-earned incentive claims| H
 ```
 
-### Modules
+The design connects **three things that are usually separate**:
 
-| Area | Contracts | Responsibility |
-| --- | --- | --- |
-| Escrow | `VeMON`, `VeValidator`, `VotingEscrow` | `VeMON` locks native MON and represents positions as veNFTs with epoch-based voting-power checkpoints. `VeValidator` creates permanent, non-transferable validator identity positions. `VotingEscrow` contains shared checkpoint and lock accounting. |
-| Staking administration | `StakingAdmin`, `StakingController` | Deploys deterministic vaults, validates validator submissions, stores commission settings, tracks staking intent, and coordinates native staking operations. |
-| Staking custody | `StakingVault`, `StakingAgent`, `StakeControlled` | `StakingVault` is bound to one validator and accounts for position balances and native validator rewards. A `StakingAgent` executes delegation, undelegation, matured withdrawals, and reward operations for a veMON position. `StakeControlled` wraps the Monad staking precompile interface. |
-| Voting and gauges | `ValidatorsVoter`, `NonStakingVoter`, `Gauge`, `NonStakingGauge` | Connects validator gauges to staking allocations, manages gauge weights and reward funding, and accounts for ERC-20 gauge rewards. A non-staking gauge assigns its reward balance to a beneficiary. |
-| Cycle rewards | `Reward`, `VotingReward`, `BribeVotingRewards` | Checkpoints position balances and supply by cycle, records reward funding, and pays eligible veMON positions. Bribes are distinct from native MON rewards earned from validator staking. |
-| Interfaces and libraries | `src/interfaces/`, `src/libraries/` | Defines protocol-facing APIs and shared epoch, boost, payload, cast, and staking-reward accounting helpers. |
+1. **Capital:** Real MON is locked and accounted for per veMON position.
+2. **Choice:** Allocations to validator vaults determine corresponding validator-gauge voting weight. There is no separate user vote transaction to keep in sync with staking.
+3. **Rewards:** Native MON rewards from staking and externally funded ERC-20 incentives use distinct accounting and claim paths.
 
-### Staking and validator lifecycle
+### A holder's journey
 
-1. The operator creates a validator position through `VeValidator`. For a new validator, the submission includes a 165-byte Monad `addValidator` payload plus its secp256k1 and BLS signatures. The controller checks the predicted vault/auth address against the payload. Existing validators use `createExistingValidator` and are checked against the staking precompile.
-2. `StakingController` deploys a deterministic `StakingVault` and binds it to the validator position. The vault is the authorized caller for validator registration and staking operations routed through the Monad precompile.
-3. The new-validator vault accumulates the fixed `VALIDATOR_STAKE_AMOUNT` before it submits `addValidator`. The amount, commission scale, and signing configuration are exposed by the controller for payload construction.
-4. A MON holder creates a veMON lock. The escrow deposits the MON into the controller and records the principal and its voting-power checkpoints.
-5. The holder supplies a desired allocation across validator vaults. The controller records that intent and settles it through vaults and agents. Monad undelegations have a withdrawal delay; permissionless calls to `poke` can complete pending transitions once funds become available.
-6. Native staking rewards can be claimed or compounded through the controller. Gauge incentives and bribes are accounted for by their own reward contracts and cycle checkpoints.
+| Step | What happens |
+| --- | --- |
+| **1. Lock MON** | Deposit native MON into a time-bound or permanent `veMON` NFT position. Finite-lock voting power decays over Monad epochs. |
+| **2. Back validators** | Allocate that position's MON among validator vaults. The controller deploys through the vault first where registration backing is needed, and uses a position-specific staking agent for additional delegation. |
+| **3. Vote by staking** | `ValidatorsVoter` receives allocation updates from the controller and attributes a proportional share of the veMON position's voting power to each validator gauge. Capital staged in a pre-registration vault can also carry allocation weight. |
+| **4. Earn** | Staking rewards accrue in native MON where the underlying validator generates rewards. Sponsored, whitelisted ERC-20 incentives are tracked by validator gauge and Quevra cycle. |
+| **5. Claim or compound** | Claim native rewards to the wallet, or compound them into the same veMON position's tracked principal and staking allocation. Claim eligible ERC-20 incentives separately. |
+| **6. Change your mind** | In a later cycle, replace your target allocations. Anyone can call `poke` to continue withdrawals and redelegations once Monad permits settlement. |
+| **7. Exit** | For a finite lock: wait for lock expiry, remove staking allocations, settle pending native withdrawals, and redeem the underlying MON. Claim accrued ERC-20 incentives **before** burning the NFT. |
 
-The current `ProtocolTimeLibrary` defines a Quevra cycle as five Monad staking epochs. Cycle length is a protocol configuration and should be reviewed before deployment to a production network.
+### A validator's journey
 
-## Source layout
+A validator applicant creates a **non-transferable `veValidator` identity**, linked to a dedicated staking vault, a gauge, and a bribe-reward contract.
+
+- **New validator:** Supply a Monad `addValidator` payload with the required secp256k1/BLS signatures, using the deterministic vault address as the auth address. The vault accumulates the registration amount and then calls the staking precompile.
+- **Existing validator:** Reference a validator ID known to the staking precompile. Quevra creates the linked vault and gauge for that identity.
+- **Compete for backing:** Supporters direct MON to the vault; approved reward tokens can be funded into the associated incentive contract to reward eligible voting weight.
+
+An existing validator ID is checked for existence, but the current onboarding path does **not** fully prove that the identity creator controls the validator's native auth address. That authorization is a hardening item before unrestricted deployment.
+
+## The mechanism that makes Quevra different
+
+**Your allocation is your vote.**
+
+Traditional vote-escrow designs often let users vote with abstract governance power while the underlying stake lives somewhere else. Quevra binds the two together: the controller synchronizes validator-gauge weights as it moves a position's MON allocation.
+
+The per-gauge weight is calculated from the position's voting power and its share of MON allocated to that validator:
 
 ```text
-src/
-  VeMON.sol, VeValidator.sol, VotingEscrow.sol
-  staking/                 Controller, admin, vault, and agent modules
-  voting/                  Validator and non-staking voters
-  gauges/                  Staking and non-staking reward gauges
-  rewards/                 Cycle rewards and bribe accounting
-  interfaces/              Protocol contract APIs
-  libraries/               Shared accounting and Monad helpers
-test/
-  *.t.sol                  Unit and module-level tests
-  integration/             Cross-module staking scenarios
-  fixtures/                Shared test setup
-script/e2e/                Local Solonet validator-registration flow
+validator gauge weight ≈ veMON voting power × allocated MON / position principal
 ```
 
-## Requirements and setup
+Unallocated principal does not create validator-gauge weight. Changes to physical allocations update the associated vote/reward accounting. This gives operators a direct reason to earn real backing, while holders can allocate across more than one validator.
 
-- Foundry (`forge` and `anvil`)
-- Git with submodule support
-- Docker for the Solonet end-to-end test
+**Rebalancing is asynchronous by design.** Monad changes are epoch-bound and undelegations have a native withdrawal delay. Quevra records the user's *desired* allocations, carries out available actions, and exposes permissionless `poke(tokenId)` calls to complete outstanding transitions after settlement becomes possible. A reallocation request is **not** a promise of instant redelegation.
 
-This package is a Git submodule in the Quevra workspace. From the workspace root, initialize submodules and install JavaScript workspace dependencies with pnpm:
+**Incentives have a clear clock.** Quevra groups Monad epochs into economic *cycles* (currently **five epochs per cycle** in `ProtocolTimeLibrary`, a testnet-oriented parameter). Incentives funded in cycle `c` are accounted against that cycle's recorded vote weights and become claimable beginning in **cycle `c+1`**, not immediately. Reward funding actually transfers ERC-20 tokens into the rewards contract; a notification alone does not mint rewards.
 
-```sh
-git submodule update --init --recursive
-pnpm install
-```
+## What is built today
 
-Or clone the parent repository with `--recurse-submodules`. The contract sources and Foundry configuration are in this directory. Build and test from the package directory:
+This repository contains a **Solidity / Foundry contracts prototype**, not a deployed consumer app or an audited mainnet product.
 
-```sh
-cd packages/contracts
+| Component | Implementation | Why it matters |
+| --- | --- | --- |
+| Locked MON positions | [`VeMON.sol`](./src/VeMON.sol), [`VotingEscrow.sol`](./src/VotingEscrow.sol) | Native MON custody, ERC-721 positions, finite/permanent locks, epoch-based voting power and checkpoints. |
+| Validator identities | [`VeValidator.sol`](./src/VeValidator.sol) | Non-transferable validator records; new signed-payload submissions or existing validator IDs; linked vault/gauge identities. |
+| Capital routing | [`StakingController.sol`](./src/staking/StakingController.sol), [`StakingAdmin.sol`](./src/staking/StakingAdmin.sol) | Position balances, desired allocations, delayed settlement, validator onboarding, reward claims and compounding. |
+| Native staking custody | [`StakingVault.sol`](./src/staking/controlled/StakingVault.sol), [`StakingAgent.sol`](./src/staking/controlled/StakingAgent.sol) | Validator-specific capital pools and position-specific delegations using Monad's actual `0x1000` staking interface. |
+| Stake-linked voting | [`ValidatorsVoter.sol`](./src/voting/ValidatorsVoter.sol) | Synchronizes vote weights with allocations and links validators to gauges and bribe-reward contracts. |
+| Incentives | [`BribeVotingRewards.sol`](./src/rewards/BribeVotingRewards.sol), [`Reward.sol`](./src/rewards/Reward.sol), [`NonStakingGauge.sol`](./src/gauges/NonStakingGauge.sol) | Cycle-scoped ERC-20 bribe funding/claims and a separate validator-beneficiary gauge reward channel. |
+| Protocol clock | [`ProtocolTimeLibrary.sol`](./src/libraries/ProtocolTimeLibrary.sol) | Uses Monad staking epochs, effective-epoch rules and cycle boundaries instead of wall-clock guesses. |
+
+The code also implements validator voting-power boosts, bounded to **5×**, through the validator escrow/voter machinery. This is **not** a claim of 5× MON principal or staking yield.
+
+### Why native Monad integration matters
+
+Quevra is not merely a token-weighted poll. Its vaults and agents make native staking calls for `addValidator`, `delegate`, `undelegate`, `withdraw`, and reward operations through Monad's **staking precompile at `0x1000`**. The system has to respect Monad's staking epoch transitions, delayed withdrawals and validator-state constraints. [Monad staking API](https://docs.monad.xyz/reference/staking/api)
+
+## Run it yourself
+
+**Requirements:** Git (with submodules) and [Foundry](https://book.getfoundry.sh/) (`forge`). A compatible Monad RPC is needed for fork-dependent tests. Node/pnpm are optional convenience tooling for the package scripts.
+
+```bash
+git clone --recurse-submodules --branch mezo-earn-alignment https://github.com/newtmex/quevra-contracts.git
+cd quevra-contracts
+
 forge build
-forge test
-forge fmt
+forge fmt --check
+forge test --network monad -vvv
 ```
 
-Or run the package scripts from the workspace root:
+The Foundry configuration targets **Monad testnet (chain ID `10143`)** and pins a fork block for reproducibility. Override the RPC using your own endpoint if the public testnet RPC is unavailable.
 
-```sh
-pnpm --filter @quevra/contracts build
-pnpm --filter @quevra/contracts test
-pnpm --filter @quevra/contracts check
+### What to inspect first (for judges and contributors)
+
+| Question | Evidence in this repository |
+| --- | --- |
+| Can several positions help register a validator? | [`test/VeValidator.t.sol`](./test/VeValidator.t.sol) and [`test/StakingVault.t.sol`](./test/StakingVault.t.sol) |
+| Can one locked MON position move support between validators? | [`test/integration/StakingControllerRebalance.t.sol`](./test/integration/StakingControllerRebalance.t.sol) — `test_reusesLockedMONWhenReallocatingAcrossValidators` |
+| Does stake allocation update vote and bribe-accounting weight? | [`test/VeValidator.t.sol`](./test/VeValidator.t.sol) — `test_bribeWeightFollowsControllerStakeAndUndelegation`, `test_rebalancePokeMovesVoteWeightWithPhysicalStake` |
+| Are vault reward shares attributed per position? | [`test/integration/StakingControllerRebalance.t.sol`](./test/integration/StakingControllerRebalance.t.sol) — shared-vault/reward tests |
+| Is there a native reward claim/compound/exit scenario? | [`test/integration/ForkNativeRewards.t.sol`](./test/integration/ForkNativeRewards.t.sol) — `test_forkConsensusRewardsCanBeCompoundedClaimedAndWithdrawn` |
+
+Try an individual test with:
+
+```bash
+forge test --network monad --match-test test_reusesLockedMONWhenReallocatingAcrossValidators -vvv
+forge test --network monad --match-test test_bribeWeightFollowsControllerStakeAndUndelegation -vvv
 ```
 
-The default Foundry configuration targets Monad testnet, chain ID `10143`, and pins a fork block. Tests using Monad's staking environment require access to the configured Monad RPC endpoint. To run the full package check, run `pnpm --filter @quevra/contracts check`; it checks formatting, builds with size reporting, and runs the Foundry tests.
+These paths are **source-level evidence**, not a claim that every test has passed in your environment. Fork-dependent cases need the configured network's staking state. In particular, the tests demonstrating vote-to-bribe **weight sync** are not yet a complete, independently verified end-to-end proof of real ERC-20 incentive funding and cycle-`c+1` payout.
 
-## Local Solonet end-to-end test
+**E2E status:** [`script/e2e/run.sh`](./script/e2e/run.sh) is currently **out of date**: it refers to the removed `ValidatorRegistry` path and a `script/e2e/AddValidatorOnSolonet.s.sol` file that is absent from this branch. It should be repaired before being advertised or run as a working demonstration.
 
-The E2E script deploys the validator-registration flow against a running Solonet, obtains fresh consensus keys in the Solonet container, submits the `addValidator` request, and checks the staking precompile. In the Quevra workspace, start the `services/solonet` submodule using its README; see the [Solonet repository](https://github.com/monad-crypto/monad-solonet) for standalone setup. Then run from the workspace root:
+## Honest project status
 
-```sh
-pnpm --filter @quevra/contracts test:e2e
+**Implemented in the branch:** native MON lock positions; new/existing validator identity creation; vault/agent staking routes; stake-linked validator voting; native rewards claim/compound paths; cycle-based bribe contracts; and unit/integration test scenarios.
+
+**Still needed before a production or public hackathon deployment:**
+
+- A complete deployment script, verified network addresses and repeatable demo transactions.
+- Full tests for actual ERC-20 bribe funding, cycle rollover, claims, late claims and entitlement handling on NFT exit.
+- Repair and rerun the Solonet E2E runner against the *current* controller/validator identity flow.
+- Security review of validator authorization, reward accounting, lock exits, keeper transitions and operational permissions.
+- User-facing tooling, deployment instructions and an operator onboarding guide.
+
+**Not claimed here:** a transferable liquid-staking token, a live DeFi integration, `QUE`/`veQUE` governance, validator active-set admission guarantees, a promised staking APR, or an audited/mainnet-ready release. The veMON NFT represents a **locked** position; its underlying MON is not instantly redeemable.
+
+## Built for Monad, informed by vote-escrow protocols
+
+Quevra uses Monad's native staking mechanics for the *capital* leg and adapts vote-escrow/gauge ideas for the *coordination* leg. The voting and rewards architecture draws from [Mezo Earn / Tigris](https://github.com/mezo-org/tigris), with roots in the wider Solidly/Velodrome/Curve design family. The original idea is the integration of actual MON staking allocations, validator onboarding, position accounting and validator-specific incentive markets into one flow.
+
+### Licensing and attribution
+
+**This repository is not uniformly MIT-licensed.** Quevra-authored files generally use `SPDX-License-Identifier: MIT`, while certain adapted Tigris sources — notably [`VotingEscrow.sol`](./src/VotingEscrow.sol), [`ValidatorsVoter.sol`](./src/voting/ValidatorsVoter.sol), [`NonStakingVoter.sol`](./src/voting/NonStakingVoter.sol), and [`VotingReward.sol`](./src/rewards/VotingReward.sol) — declare **BUSL-1.1**. Preserve each file's SPDX identifier, existing attribution, applicable upstream license terms and notices. Do not replace BUSL headers with MIT merely because the rest of the project prefers MIT. Third-party dependencies retain their respective licenses.
+
+AI-assisted coding tools were used during development and documentation. The protocol's design choices, repository contents and security responsibilities remain with its maintainers.
+
+## Upgradeable deployment infrastructure
+
+The contracts package includes a Hardhat 3 + TypeScript deployment and upgrade workflow alongside Foundry. Four core modules use UUPS proxies; vaults, agents, gauges, and bribe contracts use four family-specific beacons. See [architecture](./docs/architecture.md), [deployment](./docs/deployment.md), and [upgrades](./docs/upgrades.md) for owner authority, command examples, deterministic vault prediction, and operational limitations.
+
+After configuring `.env` with an RPC, deployer key, multisig, delay, and reward token:
+
+```bash
+pnpm --filter @quevra/contracts deploy:all -- --network monadTestnet
+pnpm --filter @quevra/contracts deploy:status -- --network monadTestnet
 ```
 
-Defaults are RPC `http://localhost:8080`, chain ID `20143`, and Docker container name `solonet`. The script accepts `SOLONET_RPC`, `SOLONET_CONTAINER`, `SOLONET_CHAIN_ID`, and related environment overrides. It uses development-only keys by default; never use them on a public network.
+This repository change does not upgrade earlier non-proxy deployments. Protocol-owned state now uses ERC-7201 namespaces; this layout does not automatically migrate sequential-storage state from an already deployed implementation. Foundry fork/Solonet tests remain the source of evidence for Monad's native staking precompile; Hardhat local tests cover proxy, initializer, and upgrade mechanics.
 
-On Apple Silicon, the Solonet README documents the Colima/QEMU setup used by this E2E flow.
+---
 
-## Using the contracts
+<div align="center">
 
-There is no complete deployment script or production deployment manifest in this package yet. A deployment must create the contracts in dependency order, configure their one-time controller/escrow/voter bindings, whitelist reward tokens, and record the resulting addresses. The exact deployment sequence depends on the selected reward token and the controller, veMON, veValidator, and voter addresses.
+### Quevra's bet
 
-At a high level, a deployment and user flow includes:
+**Better validators need a path to capital. MON holders need a reason — and a way — to back them.**
 
-1. Deploy controller, voting, escrow, and reward components with the intended owner and reward-token configuration.
-2. Bind the controller to the veMON and validator escrow contracts, then bind the validator voter and boostable escrow as required by the contracts' one-time setters.
-3. For a new validator, call the signing configuration view to determine the predicted vault auth address, then construct and sign the complete Monad validator payload using that address, the configured commission, and the fixed registration stake amount.
-4. Create a validator position with the payload and signatures, then fund the position through veMON locks and controller allocations.
-5. Use controller claim/compound operations for native staking rewards. Use gauge and bribe reward entrypoints for their separate ERC-20 incentives.
+Quevra is building that path on Monad.
 
-Consult the interfaces in `src/interfaces/` and tests in `test/` for function signatures and expected state transitions. Do not treat this overview as a substitute for checking deployment parameters and contract invariants.
+*Built for the Monad Metropolis hackathon. Contributions, review and critical feedback are welcome.*
 
-## Tests
-
-The test suite includes coverage for protocol time, veMON and validator positions, staking vaults and agents, controller allocations and rewards, and selected integration flows. The fork-native-reward test exercises interactions with a validator present in the configured Monad fork. Gauge, voter, and bribe behavior should be checked against their individual tests as that coverage is expanded.
-
-Useful targeted commands:
-
-```sh
-forge test --match-path 'test/VeMON.t.sol'
-forge test --match-path 'test/StakingController.t.sol'
-forge test --match-path 'test/integration/*'
-```
-
-## Roadmap
-
-The following items are planned and are not complete features of this package yet:
-
-1. Add deployment scripts and network-specific configuration for Monad testnet, then publish verified contract addresses and transaction links.
-2. Expand focused tests for validator gauge creation, voting-weight changes, cycle bribes, and reward claims, including access control, invalid inputs, accounting, and success cases.
-3. Add deployment and upgrade safety documentation, including the required order for one-time address bindings and operational ownership.
-4. Revisit the five-epoch cycle length and other economic parameters with production network conditions in mind.
-5. Complete a source-license and attribution review for adapted code before making a package-wide license claim.
-
-## Attribution and licensing
-
-Check the SPDX identifier and provenance comments in each Solidity source file, and preserve upstream copyright and author notices when redistributing adapted code. This package currently contains files with different SPDX identifiers, including MIT and BUSL-1.1. A source file's header applies to that file; this README does not claim that the package as a whole has one license. Confirm that the selected licenses and permissions meet the intended distribution requirements before publishing or combining the package with other work.
-
-## AI disclosure
-
-AI coding tools were used during development, including assistance with contract documentation and this README.
+</div>

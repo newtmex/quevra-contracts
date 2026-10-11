@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 import {StakingVault} from "../../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
@@ -18,14 +19,15 @@ abstract contract StakingVaultFixture is VeValidatorFixture {
             secpPubkey, blsPubkey, bytes20(address(vault)), bytes32(validatorStake), bytes32(commission)
         );
         tokenId = validatorVe.registerNew(operator, payload, secpSig, blsSig);
-        vm.prank(owner);
-        vault.initialize(address(validatorVe), tokenId, 0);
     }
 
     function _newVault() internal returns (StakingVault deployedVault) {
-        vm.prank(owner);
         StakingVault implementation = new StakingVault();
-        deployedVault = StakingVault(payable(Clones.clone(address(implementation))));
+        UpgradeableBeacon beacon = new UpgradeableBeacon(address(implementation), owner);
+        vm.prank(owner);
+        deployedVault = StakingVault(payable(address(new BeaconProxy(address(beacon), bytes("")))));
+        vm.prank(owner);
+        deployedVault.initialize(owner, address(validatorVe), 1, 0);
     }
 
     function _addVaultValidator() internal returns (uint64 validatorId) {

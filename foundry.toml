@@ -7,8 +7,11 @@ auto_detect_solc = false
 evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
+via_ir = true
 bytecode_hash = "none"
 use_literal_content = true
+# Monad permits deployed runtime bytecode up to 128 KiB.
+code_size_limit = 131072
 ignored_warnings_from = ["lib"]
 lint = { exclude_lints = [
     # Intentional protocol patterns: bounded casts, controlled batch/precompile
@@ -24,7 +27,8 @@ lint = { exclude_lints = [
     "unsafe-typecast",
 ] }
 remappings = [
-    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+    "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/",
     "forge-std/=lib/forge-std/src/",
 ]
 network = "monad"

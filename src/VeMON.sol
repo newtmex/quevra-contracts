@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {VotingEscrow} from "./VotingEscrow.sol";
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import {IStakingController} from "./interfaces/IStakingController.sol";
 import {IVotingEscrow} from "./interfaces/IVotingEscrow.sol";
 import {ProtocolTimeLibrary} from "./libraries/ProtocolTimeLibrary.sol";
@@ -26,19 +26,23 @@ contract VeMON is VotingEscrow {
     event LockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
     event UnlockPermanent(address indexed account, uint256 indexed tokenId, uint256 amount, uint64 epoch);
 
-    constructor(address controller_, uint64 maxLockCycles_)
-        VotingEscrow(maxLockCycles_, "Locked MON", "veMON", controller_, address(0))
-    {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address controller_, uint64 maxLockCycles_, address owner_) external initializer {
         if (controller_ == address(0)) revert InvalidAddress();
+        __VotingEscrow_init(maxLockCycles_, "Locked MON", "veMON", controller_, address(0), owner_);
     }
 
     function createLock(uint256 value, uint256 lockDuration) external payable nonReentrant returns (uint256 tokenId) {
         uint256 unlockEpoch = _unlockEpoch(lockDuration);
         if (value == 0 || value > uint256(uint128(type(int128).max))) revert InvalidAmount();
 
-        tokenId = nextId++;
+        tokenId = _escrowStorage().nextId++;
         _deposit(value, tokenId);
-        _lockData[tokenId] = LockData(unlockEpoch, false, 0);
+        _escrowStorage().lockData[tokenId] = LockData(unlockEpoch, false, 0);
         int128 principal = _amountOf(tokenId);
         if (principal.toUint256() != value) revert InvalidValue();
         _checkpointLock(
@@ -53,7 +57,7 @@ contract VeMON is VotingEscrow {
     function lockPermanent(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
         uint256 amount = uint256(uint128(_amountOf(tokenId)));
-        LockData memory oldData = _lockData[tokenId];
+        LockData memory oldData = _escrowStorage().lockData[tokenId];
         IVotingEscrow.LockedBalance memory oldLock =
             IVotingEscrow.LockedBalance(int128(uint128(amount)), oldData.end, oldData.isPermanent, oldData.boost);
         if (oldLock.isPermanent) revert PermanentLock();
@@ -61,7 +65,7 @@ contract VeMON is VotingEscrow {
         if (oldLock.end <= currentEpoch) revert LockExpired();
 
         IVotingEscrow.LockedBalance memory newLock = IVotingEscrow.LockedBalance(oldLock.amount, 0, true, oldLock.boost);
-        _lockData[tokenId] = LockData(0, true, oldData.boost);
+        _escrowStorage().lockData[tokenId] = LockData(0, true, oldData.boost);
         _checkpointLock(tokenId, oldLock, newLock);
         emit LockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
@@ -69,15 +73,15 @@ contract VeMON is VotingEscrow {
     function unlockPermanent(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
         uint256 amount = uint256(uint128(_amountOf(tokenId)));
-        LockData memory oldData = _lockData[tokenId];
+        LockData memory oldData = _escrowStorage().lockData[tokenId];
         IVotingEscrow.LockedBalance memory oldLock =
             IVotingEscrow.LockedBalance(int128(uint128(amount)), oldData.end, oldData.isPermanent, oldData.boost);
         if (!oldLock.isPermanent) revert NotPermanentLock();
 
         uint64 currentEpoch = _currentEpoch();
         IVotingEscrow.LockedBalance memory newLock =
-            IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles), false, oldLock.boost);
-        _lockData[tokenId] = LockData(newLock.end, false, oldData.boost);
+            IVotingEscrow.LockedBalance(oldLock.amount, _unlockEpoch(maxLockCycles()), false, oldLock.boost);
+        _escrowStorage().lockData[tokenId] = LockData(newLock.end, false, oldData.boost);
         _checkpointLock(tokenId, oldLock, newLock);
         emit UnlockPermanent(msg.sender, tokenId, newLock.amount.toUint256(), currentEpoch);
     }
@@ -85,26 +89,26 @@ contract VeMON is VotingEscrow {
     function _deposit(uint256 amount, uint256 tokenId) internal {
         if (msg.value != amount) revert InvalidValue();
 
-        IStakingController(controller).deposit{value: amount}(tokenId);
+        IStakingController(controller()).deposit{value: amount}(tokenId);
     }
 
     /// @notice Withdraw a fully unstaked position's MON and burn its veNFT.
     function withdraw(uint256 tokenId) external nonReentrant {
         _requireApprovedOrOwner(msg.sender, tokenId);
 
-        if (_lockData[tokenId].isPermanent) revert PermanentLock();
+        if (_escrowStorage().lockData[tokenId].isPermanent) revert PermanentLock();
 
         (uint64 currentEpoch,) = ProtocolTimeLibrary.currentEpoch();
-        if (_lockData[tokenId].end > currentEpoch) revert LockNotExpired();
+        if (_escrowStorage().lockData[tokenId].end > currentEpoch) revert LockNotExpired();
 
         // Withdrawal proceeds are forwarded to the controller and do not need to be read here.
         // forge-lint: disable-next-line(unused-return)
-        IStakingController(controller).withdraw(tokenId);
+        IStakingController(controller()).withdraw(tokenId);
         _burn(tokenId);
     }
 
     function _amountOf(uint256 tokenId) internal view override returns (int128) {
-        return uint256(IStakingController(controller).veMONPrincipalOf(tokenId)).toInt128();
+        return uint256(IStakingController(controller()).veMONPrincipalOf(tokenId)).toInt128();
     }
 
     function _requireApprovedOrOwner(address account, uint256 tokenId) internal view {
@@ -121,7 +125,7 @@ contract VeMON is VotingEscrow {
 
     function _unlockEpoch(uint256 lockCycles) internal returns (uint256 unlockEpoch) {
         if (lockCycles == 0) revert LockDurationNotInFuture();
-        if (lockCycles > maxLockCycles) revert LockDurationTooLong();
+        if (lockCycles > maxLockCycles()) revert LockDurationTooLong();
 
         (uint64 currentEpoch_,) = ProtocolTimeLibrary.currentEpoch();
         unlockEpoch =
@@ -132,7 +136,7 @@ contract VeMON is VotingEscrow {
     }
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
-        from = ERC721._update(to, tokenId, auth);
-        if (from != address(0) && to != address(0)) ownershipChange[tokenId] = block.number;
+        from = ERC721Upgradeable._update(to, tokenId, auth);
+        if (from != address(0) && to != address(0)) _escrowStorage().ownershipChange[tokenId] = block.number;
     }
 }

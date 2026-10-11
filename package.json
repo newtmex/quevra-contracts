@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "description": "Quevra protocol contracts",
   "main": "./index.js",
   "exports": {
@@ -10,10 +13,33 @@
   },
   "scripts": {
     "dev": "anvil --network monad",
-    "build": "forge build",
-    "test": "forge test",
+    "build": "forge build && hardhat compile",
+    "test": "forge test && hardhat test",
+    "test:hardhat": "hardhat test mocha",
     "test:e2e": "bash script/e2e/run.sh",
-    "typecheck": "forge build",
-    "check": "forge fmt --check && forge build --sizes && forge test -vvv"
+    "hardhat": "hardhat",
+    "deploy:all": "hardhat run deploy/scripts/deploy-all.ts",
+    "deploy:core": "hardhat run deploy/scripts/deploy-core.ts",
+    "deploy:status": "hardhat run deploy/scripts/status.ts",
+    "deploy:verify": "hardhat run deploy/scripts/verify.ts",
+    "upgrade:validate": "hardhat run deploy/scripts/upgrade-validate.ts",
+    "upgrade:prepare": "hardhat run deploy/scripts/upgrade-prepare.ts",
+    "upgrade:execute:local": "hardhat run deploy/scripts/upgrade-execute-local.ts",
+    "typecheck": "tsc --noEmit && forge build",
+    "check": "forge fmt --check && forge build --sizes && forge test -vvv && hardhat compile && tsc --noEmit && hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "4.2.0",
+    "@nomicfoundation/hardhat-mocha": "4.0.0",
+    "@nomicfoundation/hardhat-verify": "3.0.22",
+    "@openzeppelin/contracts": "5.7.0",
+    "@openzeppelin/contracts-upgradeable": "5.7.0",
+    "@openzeppelin/hardhat-upgrades": "4.1.0",
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.7.5",
+    "ethers": "6.17.0",
+    "hardhat": "3.19.0",
+    "mocha": "12.0.0",
+    "typescript": "5.9.3"
   }
 }

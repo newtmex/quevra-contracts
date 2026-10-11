@@ -10,13 +10,15 @@ import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
 import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 contract StakingControllerTest is StakingControllerFixture {
-    function test_constructorSetsImplementations() public view {
+    function test_proxyInitializesAndStoresBeacons() public view {
         assertEq(controller.owner(), address(this));
         assertTrue(address(veMON) != address(controller));
-        assertTrue(controller.vaultImplementation() != address(0));
-        assertTrue(controller.agentImplementation() != address(0));
+        assertEq(controller.vaultBeacon(), vaultBeacon);
+        assertEq(controller.agentBeacon(), agentBeacon);
     }
 
     function test_predictAgentAddressIsDeterministicAndTokenBound() public view {
@@ -29,17 +31,28 @@ contract StakingControllerTest is StakingControllerFixture {
     }
 
     function test_constructorSetsInitialCommissionImmediately() public {
-        StakingController configured = new StakingController(address(this), commission);
+        (StakingController configured,,) = _newController(commission);
         assertEq(configured.commission(), commission);
     }
 
     function test_constructorRejectsCommissionAboveMaximum() public {
+        StakingVault vaultImpl = new StakingVault();
+        StakingAgent agentImpl = new StakingAgent();
+        UpgradeableBeacon vaultProxyBeacon = new UpgradeableBeacon(address(vaultImpl), address(this));
+        UpgradeableBeacon agentProxyBeacon = new UpgradeableBeacon(address(agentImpl), address(this));
+        StakingController implementation = new StakingController();
         vm.expectRevert(IStakingController.InvalidCommission.selector);
-        new StakingController(address(this), 1e18 + 1);
+        new ERC1967Proxy(
+            address(implementation),
+            abi.encodeCall(
+                StakingController.initialize,
+                (address(this), 1e18 + 1, address(vaultProxyBeacon), address(agentProxyBeacon))
+            )
+        );
     }
 
     function test_veIsOwnerSetOnce() public {
-        StakingController configured = new StakingController(address(this), 0);
+        (StakingController configured,,) = _newController(0);
         address replacement = makeAddr("replacement-ve");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, operator));

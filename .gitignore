@@ -1,6 +1,8 @@
 # Compiler files
 cache/
 out/
+/artifacts/
+/artifacts/hardhat/
 
 # Commonly ignored directories
 .logs/
@@ -14,6 +16,8 @@ out/
 
 # Docs
 docs/
+!docs/
+!docs/**
 
 # Dotenv file
 .env

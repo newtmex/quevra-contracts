@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 import {ValidatorsVoter} from "../src/voting/ValidatorsVoter.sol";
 import {StakingController} from "../src/staking/StakingController.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
@@ -9,6 +9,12 @@ import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
 import {VeMON} from "../src/VeMON.sol";
 import {VeValidator} from "../src/VeValidator.sol";
 import {VeValidatorFixture} from "./fixtures/VeValidatorFixture.sol";
+import {StakingVault} from "../src/staking/controlled/StakingVault.sol";
+import {StakingAgent} from "../src/staking/controlled/StakingAgent.sol";
+import {NonStakingGauge} from "../src/gauges/NonStakingGauge.sol";
+import {BribeVotingRewards} from "../src/rewards/BribeVotingRewards.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract VeValidatorTest is VeValidatorFixture {
     StakingController internal controller;
@@ -19,13 +25,61 @@ contract VeValidatorTest is VeValidatorFixture {
 
     function setUp() public override {
         super.setUp();
-        controller = new StakingController(address(this), 0);
-        veMON = new VeMON(address(controller), 4);
+        StakingVault vaultImplementation = new StakingVault();
+        StakingAgent agentImplementation = new StakingAgent();
+        UpgradeableBeacon vaultBeacon = new UpgradeableBeacon(address(vaultImplementation), address(this));
+        UpgradeableBeacon agentBeacon = new UpgradeableBeacon(address(agentImplementation), address(this));
+        StakingController controllerImplementation = new StakingController();
+        controller = StakingController(
+            payable(address(
+                    new ERC1967Proxy(
+                        address(controllerImplementation),
+                        abi.encodeCall(
+                            StakingController.initialize, (address(this), 0, address(vaultBeacon), address(agentBeacon))
+                        )
+                    )
+                ))
+        );
+        VeMON veMONImplementation = new VeMON();
+        veMON = VeMON(
+            address(
+                new ERC1967Proxy(
+                    address(veMONImplementation),
+                    abi.encodeCall(VeMON.initialize, (address(controller), 4, address(this)))
+                )
+            )
+        );
         controller.setVe(address(veMON));
 
-        validatorsVoter = new ValidatorsVoter(address(veMON), address(0), address(this));
+        NonStakingGauge gaugeImplementation = new NonStakingGauge();
+        BribeVotingRewards bribeImplementation = new BribeVotingRewards();
+        UpgradeableBeacon gaugeBeacon = new UpgradeableBeacon(address(gaugeImplementation), address(this));
+        UpgradeableBeacon bribeBeacon = new UpgradeableBeacon(address(bribeImplementation), address(this));
+        ValidatorsVoter voterImplementation = new ValidatorsVoter();
+        validatorsVoter = ValidatorsVoter(
+            address(
+                new ERC1967Proxy(
+                    address(voterImplementation),
+                    abi.encodeCall(
+                        ValidatorsVoter.initialize,
+                        (address(veMON), address(0), address(this), address(gaugeBeacon), address(bribeBeacon))
+                    )
+                )
+            )
+        );
         gaugeRewardToken = new ERC20Mock();
-        veValidator = new VeValidator(address(controller), address(validatorsVoter), address(gaugeRewardToken), 4);
+        VeValidator implementation = new VeValidator();
+        veValidator = VeValidator(
+            address(
+                new ERC1967Proxy(
+                    address(implementation),
+                    abi.encodeCall(
+                        VeValidator.initialize,
+                        (address(controller), address(validatorsVoter), address(gaugeRewardToken), 4, address(this))
+                    )
+                )
+            )
+        );
         validatorsVoter.setBoostableVe(address(veValidator));
         validatorsVoter.whitelistToken(address(gaugeRewardToken), true);
         controller.setValidatorVe(address(veValidator));

@@ -5,7 +5,9 @@ import {BribeVotingRewards} from "../src/rewards/BribeVotingRewards.sol";
 import {IBaseVoter} from "../src/interfaces/IBaseVoter.sol";
 import {IReward} from "../src/interfaces/IReward.sol";
 import {BribeVotingRewardsFixture} from "./fixtures/StakingRewardsFixture.sol";
-import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 contract RewardVoterMock is IBaseVoter {
     address public immutable override ve;
@@ -30,7 +32,10 @@ contract BribeVotingRewardsTest is BribeVotingRewardsFixture {
     function setUp() public override {
         super.setUp();
         rewardVoter = new RewardVoterMock(address(veMON));
-        bribeVotingRewards = new BribeVotingRewards(address(rewardVoter), new address[](0));
+        BribeVotingRewards implementation = new BribeVotingRewards();
+        UpgradeableBeacon beacon = new UpgradeableBeacon(address(implementation), address(this));
+        bribeVotingRewards = BribeVotingRewards(address(new BeaconProxy(address(beacon), bytes(""))));
+        bribeVotingRewards.initialize(address(rewardVoter), new address[](0));
         rewardA = new ERC20Mock();
         rewardB = new ERC20Mock();
         unlisted = new ERC20Mock();

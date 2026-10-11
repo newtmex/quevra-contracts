@@ -394,3 +394,11 @@ Before finishing:
 - For claims about true Monad compatibility, run the relevant Solonet or fork/e2e path and state any environment limitations. For Tigris-inspired changes, perform and report the source SPDX/provenance review described above.
 
 A clean build is necessary but **not sufficient** for MVP readiness.
+
+## Upgradeable architecture notes
+
+- Core proxy modules are `StakingController`, `VeMON`, `VeValidator`, and `ValidatorsVoter` (UUPS). Dynamic vault, agent, gauge, and bribe instances use their respective `UpgradeableBeacon` and `BeaconProxy`.
+- The deployment and upgrade CLI is in `deploy/`; maintain the command/config documentation under `docs/`. Hardhat 3 and Foundry must keep Solidity 0.8.28, Cancun, optimizer 200, bytecode metadata, and `viaIR` settings aligned.
+- Preserve the implementation constructor `_disableInitializers()` pattern, parent initializer ordering, and narrow upgrade owner checks. The configured owner has direct UUPS and Beacon upgrade authority; UUPS ownership handoff uses `Ownable2StepUpgradeable` acceptance.
+- Do not claim protocol storage is ERC-7201 namespaced until each protocol-owned state module has been migrated and representative storage validation tests prove compatibility. Current protocol variables use sequential storage; this is an explicit outstanding architectural limitation.
+- Use elevated access for RPC-dependent Foundry fork, Solonet, deployment, and verification commands. Record the exact network and environment used; Hardhat's simulated network does not test Monad's staking precompile.
