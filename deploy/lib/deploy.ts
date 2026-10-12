@@ -12,6 +12,11 @@ import {
   type DeploymentManifest,
 } from "./runtime.js";
 
+const upgradeableBeaconAbi = [
+  "function implementation() view returns (address)",
+  "function owner() view returns (address)",
+];
+
 async function deployBeacon(
   manifest: DeploymentManifest,
   ctx: Awaited<ReturnType<typeof context>>,
@@ -20,8 +25,11 @@ async function deployBeacon(
   owner: string,
 ) {
   const prior = manifest.contracts[key];
-  if (prior?.beacon && (await deployedCode(ctx.ethers.provider, prior.beacon))) {
-    const beacon = await ctx.ethers.getContractAt("UpgradeableBeacon", prior.beacon);
+  if (prior?.beacon) {
+    if (!(await deployedCode(ctx.ethers.provider, prior.beacon))) {
+      throw new Error(`Manifest ${key} beacon ${prior.beacon} has no on-chain code; refusing to redeploy`);
+    }
+    const beacon = await ctx.ethers.getContractAt(upgradeableBeaconAbi, prior.beacon);
     if ((await beacon.owner()) !== owner) throw new Error(`${key} beacon owner differs from PROTOCOL_OWNER_ADDRESS`);
     const implementation = await beacon.implementation();
     manifest.contracts[key] = {
@@ -37,11 +45,12 @@ async function deployBeacon(
   const beacon = await ctx.upgrades.deployBeacon(Factory, { initialOwner: owner });
   const txHash = await deploymentTx(beacon);
   const address = await beacon.getAddress();
-  const implementation = await (await ctx.ethers.getContractAt("UpgradeableBeacon", address)).implementation();
+  manifest.contracts[key] = { beacon: address, transactionHash: txHash };
+  await writeManifest(manifest);
+  const implementation = await (await ctx.ethers.getContractAt(upgradeableBeaconAbi, address)).implementation();
   manifest.contracts[key] = {
-    beacon: address,
+    ...manifest.contracts[key],
     implementation,
-    transactionHash: txHash,
     codeHash: await recordCodeHash(ctx.ethers.provider, address),
     implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
   };
@@ -57,7 +66,10 @@ async function deployUups(
   args: unknown[],
 ) {
   const prior = manifest.contracts[key];
-  if (prior?.proxy && (await deployedCode(ctx.ethers.provider, prior.proxy))) {
+  if (prior?.proxy) {
+    if (!(await deployedCode(ctx.ethers.provider, prior.proxy))) {
+      throw new Error(`Manifest ${key} proxy ${prior.proxy} has no on-chain code; refusing to redeploy`);
+    }
     const instance = await ctx.ethers.getContractAt(contractName, prior.proxy);
     const implementation = await ctx.upgrades.erc1967.getImplementationAddress(prior.proxy);
     manifest.contracts[key] = {
@@ -73,11 +85,12 @@ async function deployUups(
   const proxy = await ctx.upgrades.deployProxy(Factory, args, { kind: "uups", initializer: "initialize" });
   const txHash = await deploymentTx(proxy);
   const address = await proxy.getAddress();
+  manifest.contracts[key] = { proxy: address, transactionHash: txHash };
+  await writeManifest(manifest);
   const implementation = await ctx.upgrades.erc1967.getImplementationAddress(address);
   manifest.contracts[key] = {
-    proxy: address,
+    ...manifest.contracts[key],
     implementation,
-    transactionHash: txHash,
     codeHash: await recordCodeHash(ctx.ethers.provider, address),
     implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
   };

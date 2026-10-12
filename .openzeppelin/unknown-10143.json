@@ -1,0 +1,3075 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x8e119Bfe93dB45Cb456B3ACE1a3935958E8dC04f",
+      "txHash": "0x3d64e7c386da589975e129948d713c4114114308a6ec4ffdd725153e5bfc02f2",
+      "kind": "uups"
+    },
+    {
+      "address": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+      "txHash": "0x4b47ef07f88a8373e722724f9188e059e7c6d3f0bc344882e48ae701ebfde673",
+      "kind": "uups"
+    },
+    {
+      "address": "0x46Eb9dfa056A40C3AC2C65914aA792790227A3aF",
+      "txHash": "0x68d27abe8b593d97b54cf91b98ca6a1ecb9c0d00ad7c0c65401c3ad5660fa8cb",
+      "kind": "uups"
+    },
+    {
+      "address": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+      "txHash": "0x27fb9cc4b8326993b7e3a9af44b72ca82a0c78154e6dc5b1bc85a173158f0917",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "f41fe3616c6765ca1ed618bb449ed17fa9ce91968e0cac3e8487eab4dd76b925": {
+      "address": "0xb25912d67A8fb9C7Acb8b2eB4c1600aF7872D132",
+      "txHash": "0xbb1a7c31e29235fb69936e470d4f4f616389828650605d33d14aeccd823e7ee4",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_bytes32)dyn_storage": {
+            "label": "bytes32[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(IVeValidator)7166": {
+            "label": "contract IVeValidator",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)883_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Set)4358_storage": {
+            "label": "struct EnumerableSet.Set",
+            "members": [
+              {
+                "label": "_values",
+                "type": "t_array(t_bytes32)dyn_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_positions",
+                "type": "t_mapping(t_bytes32,t_uint256)",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(StakeControlledStorage)8823_storage": {
+            "label": "struct StakeControlled.StakeControlledStorage",
+            "members": [
+              {
+                "label": "controller",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(StakingVaultStorage)9100_storage": {
+            "label": "struct StakingVault.StakingVaultStorage",
+            "members": [
+              {
+                "label": "validatorVe",
+                "type": "t_contract(IVeValidator)7166",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "balanceOf",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "pendingWithdrawal",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "tokenIds",
+                "type": "t_struct(UintSet)4735_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "totalBalance",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "rewardPerShareStored",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "accountedUnclaimedRewards",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "rewardReserve",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "userRewardPerSharePaid",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "rewards",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "validatorTokenId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "11"
+              },
+              {
+                "label": "requiresMinimumStake",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "12"
+              },
+              {
+                "label": "currentValidatorId",
+                "type": "t_uint64",
+                "offset": 1,
+                "slot": "12"
+              }
+            ],
+            "numberOfBytes": "416"
+          },
+          "t_struct(UintSet)4735_storage": {
+            "label": "struct EnumerableSet.UintSet",
+            "members": [
+              {
+                "label": "_inner",
+                "type": "t_struct(Set)4358_storage",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.StakingVault": [
+            {
+              "contract": "StakingVault",
+              "label": "validatorVe",
+              "type": "t_contract(IVeValidator)7166",
+              "src": "project/src/staking/controlled/StakingVault.sol:19",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "balanceOf",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/controlled/StakingVault.sol:20",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "pendingWithdrawal",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/controlled/StakingVault.sol:21",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "tokenIds",
+              "type": "t_struct(UintSet)4735_storage",
+              "src": "project/src/staking/controlled/StakingVault.sol:22",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "totalBalance",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingVault.sol:23",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "rewardPerShareStored",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingVault.sol:24",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "accountedUnclaimedRewards",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingVault.sol:25",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "rewardReserve",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingVault.sol:26",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "userRewardPerSharePaid",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/controlled/StakingVault.sol:27",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "rewards",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/controlled/StakingVault.sol:28",
+              "offset": 0,
+              "slot": "10"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "validatorTokenId",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingVault.sol:29",
+              "offset": 0,
+              "slot": "11"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "requiresMinimumStake",
+              "type": "t_bool",
+              "src": "project/src/staking/controlled/StakingVault.sol:30",
+              "offset": 0,
+              "slot": "12"
+            },
+            {
+              "contract": "StakingVault",
+              "label": "currentValidatorId",
+              "type": "t_uint64",
+              "src": "project/src/staking/controlled/StakingVault.sol:31",
+              "offset": 1,
+              "slot": "12"
+            }
+          ],
+          "erc7201:quevra.StakeControlled": [
+            {
+              "contract": "StakeControlled",
+              "label": "controller",
+              "type": "t_address",
+              "src": "project/src/staking/controlled/StakeControlled.sol:13",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "e50250015a2cc180b851ebbf2bd9b81ffaa1f1375f08e749910f991759b87ab0": {
+      "address": "0xE53a0fE341Fa14061fFfd43C97e4c4D4cD054322",
+      "txHash": "0x477de5b7b853dd11f0a43ac8e3941ea18f5507e707b9a9ffae531235c3b70c65",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_uint64,t_bool)": {
+            "label": "mapping(uint64 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_uint256)": {
+            "label": "mapping(uint64 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)883_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(StakeControlledStorage)8823_storage": {
+            "label": "struct StakeControlled.StakeControlledStorage",
+            "members": [
+              {
+                "label": "controller",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(StakingAgentStorage)8890_storage": {
+            "label": "struct StakingAgent.StakingAgentStorage",
+            "members": [
+              {
+                "label": "veTokenId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "balanceOf",
+                "type": "t_mapping(t_uint64,t_uint256)",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "pendingWithdrawal",
+                "type": "t_mapping(t_uint64,t_uint256)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "usedValidator",
+                "type": "t_mapping(t_uint64,t_bool)",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.StakingAgent": [
+            {
+              "contract": "StakingAgent",
+              "label": "veTokenId",
+              "type": "t_uint256",
+              "src": "project/src/staking/controlled/StakingAgent.sol:11",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "StakingAgent",
+              "label": "balanceOf",
+              "type": "t_mapping(t_uint64,t_uint256)",
+              "src": "project/src/staking/controlled/StakingAgent.sol:12",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "StakingAgent",
+              "label": "pendingWithdrawal",
+              "type": "t_mapping(t_uint64,t_uint256)",
+              "src": "project/src/staking/controlled/StakingAgent.sol:13",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "StakingAgent",
+              "label": "usedValidator",
+              "type": "t_mapping(t_uint64,t_bool)",
+              "src": "project/src/staking/controlled/StakingAgent.sol:14",
+              "offset": 0,
+              "slot": "3"
+            }
+          ],
+          "erc7201:quevra.StakeControlled": [
+            {
+              "contract": "StakeControlled",
+              "label": "controller",
+              "type": "t_address",
+              "src": "project/src/staking/controlled/StakeControlled.sol:13",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "1d3a29927fe5443e1b9ffd1489ff68f2a384a338bc4d144bf98b8477cf8385a6": {
+      "address": "0x66F7FC55bbE07512dc522f80303862889D13FdA1",
+      "txHash": "0xc11d0d7adb530832b4112ca3f8da4f18de8ea9dc4ddd18a56e9f3f7930acf86f",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(GaugeStorage)6081_storage": {
+            "label": "struct Gauge.GaugeStorage",
+            "members": [
+              {
+                "label": "rewardToken",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "voter",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "ve",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "periodFinish",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "rewardRate",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "lastUpdateTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "rewardPerTokenStored",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "totalSupply",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "balanceOf",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "userRewardPerTokenPaid",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "rewards",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "rewardRateByEpoch",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "11"
+              }
+            ],
+            "numberOfBytes": "384"
+          },
+          "t_struct(InitializableStorage)883_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(NonStakingGaugeStorage)6248_storage": {
+            "label": "struct NonStakingGauge.NonStakingGaugeStorage",
+            "members": [
+              {
+                "label": "rewardsBeneficiary",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.NonStakingGauge": [
+            {
+              "contract": "NonStakingGauge",
+              "label": "rewardsBeneficiary",
+              "type": "t_address",
+              "src": "project/src/gauges/NonStakingGauge.sol:14",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:quevra.Gauge": [
+            {
+              "contract": "Gauge",
+              "label": "rewardToken",
+              "type": "t_address",
+              "src": "project/src/gauges/Gauge.sol:24",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Gauge",
+              "label": "voter",
+              "type": "t_address",
+              "src": "project/src/gauges/Gauge.sol:25",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "Gauge",
+              "label": "ve",
+              "type": "t_address",
+              "src": "project/src/gauges/Gauge.sol:26",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "Gauge",
+              "label": "periodFinish",
+              "type": "t_uint256",
+              "src": "project/src/gauges/Gauge.sol:27",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "Gauge",
+              "label": "rewardRate",
+              "type": "t_uint256",
+              "src": "project/src/gauges/Gauge.sol:28",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "Gauge",
+              "label": "lastUpdateTime",
+              "type": "t_uint256",
+              "src": "project/src/gauges/Gauge.sol:29",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "Gauge",
+              "label": "rewardPerTokenStored",
+              "type": "t_uint256",
+              "src": "project/src/gauges/Gauge.sol:30",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "Gauge",
+              "label": "totalSupply",
+              "type": "t_uint256",
+              "src": "project/src/gauges/Gauge.sol:31",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "Gauge",
+              "label": "balanceOf",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/gauges/Gauge.sol:32",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "Gauge",
+              "label": "userRewardPerTokenPaid",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/gauges/Gauge.sol:33",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "Gauge",
+              "label": "rewards",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/gauges/Gauge.sol:34",
+              "offset": 0,
+              "slot": "10"
+            },
+            {
+              "contract": "Gauge",
+              "label": "rewardRateByEpoch",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/gauges/Gauge.sol:35",
+              "offset": 0,
+              "slot": "11"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "605bce91ac57f09c2ea9f92a744db3371bc106292951958d26a422fd4f6ae034": {
+      "address": "0xf22EaAecdA0E2144154a964C2294549a3Ba999C4",
+      "txHash": "0xbc2fc0d787bc85f2327389e9fa8bcc68057c58b9b2efe059da328db3033d7796",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_uint256,t_uint256))": {
+            "label": "mapping(address => mapping(uint256 => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))": {
+            "label": "mapping(uint256 => mapping(uint256 => struct IReward.Checkpoint))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Checkpoint)4662_storage)": {
+            "label": "mapping(uint256 => struct IReward.Checkpoint)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)": {
+            "label": "mapping(uint256 => struct IReward.SupplyCheckpoint)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Checkpoint)4662_storage": {
+            "label": "struct IReward.Checkpoint",
+            "members": [
+              {
+                "label": "cycle",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "balanceOf",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(InitializableStorage)808_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(RewardStorage)5681_storage": {
+            "label": "struct Reward.RewardStorage",
+            "members": [
+              {
+                "label": "voter",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "ve",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "authorized",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "totalSupply",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "balanceOf",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "tokenRewardsPerCycle",
+                "type": "t_mapping(t_address,t_mapping(t_uint256,t_uint256))",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "lastEarnEpoch",
+                "type": "t_mapping(t_address,t_mapping(t_uint256,t_uint256))",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "rewardTokens",
+                "type": "t_array(t_address)dyn_storage",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "isReward",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "checkpoints",
+                "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "numCheckpoints",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "supplyCheckpoints",
+                "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)",
+                "offset": 0,
+                "slot": "11"
+              },
+              {
+                "label": "supplyNumCheckpoints",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "12"
+              }
+            ],
+            "numberOfBytes": "416"
+          },
+          "t_struct(SupplyCheckpoint)4667_storage": {
+            "label": "struct IReward.SupplyCheckpoint",
+            "members": [
+              {
+                "label": "cycle",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "supply",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.Reward": [
+            {
+              "contract": "Reward",
+              "label": "voter",
+              "type": "t_address",
+              "src": "project/src/rewards/Reward.sol:25",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Reward",
+              "label": "ve",
+              "type": "t_address",
+              "src": "project/src/rewards/Reward.sol:26",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "Reward",
+              "label": "authorized",
+              "type": "t_address",
+              "src": "project/src/rewards/Reward.sol:27",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "Reward",
+              "label": "totalSupply",
+              "type": "t_uint256",
+              "src": "project/src/rewards/Reward.sol:28",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "Reward",
+              "label": "balanceOf",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/rewards/Reward.sol:29",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "Reward",
+              "label": "tokenRewardsPerCycle",
+              "type": "t_mapping(t_address,t_mapping(t_uint256,t_uint256))",
+              "src": "project/src/rewards/Reward.sol:30",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "Reward",
+              "label": "lastEarnEpoch",
+              "type": "t_mapping(t_address,t_mapping(t_uint256,t_uint256))",
+              "src": "project/src/rewards/Reward.sol:31",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "Reward",
+              "label": "rewardTokens",
+              "type": "t_array(t_address)dyn_storage",
+              "src": "project/src/rewards/Reward.sol:32",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "Reward",
+              "label": "isReward",
+              "type": "t_mapping(t_address,t_bool)",
+              "src": "project/src/rewards/Reward.sol:33",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "Reward",
+              "label": "checkpoints",
+              "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))",
+              "src": "project/src/rewards/Reward.sol:34",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "Reward",
+              "label": "numCheckpoints",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/rewards/Reward.sol:35",
+              "offset": 0,
+              "slot": "10"
+            },
+            {
+              "contract": "Reward",
+              "label": "supplyCheckpoints",
+              "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)",
+              "src": "project/src/rewards/Reward.sol:36",
+              "offset": 0,
+              "slot": "11"
+            },
+            {
+              "contract": "Reward",
+              "label": "supplyNumCheckpoints",
+              "type": "t_uint256",
+              "src": "project/src/rewards/Reward.sol:37",
+              "offset": 0,
+              "slot": "12"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "0a6a969b3228543739220ae814fd2e6a9f880ad295c490b73a69539667e0d121": {
+      "address": "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
+      "txHash": "0xacc116ef48d35c4addc1348f43e133f6c4f9823149ee332fb3eb3d8cb13d8c8b",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_bytes32)dyn_storage": {
+            "label": "bytes32[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_address)dyn_storage)": {
+            "label": "mapping(uint256 => address[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(uint256 => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)": {
+            "label": "mapping(uint256 => struct EnumerableSet.AddressSet)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint64)": {
+            "label": "mapping(uint256 => uint64)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_address)": {
+            "label": "mapping(uint64 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(AddressSet)4638_storage": {
+            "label": "struct EnumerableSet.AddressSet",
+            "members": [
+              {
+                "label": "_inner",
+                "type": "t_struct(Set)4358_storage",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(InitializableStorage)883_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Ownable2StepStorage)13_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)68_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Set)4358_storage": {
+            "label": "struct EnumerableSet.Set",
+            "members": [
+              {
+                "label": "_values",
+                "type": "t_array(t_bytes32)dyn_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_positions",
+                "type": "t_mapping(t_bytes32,t_uint256)",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(StakingAdminStorage)8091_storage": {
+            "label": "struct StakingAdmin.StakingAdminStorage",
+            "members": [
+              {
+                "label": "ve",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "validatorVe",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "vaultBeacon",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "agentBeacon",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "isVault",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "isAgent",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "validatorTokenId",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "validatorBackingOf",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "veMONPrincipalOf",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "vaultByValidatorId",
+                "type": "t_mapping(t_uint64,t_address)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "commission",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "pendingCommission",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "11"
+              },
+              {
+                "label": "pendingCommissionCycle",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "12"
+              }
+            ],
+            "numberOfBytes": "416"
+          },
+          "t_struct(StakingControllerStorage)8382_storage": {
+            "label": "struct StakingController.StakingControllerStorage",
+            "members": [
+              {
+                "label": "balanceOf",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "agentByToken",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "stakingCycleOf",
+                "type": "t_mapping(t_uint256,t_uint64)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "intentOf",
+                "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "tokenVaultLists",
+                "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "tokenRewardVaultLists",
+                "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "intentVaultLists",
+                "type": "t_mapping(t_uint256,t_array(t_address)dyn_storage)",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "intentVaultIndex",
+                "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+                "offset": 0,
+                "slot": "7"
+              }
+            ],
+            "numberOfBytes": "256"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.StakingController": [
+            {
+              "contract": "StakingController",
+              "label": "balanceOf",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/StakingController.sol:31",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "StakingController",
+              "label": "agentByToken",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "project/src/staking/StakingController.sol:32",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "StakingController",
+              "label": "stakingCycleOf",
+              "type": "t_mapping(t_uint256,t_uint64)",
+              "src": "project/src/staking/StakingController.sol:33",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "StakingController",
+              "label": "intentOf",
+              "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+              "src": "project/src/staking/StakingController.sol:34",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "StakingController",
+              "label": "tokenVaultLists",
+              "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+              "src": "project/src/staking/StakingController.sol:35",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "StakingController",
+              "label": "tokenRewardVaultLists",
+              "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+              "src": "project/src/staking/StakingController.sol:36",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "StakingController",
+              "label": "intentVaultLists",
+              "type": "t_mapping(t_uint256,t_array(t_address)dyn_storage)",
+              "src": "project/src/staking/StakingController.sol:37",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "StakingController",
+              "label": "intentVaultIndex",
+              "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+              "src": "project/src/staking/StakingController.sol:38",
+              "offset": 0,
+              "slot": "7"
+            }
+          ],
+          "erc7201:quevra.StakingAdmin": [
+            {
+              "contract": "StakingAdmin",
+              "label": "ve",
+              "type": "t_address",
+              "src": "project/src/staking/StakingAdmin.sol:23",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "validatorVe",
+              "type": "t_address",
+              "src": "project/src/staking/StakingAdmin.sol:24",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "vaultBeacon",
+              "type": "t_address",
+              "src": "project/src/staking/StakingAdmin.sol:25",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "agentBeacon",
+              "type": "t_address",
+              "src": "project/src/staking/StakingAdmin.sol:26",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "isVault",
+              "type": "t_mapping(t_address,t_bool)",
+              "src": "project/src/staking/StakingAdmin.sol:27",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "isAgent",
+              "type": "t_mapping(t_address,t_bool)",
+              "src": "project/src/staking/StakingAdmin.sol:28",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "validatorTokenId",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/staking/StakingAdmin.sol:29",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "validatorBackingOf",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/StakingAdmin.sol:30",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "veMONPrincipalOf",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/staking/StakingAdmin.sol:31",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "vaultByValidatorId",
+              "type": "t_mapping(t_uint64,t_address)",
+              "src": "project/src/staking/StakingAdmin.sol:32",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "commission",
+              "type": "t_uint256",
+              "src": "project/src/staking/StakingAdmin.sol:33",
+              "offset": 0,
+              "slot": "10"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "pendingCommission",
+              "type": "t_uint256",
+              "src": "project/src/staking/StakingAdmin.sol:34",
+              "offset": 0,
+              "slot": "11"
+            },
+            {
+              "contract": "StakingAdmin",
+              "label": "pendingCommissionCycle",
+              "type": "t_uint64",
+              "src": "project/src/staking/StakingAdmin.sol:35",
+              "offset": 0,
+              "slot": "12"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/Ownable2StepUpgradeable.sol:29",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "c011a1b8516ab7f65780e776c718d8daf02e84f0b20c655731e8b93d5b715d82": {
+      "address": "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
+      "txHash": "0x7851fb9c78ba6b1ee90ef706d7b6c780edacedf0ba7701c826217ec7309e0b62",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_struct(Point)4055_storage)dyn_storage": {
+            "label": "struct VotingEscrow.Point[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_int128": {
+            "label": "int128",
+            "numberOfBytes": "16"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+            "label": "mapping(address => mapping(address => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.Point[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(LockData)4062_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.LockData)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Point)4055_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.Point)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_int128)": {
+            "label": "mapping(uint64 => int128)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(ERC721Storage)178_storage": {
+            "label": "struct ERC721Upgradeable.ERC721Storage",
+            "members": [
+              {
+                "label": "_name",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_symbol",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "_owners",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "_balances",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "_tokenApprovals",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "_operatorApprovals",
+                "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+                "offset": 0,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          },
+          "t_struct(InitializableStorage)808_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(LockData)4062_storage": {
+            "label": "struct VotingEscrow.LockData",
+            "members": [
+              {
+                "label": "end",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "isPermanent",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "boost",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Ownable2StepStorage)13_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)68_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Point)4055_storage": {
+            "label": "struct VotingEscrow.Point",
+            "members": [
+              {
+                "label": "bias",
+                "type": "t_int128",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "slope",
+                "type": "t_int128",
+                "offset": 16,
+                "slot": "0"
+              },
+              {
+                "label": "epoch",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "permanentBalance",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(VotingEscrowStorage)4102_storage": {
+            "label": "struct VotingEscrow.VotingEscrowStorage",
+            "members": [
+              {
+                "label": "maxLockCycles",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "maxLockEpochs",
+                "type": "t_uint64",
+                "offset": 8,
+                "slot": "0"
+              },
+              {
+                "label": "controller",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "voter",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "nextId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "lockData",
+                "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "epoch",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "pointHistory",
+                "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "userPointHistory",
+                "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "slopeChanges",
+                "type": "t_mapping(t_uint64,t_int128)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "ownershipChange",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "permanentLockBalance",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "10"
+              }
+            ],
+            "numberOfBytes": "352"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.VotingEscrow": [
+            {
+              "contract": "VotingEscrow",
+              "label": "maxLockCycles",
+              "type": "t_uint64",
+              "src": "project/src/VotingEscrow.sol:50",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "maxLockEpochs",
+              "type": "t_uint64",
+              "src": "project/src/VotingEscrow.sol:51",
+              "offset": 8,
+              "slot": "0"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "controller",
+              "type": "t_address",
+              "src": "project/src/VotingEscrow.sol:52",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "voter",
+              "type": "t_address",
+              "src": "project/src/VotingEscrow.sol:53",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "nextId",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:54",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "lockData",
+              "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+              "src": "project/src/VotingEscrow.sol:55",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "epoch",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:56",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "pointHistory",
+              "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+              "src": "project/src/VotingEscrow.sol:57",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "userPointHistory",
+              "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+              "src": "project/src/VotingEscrow.sol:58",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "slopeChanges",
+              "type": "t_mapping(t_uint64,t_int128)",
+              "src": "project/src/VotingEscrow.sol:59",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "ownershipChange",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/VotingEscrow.sol:60",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "permanentLockBalance",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:61",
+              "offset": 0,
+              "slot": "10"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/Ownable2StepUpgradeable.sol:29",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.ERC721": [
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_name",
+              "type": "t_string_storage",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:27",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_symbol",
+              "type": "t_string_storage",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:30",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_owners",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:32",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_balances",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:34",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_tokenApprovals",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:36",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_operatorApprovals",
+              "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:38",
+              "offset": 0,
+              "slot": "5"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "ab6b6abcd65d0f967e000e65c4d5c6643a1e87ee754375f28fff54b682501777": {
+      "address": "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
+      "txHash": "0x65e7a9919c373e3f068e8a56a35ac5d7b0d9401cf5f601bbec2deceff584891c",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_address)dyn_storage)": {
+            "label": "mapping(uint256 => address[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(uint256 => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)808_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(NonStakingVoterStorage)6001_storage": {
+            "label": "struct NonStakingVoter.NonStakingVoterStorage",
+            "members": [
+              {
+                "label": "ve",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "isWhitelistedToken",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "isGauge",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "gaugeToBribe",
+                "type": "t_mapping(t_address,t_address)",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "weights",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "votes",
+                "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "usedWeights",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "gaugeVote",
+                "type": "t_mapping(t_uint256,t_array(t_address)dyn_storage)",
+                "offset": 0,
+                "slot": "7"
+              }
+            ],
+            "numberOfBytes": "256"
+          },
+          "t_struct(Ownable2StepStorage)13_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)68_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(ValidatorsVoterStorage)6198_storage": {
+            "label": "struct ValidatorsVoter.ValidatorsVoterStorage",
+            "members": [
+              {
+                "label": "boostableVe",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "gaugeBeacon",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "bribeBeacon",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "boostableTokenIdToGauge",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "gaugeToVault",
+                "type": "t_mapping(t_address,t_address)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "vaultToGauge",
+                "type": "t_mapping(t_address,t_address)",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "gaugeVoteIndex",
+                "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.ValidatorsVoter": [
+            {
+              "contract": "ValidatorsVoter",
+              "label": "boostableVe",
+              "type": "t_address",
+              "src": "project/src/voting/ValidatorsVoter.sol:29",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "gaugeBeacon",
+              "type": "t_address",
+              "src": "project/src/voting/ValidatorsVoter.sol:30",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "bribeBeacon",
+              "type": "t_address",
+              "src": "project/src/voting/ValidatorsVoter.sol:31",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "boostableTokenIdToGauge",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "project/src/voting/ValidatorsVoter.sol:32",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "gaugeToVault",
+              "type": "t_mapping(t_address,t_address)",
+              "src": "project/src/voting/ValidatorsVoter.sol:33",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "vaultToGauge",
+              "type": "t_mapping(t_address,t_address)",
+              "src": "project/src/voting/ValidatorsVoter.sol:34",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "ValidatorsVoter",
+              "label": "gaugeVoteIndex",
+              "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+              "src": "project/src/voting/ValidatorsVoter.sol:35",
+              "offset": 0,
+              "slot": "6"
+            }
+          ],
+          "erc7201:quevra.NonStakingVoter": [
+            {
+              "contract": "NonStakingVoter",
+              "label": "ve",
+              "type": "t_address",
+              "src": "project/src/voting/NonStakingVoter.sol:27",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "isWhitelistedToken",
+              "type": "t_mapping(t_address,t_bool)",
+              "src": "project/src/voting/NonStakingVoter.sol:28",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "isGauge",
+              "type": "t_mapping(t_address,t_bool)",
+              "src": "project/src/voting/NonStakingVoter.sol:29",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "gaugeToBribe",
+              "type": "t_mapping(t_address,t_address)",
+              "src": "project/src/voting/NonStakingVoter.sol:30",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "weights",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/voting/NonStakingVoter.sol:31",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "votes",
+              "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))",
+              "src": "project/src/voting/NonStakingVoter.sol:32",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "usedWeights",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/voting/NonStakingVoter.sol:33",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "NonStakingVoter",
+              "label": "gaugeVote",
+              "type": "t_mapping(t_uint256,t_array(t_address)dyn_storage)",
+              "src": "project/src/voting/NonStakingVoter.sol:34",
+              "offset": 0,
+              "slot": "7"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/Ownable2StepUpgradeable.sol:29",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "1768714ab0a1761e45a8ad167ccdfa8d0f91e9ccba8c1bd401a371583bac512d": {
+      "address": "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
+      "txHash": "0x4b667b224b7859d05685ec6b83b461857295ae33f2ecc5441c273ba30510be3d",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_struct(Point)4055_storage)dyn_storage": {
+            "label": "struct VotingEscrow.Point[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes_storage": {
+            "label": "bytes",
+            "numberOfBytes": "32"
+          },
+          "t_int128": {
+            "label": "int128",
+            "numberOfBytes": "16"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+            "label": "mapping(address => mapping(address => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.Point[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(LockData)4062_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.LockData)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Point)4055_storage)": {
+            "label": "mapping(uint256 => struct VotingEscrow.Point)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)": {
+            "label": "mapping(uint256 => struct VeValidator.ValidatorPosition)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)": {
+            "label": "mapping(uint256 => struct IVeValidator.ValidatorSubmission)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint64,t_int128)": {
+            "label": "mapping(uint64 => int128)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(ERC721Storage)178_storage": {
+            "label": "struct ERC721Upgradeable.ERC721Storage",
+            "members": [
+              {
+                "label": "_name",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_symbol",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "_owners",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "_balances",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "_tokenApprovals",
+                "type": "t_mapping(t_uint256,t_address)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "_operatorApprovals",
+                "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+                "offset": 0,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          },
+          "t_struct(InitializableStorage)808_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(LockData)4062_storage": {
+            "label": "struct VotingEscrow.LockData",
+            "members": [
+              {
+                "label": "end",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "isPermanent",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "boost",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Ownable2StepStorage)13_storage": {
+            "label": "struct Ownable2StepUpgradeable.Ownable2StepStorage",
+            "members": [
+              {
+                "label": "_pendingOwner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)68_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Point)4055_storage": {
+            "label": "struct VotingEscrow.Point",
+            "members": [
+              {
+                "label": "bias",
+                "type": "t_int128",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "slope",
+                "type": "t_int128",
+                "offset": 16,
+                "slot": "0"
+              },
+              {
+                "label": "epoch",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "permanentBalance",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(ValidatorPosition)3826_storage": {
+            "label": "struct VeValidator.ValidatorPosition",
+            "members": [
+              {
+                "label": "validatorId",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "operator",
+                "type": "t_address",
+                "offset": 8,
+                "slot": "0"
+              },
+              {
+                "label": "vault",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "gauge",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "bribeVotingRewards",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(ValidatorSubmission)5253_storage": {
+            "label": "struct IVeValidator.ValidatorSubmission",
+            "members": [
+              {
+                "label": "payload",
+                "type": "t_bytes_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "signedSecpMessage",
+                "type": "t_bytes_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "signedBlsMessage",
+                "type": "t_bytes_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "operator",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "existing",
+                "type": "t_bool",
+                "offset": 20,
+                "slot": "3"
+              },
+              {
+                "label": "validatorId",
+                "type": "t_uint64",
+                "offset": 21,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(VeValidatorStorage)3844_storage": {
+            "label": "struct VeValidator.VeValidatorStorage",
+            "members": [
+              {
+                "label": "gaugeRewardToken",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "validatorPosition",
+                "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "tokenIdForVault",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "validatorSubmissions",
+                "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(VotingEscrowStorage)4102_storage": {
+            "label": "struct VotingEscrow.VotingEscrowStorage",
+            "members": [
+              {
+                "label": "maxLockCycles",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "maxLockEpochs",
+                "type": "t_uint64",
+                "offset": 8,
+                "slot": "0"
+              },
+              {
+                "label": "controller",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "voter",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "nextId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "lockData",
+                "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "epoch",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "pointHistory",
+                "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "userPointHistory",
+                "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "slopeChanges",
+                "type": "t_mapping(t_uint64,t_int128)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "ownershipChange",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "permanentLockBalance",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "10"
+              }
+            ],
+            "numberOfBytes": "352"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:quevra.VeValidator": [
+            {
+              "contract": "VeValidator",
+              "label": "gaugeRewardToken",
+              "type": "t_address",
+              "src": "project/src/VeValidator.sol:31",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "VeValidator",
+              "label": "validatorPosition",
+              "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)",
+              "src": "project/src/VeValidator.sol:32",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "VeValidator",
+              "label": "tokenIdForVault",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "project/src/VeValidator.sol:33",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "VeValidator",
+              "label": "validatorSubmissions",
+              "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)",
+              "src": "project/src/VeValidator.sol:34",
+              "offset": 0,
+              "slot": "3"
+            }
+          ],
+          "erc7201:quevra.VotingEscrow": [
+            {
+              "contract": "VotingEscrow",
+              "label": "maxLockCycles",
+              "type": "t_uint64",
+              "src": "project/src/VotingEscrow.sol:50",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "maxLockEpochs",
+              "type": "t_uint64",
+              "src": "project/src/VotingEscrow.sol:51",
+              "offset": 8,
+              "slot": "0"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "controller",
+              "type": "t_address",
+              "src": "project/src/VotingEscrow.sol:52",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "voter",
+              "type": "t_address",
+              "src": "project/src/VotingEscrow.sol:53",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "nextId",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:54",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "lockData",
+              "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+              "src": "project/src/VotingEscrow.sol:55",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "epoch",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:56",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "pointHistory",
+              "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+              "src": "project/src/VotingEscrow.sol:57",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "userPointHistory",
+              "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+              "src": "project/src/VotingEscrow.sol:58",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "slopeChanges",
+              "type": "t_mapping(t_uint64,t_int128)",
+              "src": "project/src/VotingEscrow.sol:59",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "ownershipChange",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "project/src/VotingEscrow.sol:60",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "VotingEscrow",
+              "label": "permanentLockBalance",
+              "type": "t_uint256",
+              "src": "project/src/VotingEscrow.sol:61",
+              "offset": 0,
+              "slot": "10"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable2Step": [
+            {
+              "contract": "Ownable2StepUpgradeable",
+              "label": "_pendingOwner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/Ownable2StepUpgradeable.sol:29",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.ERC721": [
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_name",
+              "type": "t_string_storage",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:27",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_symbol",
+              "type": "t_string_storage",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:30",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_owners",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:32",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_balances",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:34",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_tokenApprovals",
+              "type": "t_mapping(t_uint256,t_address)",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:36",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "ERC721Upgradeable",
+              "label": "_operatorApprovals",
+              "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+              "src": "npm/@openzeppelin/contracts-upgradeable@5.7.0/token/ERC721/ERC721Upgradeable.sol:38",
+              "offset": 0,
+              "slot": "5"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "npm/@openzeppelin/contracts@5.7.0/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

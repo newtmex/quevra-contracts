@@ -1,5 +1,9 @@
 import { context, deployedCode, loadManifest } from "../lib/runtime.js";
 
+const upgradeableBeaconAbi = [
+  "function implementation() view returns (address)",
+];
+
 const ctx = await context();
 const manifest = await loadManifest(ctx.networkName, ctx.chainId, await ctx.deployer.getAddress());
 const contracts: Record<string, unknown> = {};
@@ -8,7 +12,9 @@ for (const [name, record] of Object.entries(manifest.contracts)) {
   const onChain = await deployedCode(ctx.ethers.provider, address);
   let implementation: string | undefined;
   if (onChain && record.proxy) implementation = await ctx.upgrades.erc1967.getImplementationAddress(record.proxy);
-  if (onChain && record.beacon) implementation = await (await ctx.ethers.getContractAt("UpgradeableBeacon", record.beacon)).implementation();
+  if (onChain && record.beacon) {
+    implementation = await (await ctx.ethers.getContractAt(upgradeableBeaconAbi, record.beacon)).implementation();
+  }
   const implementationCodeHash = implementation ? await (async () => {
     const code = await ctx.ethers.provider.getCode(implementation);
     return code === "0x" ? undefined : ctx.ethers.keccak256(code);

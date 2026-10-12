@@ -1,8 +1,16 @@
 import { defineConfig } from "hardhat/config";
+import { loadEnvFile } from "node:process";
+import { fileURLToPath } from "node:url";
 import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 import hardhatMocha from "@nomicfoundation/hardhat-mocha";
 import hardhatVerify from "@nomicfoundation/hardhat-verify";
 import hardhatUpgrades from "@openzeppelin/hardhat-upgrades";
+
+try {
+  loadEnvFile(fileURLToPath(new URL("./.env", import.meta.url)));
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
 
 const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
 const accounts = privateKey ? [privateKey] : [];

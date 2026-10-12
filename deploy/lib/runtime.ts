@@ -104,14 +104,36 @@ export async function writeManifest(manifest: DeploymentManifest): Promise<void>
 
 export async function deployedCode(provider: { getCode(address: string): Promise<string> }, address?: string): Promise<boolean> {
   if (!address) return false;
-  return (await provider.getCode(address)) !== "0x";
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      if ((await provider.getCode(address)) !== "0x") return true;
+      lastError = undefined;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  if (lastError) throw new Error(`Unable to read code at ${address}: ${(lastError as Error).message}`);
+  return false;
 }
 
-export async function deploymentTx(contract: { deploymentTransaction(): { hash: string; wait(): Promise<unknown> } | null }) {
-  const tx = contract.deploymentTransaction();
+type DeploymentTransaction = {
+  hash: string;
+  wait(): Promise<{ status?: number | bigint | null } | null>;
+};
+
+export async function deploymentTx(contract: {
+  deploymentTransaction?: () => DeploymentTransaction | null;
+  deployTransaction?: DeploymentTransaction | null;
+}) {
+  const tx = contract.deploymentTransaction?.() ?? contract.deployTransaction ?? null;
   if (!tx) throw new Error("Deployment transaction is unavailable");
   const receipt = await tx.wait();
   if (!receipt) throw new Error("Deployment transaction was not confirmed");
+  if (receipt.status !== undefined && receipt.status !== null && receipt.status !== 1) {
+    throw new Error(`Deployment transaction ${tx.hash} reverted`);
+  }
   return tx.hash;
 }
 

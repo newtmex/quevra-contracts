@@ -3,6 +3,7 @@ cache/
 out/
 /artifacts/
 /artifacts/hardhat/
+deployments/
 
 # Commonly ignored directories
 .logs/
