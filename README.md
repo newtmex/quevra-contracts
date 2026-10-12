@@ -132,6 +132,23 @@ The code also implements validator voting-power boosts, bounded to **5×**, thro
 
 Quevra is not merely a token-weighted poll. Its vaults and agents make native staking calls for `addValidator`, `delegate`, `undelegate`, `withdraw`, and reward operations through Monad's **staking precompile at `0x1000`**. The system has to respect Monad's staking epoch transitions, delayed withdrawals and validator-state constraints. [Monad staking API](https://docs.monad.xyz/reference/staking/api)
 
+### Monad testnet deployment
+
+The judging requirements call for a working Monad deployment and contract addresses. The current deployment artifacts record this Quevra deployment on **Monad testnet (chain ID `10143`)**, created on **October 12, 2026 UTC**. The core modules are UUPS proxies; vaults, agents, gauges, and bribe rewards are created through shared beacons.
+
+| Contract | Deployment address | Type |
+| --- | --- | --- |
+| `StakingController` | `0x8e119Bfe93dB45Cb456B3ACE1a3935958E8dC04f` ([artifact](./deployments/monadTestnet/StakingController.json)) | UUPS proxy |
+| `ValidatorsVoter` | `0x46Eb9dfa056A40C3AC2C65914aA792790227A3aF` ([artifact](./deployments/monadTestnet/ValidatorsVoter.json)) | UUPS proxy |
+| `VeMON` | `0xd699f3CF29614Cb9f44ab3e43e32cC271635D838` ([artifact](./deployments/monadTestnet/VeMON.json)) | UUPS proxy |
+| `VeValidator` | `0xbD243E21D28050F805Af0052a6E512C001152C5B` ([artifact](./deployments/monadTestnet/VeValidator.json)) | UUPS proxy |
+| `StakingVault` beacon | `0x2E9eAa58834c39a8bDe92886Cbf8A18954bFF855` ([artifact](./deployments/monadTestnet/StakingVaultBeacon.json)) | Shared beacon |
+| `StakingAgent` beacon | `0x862f45A57f83393AC5a01c5860DF2A5e051501C4` ([artifact](./deployments/monadTestnet/StakingAgentBeacon.json)) | Shared beacon |
+| `NonStakingGauge` beacon | `0x42A667DA858117d3ac3109046f2A8aC00876e62F` ([artifact](./deployments/monadTestnet/NonStakingGaugeBeacon.json)) | Shared beacon |
+| `BribeVotingRewards` beacon | `0xe433b856a1c88ec70AAC8D98bcc2a5db8dFa340F` ([artifact](./deployments/monadTestnet/BribeVotingRewardsBeacon.json)) | Shared beacon |
+
+The configured ERC-20 incentive reward token is `0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541`; it is recorded as deployment configuration, not as a Quevra-deployed contract. Individual validator vaults, staking agents, gauges, and bribe-reward instances are created through their beacons, so their addresses depend on validator onboarding and gauge creation. The artifacts above are the repository's deployment record; use the deployment verification commands below to check the current on-chain state.
+
 ## Run it yourself
 
 **Requirements:** Git (with submodules) and [Foundry](https://book.getfoundry.sh/) (`forge`). A compatible Monad RPC is needed for fork-dependent tests. Node/pnpm are optional convenience tooling for the package scripts.
@@ -165,8 +182,6 @@ forge test --network monad --match-test test_bribeWeightFollowsControllerStakeAn
 ```
 
 These paths are **source-level evidence**, not a claim that every test has passed in your environment. Fork-dependent cases need the configured network's staking state. In particular, the tests demonstrating vote-to-bribe **weight sync** are not yet a complete, independently verified end-to-end proof of real ERC-20 incentive funding and cycle-`c+1` payout.
-
-**E2E status:** [`script/e2e/run.sh`](./script/e2e/run.sh) is currently **out of date**: it refers to the removed `ValidatorRegistry` path and a `script/e2e/AddValidatorOnSolonet.s.sol` file that is absent from this branch. It should be repaired before being advertised or run as a working demonstration.
 
 ## Honest project status
 

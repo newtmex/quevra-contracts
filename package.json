@@ -7,16 +7,11 @@
     "node": ">=22.13.0"
   },
   "description": "Quevra protocol contracts",
-  "main": "./index.js",
-  "exports": {
-    ".": "./index.js"
-  },
   "scripts": {
     "dev": "anvil --network monad",
     "build": "forge build && hardhat compile",
     "test": "forge test && hardhat test",
     "test:hardhat": "hardhat test mocha",
-    "test:e2e": "bash script/e2e/run.sh",
     "hardhat": "hardhat",
     "deploy:all": "hardhat run deploy/scripts/deploy-all.ts",
     "deploy:core": "hardhat run deploy/scripts/deploy-core.ts",
