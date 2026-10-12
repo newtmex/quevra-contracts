@@ -37,16 +37,22 @@ async function deployBeacon(
       implementation,
       codeHash: await recordCodeHash(ctx.ethers.provider, prior.beacon),
       implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
+      lastOperation: { action: "unchanged" },
     };
-    await writeManifest(manifest);
+    await writeManifest(manifest, ctx.ethers.provider);
     return prior.beacon;
   }
   const Factory = await ctx.ethers.getContractFactory(contractName);
   const beacon = await ctx.upgrades.deployBeacon(Factory, { initialOwner: owner });
-  const txHash = await deploymentTx(beacon);
+  const confirmation = await deploymentTx(beacon);
   const address = await beacon.getAddress();
-  manifest.contracts[key] = { beacon: address, transactionHash: txHash };
-  await writeManifest(manifest);
+  manifest.contracts[key] = {
+    beacon: address,
+    transactionHash: confirmation.hash,
+    receipt: confirmation.receipt,
+    lastOperation: { action: "deployed", transactionHash: confirmation.hash },
+  };
+  await writeManifest(manifest, ctx.ethers.provider);
   const implementation = await (await ctx.ethers.getContractAt(upgradeableBeaconAbi, address)).implementation();
   manifest.contracts[key] = {
     ...manifest.contracts[key],
@@ -54,7 +60,7 @@ async function deployBeacon(
     codeHash: await recordCodeHash(ctx.ethers.provider, address),
     implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
   };
-  await writeManifest(manifest);
+  await writeManifest(manifest, ctx.ethers.provider);
   return address;
 }
 
@@ -77,16 +83,24 @@ async function deployUups(
       implementation,
       codeHash: await recordCodeHash(ctx.ethers.provider, prior.proxy),
       implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
+      initializer: prior.initializer ?? { name: "initialize", args },
+      lastOperation: { action: "unchanged" },
     };
-    await writeManifest(manifest);
+    await writeManifest(manifest, ctx.ethers.provider);
     return instance;
   }
   const Factory = await ctx.ethers.getContractFactory(contractName);
   const proxy = await ctx.upgrades.deployProxy(Factory, args, { kind: "uups", initializer: "initialize" });
-  const txHash = await deploymentTx(proxy);
+  const confirmation = await deploymentTx(proxy);
   const address = await proxy.getAddress();
-  manifest.contracts[key] = { proxy: address, transactionHash: txHash };
-  await writeManifest(manifest);
+  manifest.contracts[key] = {
+    proxy: address,
+    transactionHash: confirmation.hash,
+    receipt: confirmation.receipt,
+    initializer: { name: "initialize", args },
+    lastOperation: { action: "deployed", transactionHash: confirmation.hash },
+  };
+  await writeManifest(manifest, ctx.ethers.provider);
   const implementation = await ctx.upgrades.erc1967.getImplementationAddress(address);
   manifest.contracts[key] = {
     ...manifest.contracts[key],
@@ -94,7 +108,7 @@ async function deployUups(
     codeHash: await recordCodeHash(ctx.ethers.provider, address),
     implementationCodeHash: await recordCodeHash(ctx.ethers.provider, implementation),
   };
-  await writeManifest(manifest);
+  await writeManifest(manifest, ctx.ethers.provider);
   return proxy;
 }
 
@@ -182,6 +196,7 @@ export async function deployCore() {
   manifest.config = { ...manifest.config, rewardToken, maxLockCycles, initialCommission, crossReferences: bindings };
   manifest.owner = owner;
   manifest.config.ownershipHandoffPending = handoffPending;
+  await writeManifest(manifest, ctx.ethers.provider);
   console.log(JSON.stringify({
     chainId: ctx.chainId,
     contracts: Object.fromEntries(Object.entries(manifest.contracts).map(([key, item]) => [key, item.proxy ?? item.beacon])),

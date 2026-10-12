@@ -4,6 +4,17 @@ out/
 /artifacts/
 /artifacts/hardhat/
 deployments/
+!/deployments/
+/deployments/*
+!/deployments/monadTestnet/
+!/deployments/monadMainnet/
+!/deployments/solonet/
+/deployments/monadTestnet/*
+!/deployments/monadTestnet/*.json
+/deployments/monadMainnet/*
+!/deployments/monadMainnet/*.json
+/deployments/solonet/*
+!/deployments/solonet/*.json
 
 # Commonly ignored directories
 .logs/

@@ -21,11 +21,11 @@ if (!rewardToken || !(await deployedCode(ctx.ethers.provider, rewardToken))) {
   manifest.config.solonetRewardToken = rewardToken;
   manifest.config.solonetRewardTokenTransactionHash = transaction.hash;
   manifest.config.solonetRewardTokenCodeHash = await recordCodeHash(ctx.ethers.provider, rewardToken);
-  await writeManifest(manifest);
+  await writeManifest(manifest, ctx.ethers.provider);
   console.log(`Deployed local Quevra reward token at ${rewardToken}`);
 } else {
   manifest.config.solonetRewardToken = rewardToken;
-  await writeManifest(manifest);
+  await writeManifest(manifest, ctx.ethers.provider);
   console.log(`Using Solonet reward token at ${rewardToken}`);
 }
 

@@ -77,7 +77,7 @@ export async function prepareUpgrade() {
   await savePrepared(record);
   const manifest = await loadManifest(ctx.networkName, ctx.chainId, await ctx.deployer.getAddress());
   manifest.upgrades.push({ ...record, preparedAt: new Date().toISOString() });
-  await writeManifest(manifest);
+  await writeManifest(manifest, ctx.ethers.provider);
   console.log(JSON.stringify(record, null, 2));
 }
 

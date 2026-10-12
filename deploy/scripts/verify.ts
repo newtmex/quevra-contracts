@@ -33,5 +33,5 @@ for (const [name, record] of Object.entries(manifest.contracts)) {
   }
 }
 manifest.verification = { ...manifest.verification, ...results };
-await writeManifest(manifest);
+await writeManifest(manifest, ctx.ethers.provider);
 console.log(JSON.stringify(results, null, 2));
