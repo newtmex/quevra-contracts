@@ -171,6 +171,7 @@ The Foundry configuration targets **Monad testnet (chain ID `10143`)** and pins 
 | Can several positions help register a validator? | [`test/VeValidator.t.sol`](./test/VeValidator.t.sol) and [`test/StakingVault.t.sol`](./test/StakingVault.t.sol) |
 | Can one locked MON position move support between validators? | [`test/integration/StakingControllerRebalance.t.sol`](./test/integration/StakingControllerRebalance.t.sol) — `test_reusesLockedMONWhenReallocatingAcrossValidators` |
 | Does stake allocation update vote and bribe-accounting weight? | [`test/VeValidator.t.sol`](./test/VeValidator.t.sol) — `test_bribeWeightFollowsControllerStakeAndUndelegation`, `test_rebalancePokeMovesVoteWeightWithPhysicalStake` |
+| Is there a complete ERC-20 bribe fund → `c+1` claim path? | [`test/integration/BribeIncentiveFlow.t.sol`](./test/integration/BribeIncentiveFlow.t.sol) — proportional payout, cycle boundary, later vote changes, unauthorized claims, claim-before-exit |
 | Are vault reward shares attributed per position? | [`test/integration/StakingControllerRebalance.t.sol`](./test/integration/StakingControllerRebalance.t.sol) — shared-vault/reward tests |
 | Is there a native reward claim/compound/exit scenario? | [`test/integration/ForkNativeRewards.t.sol`](./test/integration/ForkNativeRewards.t.sol) — `test_forkConsensusRewardsCanBeCompoundedClaimedAndWithdrawn` |
 
@@ -179,18 +180,18 @@ Try an individual test with:
 ```bash
 forge test --network monad --match-test test_reusesLockedMONWhenReallocatingAcrossValidators -vvv
 forge test --network monad --match-test test_bribeWeightFollowsControllerStakeAndUndelegation -vvv
+forge test --network monad --match-contract BribeIncentiveFlowIntegrationTest -vvv
 ```
 
-These paths are **source-level evidence**, not a claim that every test has passed in your environment. Fork-dependent cases need the configured network's staking state. In particular, the tests demonstrating vote-to-bribe **weight sync** are not yet a complete, independently verified end-to-end proof of real ERC-20 incentive funding and cycle-`c+1` payout.
+These paths are **source-level evidence**, not a claim that every test has passed in your environment. Fork-dependent cases need the configured network's staking state. The bribe integration suite covers stake-linked gauge weight, real ERC-20 funding in cycle `c`, and claimable payouts beginning in cycle `c+1`.
 
 ## Honest project status
 
-**Implemented in the branch:** native MON lock positions; new/existing validator identity creation; vault/agent staking routes; stake-linked validator voting; native rewards claim/compound paths; cycle-based bribe contracts; and unit/integration test scenarios.
+**Implemented in the branch:** native MON lock positions; new/existing validator identity creation; vault/agent staking routes; stake-linked validator voting; native rewards claim/compound paths; cycle-based bribe contracts with integration coverage for fund → `c+1` claim, later vote changes, authorization, and claim-before-exit; and unit/integration test scenarios.
 
 **Still needed before a production or public hackathon deployment:**
 
 - A complete deployment script, verified network addresses and repeatable demo transactions.
-- Full tests for actual ERC-20 bribe funding, cycle rollover, claims, late claims and entitlement handling on NFT exit.
 - Repair and rerun the Solonet E2E runner against the *current* controller/validator identity flow.
 - Security review of validator authorization, reward accounting, lock exits, keeper transitions and operational permissions.
 - User-facing tooling, deployment instructions and an operator onboarding guide.

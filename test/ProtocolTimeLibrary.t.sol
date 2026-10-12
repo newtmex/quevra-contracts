@@ -70,16 +70,16 @@ contract ProtocolTimeLibraryTest is ProtocolTimeLibraryFixture {
 
     function test_currentCycleStartChangesOnlyAtCycleBoundary() public {
         assertEq(ProtocolTimeLibrary.currentCycleStart(), 0);
-        for (uint64 epoch = 40; epoch < 80; ++epoch) {
+        for (uint64 epoch = 5; epoch < 10; ++epoch) {
             _setEpoch(epoch, false);
-            assertEq(ProtocolTimeLibrary.currentCycleStart(), 40);
+            assertEq(ProtocolTimeLibrary.currentCycleStart(), 5);
             _setEpoch(epoch, true);
-            assertEq(ProtocolTimeLibrary.currentCycleStart(), 40);
+            assertEq(ProtocolTimeLibrary.currentCycleStart(), 5);
         }
-        _setEpoch(80, false);
-        assertEq(ProtocolTimeLibrary.currentCycleStart(), 80);
-        _setEpoch(80, true);
-        assertEq(ProtocolTimeLibrary.currentCycleStart(), 80);
+        _setEpoch(10, false);
+        assertEq(ProtocolTimeLibrary.currentCycleStart(), 10);
+        _setEpoch(10, true);
+        assertEq(ProtocolTimeLibrary.currentCycleStart(), 10);
     }
 
     function testFuzz_currentCycleStartContainsCurrentEpoch(uint64 epoch, bool inDelayPeriod) public {
@@ -90,31 +90,31 @@ contract ProtocolTimeLibraryTest is ProtocolTimeLibraryFixture {
         assertLt(epoch - start, ProtocolTimeLibrary.EPOCHS_PER_CYCLE);
     }
 
-    function test_cycleIsFortyMonadEpochs() public pure {
-        assertEq(ProtocolTimeLibrary.EPOCHS_PER_CYCLE, 40);
-        assertEq(ProtocolTimeLibrary.cycleDuration(), 40);
+    function test_cycleIsFiveMonadEpochs() public pure {
+        assertEq(ProtocolTimeLibrary.EPOCHS_PER_CYCLE, 5);
+        assertEq(ProtocolTimeLibrary.cycleDuration(), 5);
         assertEq(ProtocolTimeLibrary.cycleOf(0), 0);
         assertEq(ProtocolTimeLibrary.cycleStart(0), 0);
-        assertEq(ProtocolTimeLibrary.cycleNext(0), 40);
-        assertEq(ProtocolTimeLibrary.cycleStart(39), 0);
-        assertEq(ProtocolTimeLibrary.cycleOf(40), 1);
-        assertEq(ProtocolTimeLibrary.cycleStart(40), 40);
-        assertEq(ProtocolTimeLibrary.cycleNext(79), 80);
-        assertEq(ProtocolTimeLibrary.cycleOf(94), 2);
-        assertEq(ProtocolTimeLibrary.cycleStart(94), 80);
-        assertEq(ProtocolTimeLibrary.cycleNext(94), 120);
+        assertEq(ProtocolTimeLibrary.cycleNext(0), 5);
+        assertEq(ProtocolTimeLibrary.cycleStart(4), 0);
+        assertEq(ProtocolTimeLibrary.cycleOf(5), 1);
+        assertEq(ProtocolTimeLibrary.cycleStart(5), 5);
+        assertEq(ProtocolTimeLibrary.cycleNext(9), 10);
+        assertEq(ProtocolTimeLibrary.cycleOf(12), 2);
+        assertEq(ProtocolTimeLibrary.cycleStart(12), 10);
+        assertEq(ProtocolTimeLibrary.cycleNext(12), 15);
     }
 
     function test_voteWindowBuffersOneMonadEpoch() public pure {
         assertEq(ProtocolTimeLibrary.VOTE_BUFFER_EPOCHS, 1);
-        assertEq(ProtocolTimeLibrary.cycleVoteStart(52), 41);
-        assertEq(ProtocolTimeLibrary.cycleVoteEnd(52), 79);
-        assertEq(ProtocolTimeLibrary.cycleVoteStart(40), 41);
-        assertEq(ProtocolTimeLibrary.cycleVoteEnd(79), 79);
-        assertTrue(ProtocolTimeLibrary.inDistributeWindow(40));
-        assertFalse(ProtocolTimeLibrary.inDistributeWindow(41));
-        assertTrue(ProtocolTimeLibrary.inWhitelistWindow(79));
-        assertFalse(ProtocolTimeLibrary.inWhitelistWindow(78));
+        assertEq(ProtocolTimeLibrary.cycleVoteStart(12), 11);
+        assertEq(ProtocolTimeLibrary.cycleVoteEnd(12), 14);
+        assertEq(ProtocolTimeLibrary.cycleVoteStart(10), 11);
+        assertEq(ProtocolTimeLibrary.cycleVoteEnd(14), 14);
+        assertTrue(ProtocolTimeLibrary.inDistributeWindow(10));
+        assertFalse(ProtocolTimeLibrary.inDistributeWindow(11));
+        assertTrue(ProtocolTimeLibrary.inWhitelistWindow(14));
+        assertFalse(ProtocolTimeLibrary.inWhitelistWindow(13));
     }
 
     function testFuzz_cycleBounds(uint64 epoch) public pure {
@@ -140,19 +140,19 @@ contract ProtocolTimeLibraryTest is ProtocolTimeLibraryFixture {
     }
 
     function test_currentCycleTracksSetEpoch() public {
-        _setEpoch(52, false);
+        _setEpoch(7, false);
         (uint64 epoch, bool delay) = ProtocolTimeLibrary.currentEpoch();
-        assertEq(epoch, 52);
+        assertEq(epoch, 7);
         assertFalse(delay);
         assertEq(ProtocolTimeLibrary.currentCycle(), 1);
-        assertEq(ProtocolTimeLibrary.cycleStart(epoch), 40);
-        assertEq(ProtocolTimeLibrary.cycleNext(epoch), 80);
+        assertEq(ProtocolTimeLibrary.cycleStart(epoch), 5);
+        assertEq(ProtocolTimeLibrary.cycleNext(epoch), 10);
 
-        _setEpoch(80, true);
+        _setEpoch(10, true);
         (epoch, delay) = ProtocolTimeLibrary.currentEpoch();
-        assertEq(epoch, 80);
+        assertEq(epoch, 10);
         assertTrue(delay);
         assertEq(ProtocolTimeLibrary.currentCycle(), 2);
-        assertEq(ProtocolTimeLibrary.cycleStart(epoch), 80);
+        assertEq(ProtocolTimeLibrary.cycleStart(epoch), 10);
     }
 }
