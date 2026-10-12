@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Derived from Tigris IReward.sol.
+// Upstream: tigris/solidity/contracts/interfaces/IReward.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// Provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 interface IReward {

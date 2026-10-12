@@ -217,7 +217,18 @@ Quevra uses Monad's native staking mechanics for the *capital* leg and adapts vo
 
 ### Licensing and attribution
 
-**This repository is not uniformly MIT-licensed.** Quevra-authored files generally use `SPDX-License-Identifier: MIT`, while certain adapted Tigris sources — notably [`VotingEscrow.sol`](./src/VotingEscrow.sol), [`ValidatorsVoter.sol`](./src/voting/ValidatorsVoter.sol), [`NonStakingVoter.sol`](./src/voting/NonStakingVoter.sol), and [`VotingReward.sol`](./src/rewards/VotingReward.sol) — declare **BUSL-1.1**. Preserve each file's SPDX identifier, existing attribution, applicable upstream license terms and notices. Do not replace BUSL headers with MIT merely because the rest of the project prefers MIT. Third-party dependencies retain their respective licenses.
+**This package is multi-licensed by file; it is not uniformly MIT and is not uniformly OSI open source.**
+
+| Text | Role |
+| --- | --- |
+| [`LICENSE`](./LICENSE) | Package overview: which SPDX applies where |
+| [`LICENSE-MIT`](./LICENSE-MIT) | MIT text for Quevra-authored and MIT-adapted sources |
+| [`LICENSE-BUSL-1.1.txt`](./LICENSE-BUSL-1.1.txt) | Business Source License 1.1 for BUSL-adapted Tigris sources |
+| [`docs/provenance.md`](./docs/provenance.md) | Per-file upstream revision, SPDX, and adaptation notes |
+
+Quevra-authored files use `SPDX-License-Identifier: MIT`. Adapted Tigris sources keep their upstream SPDX: **BUSL-1.1** for [`VotingEscrow.sol`](./src/VotingEscrow.sol), [`ValidatorsVoter.sol`](./src/voting/ValidatorsVoter.sol), [`NonStakingVoter.sol`](./src/voting/NonStakingVoter.sol), [`VotingReward.sol`](./src/rewards/VotingReward.sol), and [`SafeCastLibrary.sol`](./src/libraries/SafeCastLibrary.sol); **MIT** for adapted gauge/reward/interface libraries listed in the provenance record. BUSL-1.1 is source-available (non-production use under that license) until an applicable upstream Change Date. Do not replace BUSL headers with MIT. Third-party dependencies (OpenZeppelin, forge-std, monad-std) retain their upstream licenses.
+
+The primary adaptation reference is the local [`tigris/`](./tigris/) extract at commit `fa9ba83d93d4ee362b0699e7bcd13d32e150afda`, cross-checked against [mezo-org/tigris](https://github.com/mezo-org/tigris) where those paths exist.
 
 AI-assisted coding tools were used during development and documentation. The protocol's design choices, repository contents and security responsibilities remain with its maintainers.
 

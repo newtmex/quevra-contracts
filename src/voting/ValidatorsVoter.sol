@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Adapted from Tigris ValidatorsVoter.sol (BUSL-1.1).
+// Upstream: tigris/solidity/contracts/ValidatorsVoter.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// License text: LICENSE-BUSL-1.1.txt — provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";

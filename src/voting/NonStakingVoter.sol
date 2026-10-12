@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Adapted from Tigris NonStakingVoter.sol (BUSL-1.1).
+// Upstream: tigris/solidity/contracts/NonStakingVoter.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// License text: LICENSE-BUSL-1.1.txt — provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";

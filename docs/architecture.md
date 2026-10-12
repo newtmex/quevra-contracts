@@ -47,4 +47,6 @@ The contracts use OpenZeppelin `ReentrancyGuardTransient`, which relies on Cancu
 
 ## Attribution
 
-This migration modified existing Quevra contract sources and added OpenZeppelin dependencies; it did not import or copy Tigris implementation source. Existing Tigris-derived voter/reward sources retain their `BUSL-1.1` or `MIT` SPDX headers and attribution comments. Do not change those headers without a separate source-by-source license review. OpenZeppelin dependencies are pinned to version 5.7.0 and retain their upstream MIT licensing.
+The UUPS/beacon migration modified existing Quevra contract sources and added OpenZeppelin dependencies. Separately, several voter, escrow, gauge, and reward modules are **adaptations of Mezo Earn / Tigris** sources; they keep their upstream `BUSL-1.1` or `MIT` SPDX headers and attribution comments. Do not change those headers without a source-by-source license review.
+
+Package licensing is multi-licensed by file: see [`LICENSE`](../LICENSE), [`LICENSE-MIT`](../LICENSE-MIT), [`LICENSE-BUSL-1.1.txt`](../LICENSE-BUSL-1.1.txt), and the per-file record in [`provenance.md`](provenance.md). OpenZeppelin dependencies are pinned to version 5.7.0 and retain their upstream MIT licensing.

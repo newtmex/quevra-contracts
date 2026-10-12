@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Derived from Tigris IVotingEscrow.sol.
+// Upstream: tigris/solidity/contracts/interfaces/IVotingEscrow.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// Provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";

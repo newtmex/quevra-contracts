@@ -1,0 +1,34 @@
+Quevra contracts package — license overview
+==========================================
+
+This package is **multi-licensed by file**. The `SPDX-License-Identifier` at the
+top of each Solidity source is authoritative for that file. Do not treat the
+package as uniformly MIT or as uniformly open source.
+
+License texts
+-------------
+
+- `LICENSE-MIT` — MIT License for Quevra-authored sources and for MIT-licensed
+  adaptations that retain upstream notices.
+- `LICENSE-BUSL-1.1.txt` — Business Source License 1.1 terms for files whose
+  SPDX identifier is `BUSL-1.1` (adapted from Mezo Earn / Tigris).
+- Dependency licenses remain with their packages (notably OpenZeppelin MIT under
+  `lib/openzeppelin-contracts` / npm `@openzeppelin/*`, Foundry `forge-std`, and
+  `monad-std`).
+
+What applies where
+------------------
+
+| Category | SPDX | Text |
+| --- | --- | --- |
+| Quevra-authored protocol, staking, and tooling sources | MIT | `LICENSE-MIT` |
+| Adapted Tigris sources that upstream marks MIT | MIT | `LICENSE-MIT` plus notices in the file / `docs/provenance.md` |
+| Adapted Tigris sources that upstream marks BUSL-1.1 | BUSL-1.1 | `LICENSE-BUSL-1.1.txt` |
+| Tests, scripts, and docs without an SPDX header | MIT, unless they embed or require a BUSL source | `LICENSE-MIT` |
+
+BUSL-1.1 is **source-available**, not an OSI open-source license. Production use
+of BUSL-covered files is limited by that license unless and until an upstream
+Change Date converts them under the stated Change License.
+
+Per-file provenance, upstream revisions, and adaptation notes are recorded in
+`docs/provenance.md`.

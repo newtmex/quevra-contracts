@@ -2,6 +2,7 @@
   "name": "@quevra/contracts",
   "version": "0.0.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"

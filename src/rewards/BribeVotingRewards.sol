@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+// Quevra-authored beacon implementation wrapper. Extends BUSL-1.1 VotingReward;
+// upstream Tigris BribeVotingReward.sol is also BUSL-1.1 — see docs/provenance.md.
 pragma solidity ^0.8.24;
 
 import {IBaseVoter} from "../interfaces/IBaseVoter.sol";

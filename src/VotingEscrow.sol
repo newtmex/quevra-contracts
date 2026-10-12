@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Adapted from Tigris VotingEscrow.sol (BUSL-1.1).
+// Upstream: tigris/solidity/contracts/VotingEscrow.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// License text: LICENSE-BUSL-1.1.txt — provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";

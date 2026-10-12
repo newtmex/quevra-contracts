@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Adapted from Tigris Reward.sol by velodrome.finance, @figs999, and @pegahcarter.
+// Upstream: tigris/solidity/contracts/rewards/Reward.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// Provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";

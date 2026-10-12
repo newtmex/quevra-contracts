@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Adapted from Tigris ProtocolTimeLibrary.sol for Monad staking epochs.
+// Upstream: tigris/solidity/contracts/libraries/ProtocolTimeLibrary.sol @ fa9ba83d93d4ee362b0699e7bcd13d32e150afda
+// Provenance: docs/provenance.md
 pragma solidity ^0.8.24;
 
 import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
