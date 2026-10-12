@@ -26,6 +26,7 @@ console.log(JSON.stringify({
   network: ctx.networkName,
   chainId: ctx.chainId,
   owner: manifest.owner,
+  rewardToken: manifest.config.rewardToken,
   contracts,
   crossReferences: manifest.config.crossReferences,
   dynamicInstances: manifest.dynamicInstances,

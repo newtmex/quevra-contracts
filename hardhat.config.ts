@@ -33,6 +33,13 @@ export default defineConfig({
       url: process.env.MONAD_TESTNET_RPC_URL ?? "http://127.0.0.1:8545",
       accounts,
     },
+    solonet: {
+      type: "http",
+      chainType: "generic",
+      chainId: 20143,
+      url: process.env.SOLONET_RPC ?? "http://127.0.0.1:48080",
+      accounts,
+    },
     monadMainnet: {
       type: "http",
       chainType: "generic",

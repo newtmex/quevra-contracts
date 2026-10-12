@@ -172,6 +172,7 @@ export async function deployCore() {
   console.log(JSON.stringify({
     chainId: ctx.chainId,
     contracts: Object.fromEntries(Object.entries(manifest.contracts).map(([key, item]) => [key, item.proxy ?? item.beacon])),
+    rewardToken,
     owner,
     ownershipHandoffPending: handoffPending,
   }, null, 2));

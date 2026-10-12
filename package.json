@@ -20,6 +20,7 @@
     "hardhat": "hardhat",
     "deploy:all": "hardhat run deploy/scripts/deploy-all.ts",
     "deploy:core": "hardhat run deploy/scripts/deploy-core.ts",
+    "deploy:solonet": "hardhat run deploy/scripts/deploy-solonet.ts",
     "deploy:status": "hardhat run deploy/scripts/status.ts",
     "deploy:verify": "hardhat run deploy/scripts/verify.ts",
     "upgrade:validate": "hardhat run deploy/scripts/upgrade-validate.ts",
