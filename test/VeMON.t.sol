@@ -1,160 +1,227 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {VeMON} from "../src/VeMON.sol";
+import {VotingEscrow} from "../src/VotingEscrow.sol";
+import {IVotingEscrow} from "../src/interfaces/IVotingEscrow.sol";
+import {ProtocolTimeLibrary} from "../src/libraries/ProtocolTimeLibrary.sol";
+import {VeMONFixture} from "./fixtures/VeMONFixture.sol";
 
-import {IVeMON} from "../src/interfaces/IVeMON.sol";
-import {MonVault} from "../src/vault/MonVault.sol";
-import {VeMON} from "../src/ve/VeMON.sol";
-import {WMON} from "./mocks/WMON.sol";
-
-contract VeMONTest is Test {
-    uint256 internal constant MAX_LOCK = 28 days;
-
-    WMON internal wmon;
-    MonVault internal vault;
-    VeMON internal ve;
-
-    address internal owner = makeAddr("owner");
-    address internal locker = makeAddr("locker");
-    address internal other = makeAddr("other");
-
-    function setUp() public {
-        wmon = new WMON();
-
-        uint256 nonce = vm.getNonce(address(this));
-        address predictedVault = vm.computeCreateAddress(address(this), nonce);
-        address predictedVe = vm.computeCreateAddress(address(this), nonce + 1);
-
-        vault = new MonVault(owner, address(wmon), predictedVe, address(this), address(this));
-        ve = new VeMON(owner, address(wmon), predictedVault, address(this), MAX_LOCK);
-
-        assertEq(address(vault), predictedVault);
-        assertEq(address(ve), predictedVe);
-        vm.deal(locker, 1_000_000 ether);
+contract VeMONTest is VeMONFixture {
+    function test_maxLockCyclesIsConfiguredAtDeployment() public view {
+        assertEq(veMON.maxLockCycles(), 4);
+        assertEq(veMON.maxLockEpochs(), 4 * ProtocolTimeLibrary.EPOCHS_PER_CYCLE);
     }
 
-    function test_createLockNativeCustodiesInVault() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 100 ether}(MAX_LOCK);
+    function test_createLockMintsVeMONAndCustodiesMONInController() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
-        assertEq(tokenId, 1);
-        assertEq(ve.ownerOf(tokenId), locker);
-        assertEq(ve.supply(), 100 ether);
-        assertEq(wmon.balanceOf(address(ve)), 0);
-        assertEq(wmon.balanceOf(address(vault)), 0);
-        assertEq(address(vault).balance, 100 ether);
+        assertEq(address(controller).balance, validatorStake);
+        assertEq(controller.veMONPrincipalOf(1), validatorStake);
+        assertEq(veMON.ownerOf(1), operator);
+        assertEq(veMON.balanceOf(operator), 1);
 
-        IVeMON.LockedBalance memory lock = ve.locked(tokenId);
-        assertEq(lock.amount, 100 ether);
-        assertEq(lock.end, block.timestamp + MAX_LOCK);
-        assertGt(ve.votingPowerOfNFT(tokenId), 0);
-        assertGt(ve.totalVotingPower(), 0);
+        uint256 expectedEnd = lockDuration * ProtocolTimeLibrary.EPOCHS_PER_CYCLE;
+        (int128 amount, uint256 end, bool permanent, uint256 boost) = veMON.locked(1);
+        assertEq(int256(amount), int256(validatorStake));
+        assertEq(end, expectedEnd);
+        assertFalse(permanent);
+        assertEq(boost, 0);
     }
 
-    function test_createLockPullsWMON() public {
-        vm.prank(locker);
-        wmon.deposit{value: 40 ether}();
-        vm.prank(locker);
-        wmon.approve(address(ve), 40 ether);
-        vm.prank(locker);
-        uint256 tokenId = ve.createLock(40 ether, MAX_LOCK);
+    function test_createLockDuringCycleExpiresAfterFullRequestedCycles() public {
+        _setEpoch(12, false);
 
-        assertEq(ve.ownerOf(tokenId), locker);
-        assertEq(wmon.balanceOf(locker), 0);
-        assertEq(address(vault).balance, 40 ether);
-        assertEq(wmon.balanceOf(address(ve)), 0);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        // Epoch 12 is inside cycle [10, 15); the lock ends at the fourth
+        // future cycle boundary, epoch 30.
+        (, uint256 end,,) = veMON.locked(1);
+        assertEq(end, 30);
+        assertEq(veMON.votingPowerOfAt(1, 12), 90_000 ether);
+        assertEq(veMON.votingPowerOfAt(1, 30), 0);
     }
 
-    function test_votingPowerDecaysAndWithdrawPaysNative() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 50 ether}(MAX_LOCK);
-        uint256 vp0 = ve.votingPowerOfNFT(tokenId);
+    function test_createLockAtCycleBoundaryUsesRequestedCycleCount() public {
+        _setEpoch(15, false);
 
-        vm.warp(block.timestamp + 7 days);
-        uint256 vp1 = ve.votingPowerOfNFTAt(tokenId, block.timestamp);
-        assertLt(vp1, vp0);
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
-        uint256 end = ve.locked(tokenId).end;
-        vm.warp(end);
-        assertEq(ve.votingPowerOfNFT(tokenId), 0);
-
-        uint256 before = locker.balance;
-        vm.prank(locker);
-        ve.withdraw(tokenId);
-        assertEq(locker.balance, before + 50 ether);
-        assertEq(ve.supply(), 0);
-        assertEq(address(vault).balance, 0);
+        (, uint256 end,,) = veMON.locked(1);
+        assertEq(end, 35);
     }
 
-    function test_cannotWithdrawBeforeExpiry() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 10 ether}(MAX_LOCK);
-        vm.prank(locker);
-        vm.expectRevert(IVeMON.LockNotExpired.selector);
-        ve.withdraw(tokenId);
+    function test_escrowRejectsAmountUpdateWithoutControllerPrincipalUpdate() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        _setEpoch(5, false);
+        (int128 amountBefore,,,) = veMON.locked(1);
+        assertEq(int256(amountBefore), int256(validatorStake));
+
+        uint256 compoundedRewards = 20 ether;
+        vm.prank(address(controller));
+        vm.expectRevert(VotingEscrow.InvalidAmount.selector);
+        veMON.syncAmountFromController(1, validatorStake, validatorStake + compoundedRewards);
+
+        (int128 amountAfter,,,) = veMON.locked(1);
+        assertEq(int256(amountAfter), int256(validatorStake));
+        assertEq(controller.veMONPrincipalOf(1), validatorStake);
     }
 
-    function test_votedBlocksTransferAndWithdraw() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 10 ether}(MAX_LOCK);
-        ve.voting(tokenId, true);
+    function test_onlyControllerCanCreditCompoundedRewards() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
 
-        vm.prank(locker);
-        vm.expectRevert(IVeMON.AlreadyVoted.selector);
-        ve.transferFrom(locker, other, tokenId);
-
-        uint256 end = ve.locked(tokenId).end;
-        vm.warp(end);
-        vm.prank(locker);
-        vm.expectRevert(IVeMON.AlreadyVoted.selector);
-        ve.withdraw(tokenId);
-
-        ve.voting(tokenId, false);
-        vm.prank(locker);
-        ve.withdraw(tokenId);
-        assertEq(other.balance, 0);
-        assertEq(locker.balance, 1_000_000 ether);
+        vm.prank(stranger);
+        vm.expectRevert(IVotingEscrow.NotController.selector);
+        veMON.syncAmountFromController(1, validatorStake, validatorStake + 1 ether);
     }
 
-    function test_increaseAmountAndUnlockTime() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 10 ether}(7 days);
-        uint256 vp0 = ve.votingPowerOfNFT(tokenId);
-        uint256 end0 = ve.locked(tokenId).end;
+    function test_createLockRejectsZeroOrMismatchedValue() public {
+        vm.expectRevert(VotingEscrow.InvalidAmount.selector);
+        veMON.createLock(0, lockDuration);
 
-        vm.prank(locker);
-        ve.increaseAmountNative{value: 5 ether}(tokenId);
-        assertEq(ve.locked(tokenId).amount, 15 ether);
-        assertGt(ve.votingPowerOfNFT(tokenId), vp0);
-
-        vm.prank(locker);
-        ve.increaseUnlockTime(tokenId, MAX_LOCK);
-        assertGt(ve.locked(tokenId).end, end0);
+        vm.expectRevert(VeMON.InvalidValue.selector);
+        veMON.createLock{value: 1 ether}(2 ether, lockDuration);
     }
 
-    function test_depositForFromOther() public {
-        vm.prank(locker);
-        uint256 tokenId = ve.createLockNative{value: 10 ether}(MAX_LOCK);
+    function test_createLockRejectsInvalidLockDurations() public {
+        vm.expectRevert(IVotingEscrow.LockDurationNotInFuture.selector);
+        veMON.createLock{value: 1 ether}(1 ether, 0);
 
-        vm.deal(other, 3 ether);
-        vm.prank(other);
-        wmon.deposit{value: 3 ether}();
-        vm.prank(other);
-        wmon.approve(address(ve), 3 ether);
-        vm.prank(other);
-        ve.depositFor(tokenId, 3 ether);
-
-        assertEq(ve.locked(tokenId).amount, 13 ether);
-        assertEq(ve.supply(), 13 ether);
+        uint256 maxLockCycles = veMON.maxLockCycles();
+        vm.expectRevert(VeMON.LockDurationTooLong.selector);
+        veMON.createLock{value: 1 ether}(1 ether, maxLockCycles + 1);
     }
 
-    function test_constructorSetsImmutableVoter() public view {
-        assertEq(ve.voter(), address(this));
+    function test_votingPowerDecaysLinearlyAndExpiresAtUnlockEpoch() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        assertEq(veMON.votingPowerOf(1), validatorStake);
+        assertEq(veMON.votingPowerOfAt(1, 10), 50_000 ether);
+        assertEq(veMON.votingPowerOfAt(1, 20), 0);
+        assertEq(veMON.totalVotingPower(), validatorStake);
+
+        _setEpoch(10, false);
+        veMON.checkpoint();
+        assertEq(veMON.votingPowerOf(1), 50_000 ether);
+        assertEq(veMON.totalVotingPower(), 50_000 ether);
     }
 
-    function test_constructorRevertsOnZeroMaxLock() public {
-        vm.expectRevert(IVeMON.MaxLockTooShort.selector);
-        new VeMON(owner, address(wmon), address(vault), address(this), 0);
+    function test_votingPowerCheckpointsPreserveHistoricalTotalVotingPower() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        assertEq(veMON.permanentLockBalance(), 0);
+        _setEpoch(5, false);
+        veMON.checkpoint();
+
+        vm.prank(stranger);
+        veMON.createLock{value: 20 ether}(20 ether, lockDuration);
+
+        assertEq(veMON.totalVotingPowerAt(4), 80_000 ether);
+        assertEq(veMON.totalVotingPowerAt(5), 75_020 ether);
+        assertEq(veMON.votingPowerOfAt(1, 5), 75_000 ether);
+        assertEq(veMON.votingPowerOfAt(2, 5), 20 ether);
+        assertEq(veMON.userPointEpoch(1), 1);
+        assertEq(veMON.userPointEpoch(2), 1);
+    }
+
+    function test_transferKeepsPositionPowerAndAppliesSameBlockProtection() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        vm.prank(operator);
+        veMON.transferFrom(operator, stranger, 1);
+        assertEq(veMON.votingPowerOf(1), 0);
+
+        // ERC721 transfer protection is explicitly block-scoped, so this EVM block
+        // advance isolates the subsequent read from same-block protection.
+        vm.roll(block.number + 1);
+        assertEq(veMON.votingPowerOf(1), validatorStake);
+        assertEq(veMON.votingPowerOfAt(1, 0), validatorStake);
+    }
+
+    function test_permanentLockIsConstantAndCanReturnToCycleLockedPosition() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        _setEpoch(5, false);
+
+        vm.prank(operator);
+        veMON.lockPermanent(1);
+        (int128 amount, uint256 end, bool permanent,) = veMON.locked(1);
+        assertEq(int256(amount), int256(validatorStake));
+        assertEq(end, 0);
+        assertTrue(permanent);
+        assertEq(veMON.permanentLockBalance(), validatorStake);
+        assertEq(veMON.votingPowerOf(1), validatorStake);
+        assertEq(veMON.votingPowerOfAt(1, 20), validatorStake);
+        assertEq(veMON.totalVotingPowerAt(30), validatorStake);
+        assertEq(veMON.totalVotingPower(), validatorStake);
+
+        vm.prank(operator);
+        veMON.unlockPermanent(1);
+        (, end, permanent,) = veMON.locked(1);
+        assertEq(end, 25);
+        assertFalse(permanent);
+        assertEq(veMON.permanentLockBalance(), 0);
+        assertEq(veMON.votingPowerOfAt(1, 5), validatorStake);
+        assertEq(veMON.votingPowerOfAt(1, 25), 0);
+    }
+
+    function test_invalidPermanentTransitionsRevert() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        vm.prank(stranger);
+        vm.expectRevert(VeMON.NotApprovedOrOwner.selector);
+        veMON.lockPermanent(1);
+    }
+
+    function test_withdrawRejectsUnexpiredLockBeforeCallingController() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        vm.prank(operator);
+        vm.expectRevert(VeMON.LockNotExpired.selector);
+        veMON.withdraw(1);
+
+        assertEq(veMON.ownerOf(1), operator);
+    }
+
+    function test_withdrawReturnsControllerBalanceWhenNeverStaked() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+
+        assertEq(controller.balanceOf(1), validatorStake);
+        assertTrue(controller.isFullyUnstaked(1));
+
+        _setEpoch(20, false);
+        uint256 ownerBalanceBefore = operator.balance;
+
+        vm.prank(operator);
+        veMON.withdraw(1);
+
+        assertEq(operator.balance, ownerBalanceBefore + validatorStake);
+        assertEq(controller.balanceOf(1), 0);
+        assertEq(controller.veMONPrincipalOf(1), 0);
+        assertEq(veMON.balanceOf(operator), 0);
+    }
+
+    function test_withdrawRejectsPermanentLock() public {
+        vm.prank(operator);
+        veMON.createLock{value: validatorStake}(validatorStake, lockDuration);
+        vm.prank(operator);
+        veMON.lockPermanent(1);
+
+        vm.prank(operator);
+        vm.expectRevert(VeMON.PermanentLock.selector);
+        veMON.withdraw(1);
+
+        assertEq(veMON.ownerOf(1), operator);
     }
 }

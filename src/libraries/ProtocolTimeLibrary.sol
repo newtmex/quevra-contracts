@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
+// Adapted from Tigris ProtocolTimeLibrary.sol for Monad staking epochs.
 pragma solidity ^0.8.24;
 
-import {IMonadStaking} from "../interfaces/IMonadStaking.sol";
+import {IMonadStaking} from "monad-std/interfaces/IMonadStaking.sol";
 
 /// @title ProtocolTimeLibrary
 /// @notice Vote cycles mapped from Monad staking epochs at `0x1000`.
 /// @dev One cycle is `EPOCHS_PER_CYCLE` consecutive Monad epochs. Cycle `k` covers
-///      `[40k, 40k+40)`. A 1-epoch buffer at each end is the vote window analogue of
-///      Velodrome's ±1 hour. "Epoch" in this library always means a Monad staking epoch.
+///      `[40k, 40k+40)`. A 1-epoch buffer at each end is the vote window analogue
+///      of Velodrome's ±1 hour. "Epoch" always means a Monad staking epoch.
 library ProtocolTimeLibrary {
     uint64 internal constant EPOCHS_PER_CYCLE = 40;
     uint64 internal constant VOTE_BUFFER_EPOCHS = 1;
@@ -62,9 +63,27 @@ library ProtocolTimeLibrary {
         return IMonadStaking(STAKING_PRECOMPILE).getEpoch();
     }
 
+    /// @notice First Monad epoch in which a staking state change takes effect.
+    /// @dev Monad applies changes submitted before the delay period in epoch + 1,
+    ///      and changes submitted during it in epoch + 2.
+    function effectiveEpoch(uint64 epoch, bool inEpochDelayPeriod) internal pure returns (uint64) {
+        return epoch + (inEpochDelayPeriod ? 2 : 1);
+    }
+
+    /// @notice First Monad epoch in which a staking state change takes effect now.
+    function currentEffectiveEpoch() internal returns (uint64) {
+        (uint64 epoch, bool inEpochDelayPeriod) = currentEpoch();
+        return effectiveEpoch(epoch, inEpochDelayPeriod);
+    }
+
     /// @dev Cycle index of the current Monad staking epoch.
     function currentCycle() internal returns (uint64) {
         (uint64 epoch,) = currentEpoch();
         return cycleOf(epoch);
+    }
+
+    function currentCycleStart() internal returns (uint64) {
+        (uint64 epoch,) = currentEpoch();
+        return cycleStart(epoch);
     }
 }

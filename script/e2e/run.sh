@@ -13,8 +13,9 @@ CONTAINER="${SOLONET_CONTAINER:-solonet}"
 CHAIN_ID="${SOLONET_CHAIN_ID:-20143}"
 # Anvil account 0 — funded on Solonet genesis.
 PRIVATE_KEY="${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
-# Distinct from Solonet's default staking auth (account 1).
-AUTH_ADDRESS="${AUTH_ADDRESS:-0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC}"
+# Must match the broadcaster because ValidatorRegistry uses msg.sender as the
+# staking auth address when it forwards addValidator.
+AUTH_ADDRESS="${AUTH_ADDRESS:-0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}"
 AMOUNT="${AMOUNT:-100000000000000000000000}"
 COMMISSION="${COMMISSION:-100000000000000000}"
 WAIT_SECS="${SOLONET_WAIT_SECS:-600}"
@@ -102,6 +103,7 @@ KEYS_JSON="$(
     < "${ROOT}/script/e2e/sign_payload.py"
 )"
 
+PAYLOAD="0x$(printf '%s' "$KEYS_JSON" | json_field payload)"
 SECP_PUBKEY="0x$(printf '%s' "$KEYS_JSON" | json_field secpPubkey)"
 BLS_PUBKEY="0x$(printf '%s' "$KEYS_JSON" | json_field blsPubkey)"
 SECP_SIG="0x$(printf '%s' "$KEYS_JSON" | json_field secpSig)"
@@ -109,9 +111,13 @@ BLS_SIG="0x$(printf '%s' "$KEYS_JSON" | json_field blsSig)"
 
 log "secp pubkey ${SECP_PUBKEY}"
 log "bls pubkey  ${BLS_PUBKEY}"
-log "broadcasting ValidatorRegistry propose+execute"
+log "broadcasting ValidatorRegistry request+addValidator"
 
-export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
+export PRIVATE_KEY AUTH_ADDRESS AMOUNT COMMISSION PAYLOAD SECP_PUBKEY BLS_PUBKEY SECP_SIG BLS_SIG
+
+# Override the default Monad testnet pin with the local chain's current block.
+SOLONET_BLOCK_HEX="$(rpc eth_blockNumber | json_field result)"
+SOLONET_BLOCK="$(hex_to_dec "$SOLONET_BLOCK_HEX")"
 
 # Skip local simulation: addValidator lives in the staking precompile and is not
 # present in Foundry's in-process EVM.
@@ -119,6 +125,7 @@ forge_cmd=(
   forge script script/e2e/AddValidatorOnSolonet.s.sol:AddValidatorOnSolonet
   --rpc-url "$RPC_URL"
   --chain-id "$CHAIN_ID"
+  --fork-block-number "$SOLONET_BLOCK"
   --broadcast
   --slow
   --skip-simulation
@@ -128,8 +135,8 @@ forge_cmd=(
 )
 if (( USE_DOCKER_RPC == 1 )); then
   docker exec -i \
-    -e PRIVATE_KEY -e AUTH_ADDRESS -e AMOUNT -e COMMISSION \
-    -e SECP_PUBKEY -e BLS_PUBKEY -e SECP_SIG -e BLS_SIG \
+    -e PRIVATE_KEY -e AMOUNT -e PAYLOAD \
+    -e SECP_SIG -e BLS_SIG \
     -w /quevra-contracts \
     "$CONTAINER" "${forge_cmd[@]}"
 else
@@ -157,9 +164,7 @@ def run(cmd):
         cmd = ["docker", "exec", container, *cmd]
     return subprocess.check_output(cmd, text=True)
 
-topic0 = run(
-    ["cast", "sig-event", "ValidatorExecuted(uint256,address,uint64,address,uint256,uint256)"]
-).strip()
+topic0 = run(["cast", "sig-event", "ValidatorAdded(uint256,address,uint64,address,uint256,uint256)"]).strip()
 validator_id = None
 for receipt in receipts:
     for log in receipt.get("logs") or []:
@@ -167,7 +172,7 @@ for receipt in receipts:
         if topics and topics[0].lower() == topic0.lower() and len(topics) >= 4:
             validator_id = int(topics[3], 16)
 if validator_id is None:
-    raise SystemExit("ValidatorExecuted event not found")
+    raise SystemExit("ValidatorAdded event not found")
 
 out = run(
     [

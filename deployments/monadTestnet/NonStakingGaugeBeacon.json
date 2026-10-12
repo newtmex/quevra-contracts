@@ -1,0 +1,95 @@
+{
+  "address": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+  "abi": [
+    "error BeaconInvalidImplementation(address implementation)",
+    "event Upgraded(address indexed implementation)",
+    "function implementation() view returns (address)",
+    "function upgradeTo(address newImplementation)",
+    "function owner() view returns (address)",
+    "function transferOwnership(address newOwner)",
+    "function renounceOwnership()"
+  ],
+  "transactionHash": "0x9042e543c88424b100cb9b9781a3c879d5c247811732b27e7582fa1cd450180e",
+  "receipt": {
+    "from": "0x6E1126EA838DA392A55D8DdeD9bADEccA5835114",
+    "transactionHash": "0x9042e543c88424b100cb9b9781a3c879d5c247811732b27e7582fa1cd450180e",
+    "blockHash": "0x8b5d12846328fe53d1b70702b8ed1632551a67f2cf9bbe318eb79bf07fc20728",
+    "blockNumber": 70275182,
+    "transactionIndex": 2,
+    "cumulativeGasUsed": "700425",
+    "gasUsed": "263721",
+    "contractAddress": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+    "logs": [
+      {
+        "transactionHash": "0x9042e543c88424b100cb9b9781a3c879d5c247811732b27e7582fa1cd450180e",
+        "transactionIndex": 2,
+        "blockHash": "0x8b5d12846328fe53d1b70702b8ed1632551a67f2cf9bbe318eb79bf07fc20728",
+        "blockNumber": 70275182,
+        "logIndex": 10,
+        "address": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x0000000000000000000000006e1126ea838da392a55d8dded9badecca5835114"
+        ],
+        "data": "0x"
+      },
+      {
+        "transactionHash": "0x9042e543c88424b100cb9b9781a3c879d5c247811732b27e7582fa1cd450180e",
+        "transactionIndex": 2,
+        "blockHash": "0x8b5d12846328fe53d1b70702b8ed1632551a67f2cf9bbe318eb79bf07fc20728",
+        "blockNumber": 70275182,
+        "logIndex": 11,
+        "address": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+        "topics": [
+          "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
+          "0x00000000000000000000000066f7fc55bbe07512dc522f80303862889d13fda1"
+        ],
+        "data": "0x"
+      }
+    ],
+    "logsBloom": "0x00000000000000000000000800000000400000000000000000800000000000000000000000000000000000200000000000000000000000000080000000000000000002000000000000000000000002000001000000000000000000008000000000000000020200000000000000000800000000000000000000000000000000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000020000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000",
+    "status": 1
+  },
+  "numDeployments": 1,
+  "linkedData": {
+    "contractName": "UpgradeableBeacon",
+    "sourceName": "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol",
+    "deploymentName": "NonStakingGauge",
+    "implementationContract": "NonStakingGauge",
+    "proxyKind": "beacon",
+    "protocol": {
+      "network": "monadTestnet",
+      "chainId": 10143,
+      "timestamp": "2026-10-12T02:31:47.659Z",
+      "gitCommit": "39a0dcf210e94b070adbab39c97d3ba99f1eb04e",
+      "compiler": {
+        "solc": "0.8.28",
+        "evmVersion": "cancun",
+        "optimizerRuns": 200
+      },
+      "deployer": "0x6E1126EA838DA392A55D8DdeD9bADEccA5835114",
+      "owner": "0x6E1126EA838DA392A55D8DdeD9bADEccA5835114",
+      "config": {
+        "rewardToken": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+        "maxLockCycles": 4,
+        "initialCommission": 0,
+        "crossReferences": {
+          "controllerVe": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "controllerValidatorVe": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "voterVe": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "voterBoostableVe": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "gaugeBeacon": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+          "bribeBeacon": "0xe433b856a1c88ec70AAC8D98bcc2a5db8dFa340F"
+        }
+      },
+      "dynamicInstances": [],
+      "upgrades": [],
+      "verification": {}
+    },
+    "lastOperation": {
+      "action": "deployed",
+      "transactionHash": "0x9042e543c88424b100cb9b9781a3c879d5c247811732b27e7582fa1cd450180e"
+    }
+  }
+}

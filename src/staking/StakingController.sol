@@ -1,0 +1,768 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+import {IVotingEscrow} from "../interfaces/IVotingEscrow.sol";
+import {IStakingController} from "../interfaces/IStakingController.sol";
+import {StakingVault} from "./controlled/StakingVault.sol";
+import {StakingAgent} from "./controlled/StakingAgent.sol";
+import {StakingAdmin} from "./StakingAdmin.sol";
+import {IValidatorsVoter} from "../interfaces/IValidatorsVoter.sol";
+import {BeaconProxy} from "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import {ProtocolTimeLibrary} from "../libraries/ProtocolTimeLibrary.sol";
+import {StakingControllerRewardsLibrary} from "../libraries/StakingControllerRewardsLibrary.sol";
+
+/// @title StakingController
+/// @notice Owns validator vaults and routes MON deposits through the bound vault.
+/// @dev User-selected allocations are intent; this contract only settles
+///      physical MON toward that intent.
+contract StakingController is StakingAdmin, ReentrancyGuardTransient, UUPSUpgradeable {
+    // -------------------------------------------------------------------------
+    // Storage and construction
+    // -------------------------------------------------------------------------
+    using EnumerableSet for EnumerableSet.AddressSet;
+    using StakingControllerRewardsLibrary for uint256;
+
+    /// @custom:storage-location erc7201:quevra.StakingController
+    struct StakingControllerStorage {
+        mapping(uint256 tokenId => uint256 amount) balanceOf;
+        mapping(uint256 tokenId => address agent) agentByToken;
+        mapping(uint256 tokenId => uint64 cycle) stakingCycleOf;
+        mapping(uint256 tokenId => mapping(address vault => uint256 amount)) intentOf;
+        mapping(uint256 tokenId => EnumerableSet.AddressSet) tokenVaultLists;
+        mapping(uint256 tokenId => EnumerableSet.AddressSet) tokenRewardVaultLists;
+        mapping(uint256 tokenId => address[]) intentVaultLists;
+        mapping(uint256 tokenId => mapping(address vault => uint256 indexPlusOne)) intentVaultIndex;
+    }
+
+    bytes32 private constant STAKING_CONTROLLER_STORAGE_SLOT =
+        0xdf2e1344e516cad2b26b5e1aacd502d4b25a4fe84a2e9d607d2fb8be20474b00;
+
+    function _controllerStorage() internal pure returns (StakingControllerStorage storage $) {
+        bytes32 slot = STAKING_CONTROLLER_STORAGE_SLOT;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    /// @inheritdoc IStakingController
+    function balanceOf(uint256 tokenId) public view override returns (uint256) {
+        return _controllerStorage().balanceOf[tokenId];
+    }
+
+    /// @inheritdoc IStakingController
+    function agentByToken(uint256 tokenId) public view override returns (address) {
+        return _controllerStorage().agentByToken[tokenId];
+    }
+
+    /// @inheritdoc IStakingController
+    function stakingCycleOf(uint256 tokenId) public view override returns (uint64) {
+        return _controllerStorage().stakingCycleOf[tokenId];
+    }
+
+    /// @inheritdoc IStakingController
+    function intentOf(uint256 tokenId, address vault) public view override returns (uint256) {
+        return _controllerStorage().intentOf[tokenId][vault];
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address owner_, uint256 initialCommission_, address vaultBeacon_, address agentBeacon_)
+        external
+        initializer
+    {
+        __StakingAdmin_init(owner_, initialCommission_, vaultBeacon_, agentBeacon_);
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // -------------------------------------------------------------------------
+    // Validator admission and cycle guards
+    // -------------------------------------------------------------------------
+
+    /// @inheritdoc IStakingController
+    function deployValidatorVault(address operator, uint256 tokenId, bytes32 saltSeed, address expectedAuthAddress)
+        external
+        override
+        nonReentrant
+        returns (address vault)
+    {
+        if (msg.sender != validatorVe() || operator == address(0)) revert InvalidValidatorState();
+        return _deployValidatorRequest(tokenId, operator, operator, operator, saltSeed, expectedAuthAddress);
+    }
+
+    modifier onlyNewCycle(uint256 tokenId) {
+        uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
+        if (
+            _controllerStorage().tokenVaultLists[tokenId].length() != 0
+                && currentCycle <= _controllerStorage().stakingCycleOf[tokenId]
+        ) {
+            revert StakingCycleNotAdvanced();
+        }
+        // A revert in the body rolls this assignment back, so invalid requests
+        // do not consume the cycle.
+        _controllerStorage().stakingCycleOf[tokenId] = currentCycle;
+        _;
+    }
+
+    // -------------------------------------------------------------------------
+    // External state-changing API
+    // -------------------------------------------------------------------------
+
+    /// @inheritdoc IStakingController
+    function deposit(uint256 tokenId) external payable override nonReentrant {
+        if (ve() == address(0) || msg.sender != ve()) revert NotVe();
+        if (msg.value == 0) revert InvalidDepositAmount();
+        _controllerStorage().balanceOf[tokenId] += msg.value;
+        _adminStorage().veMONPrincipalOf[tokenId] += msg.value;
+        emit MONDeposited(tokenId, msg.value);
+    }
+
+    /// @dev Receives redeemed MON from a token's vault or agent.
+    receive() external payable {
+        if (!_adminStorage().isVault[msg.sender] && !_adminStorage().isAgent[msg.sender]) {
+            revert UnexpectedEtherSender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // External state-changing API: intent and rebalancing
+    // -------------------------------------------------------------------------
+
+    /// @inheritdoc IStakingController
+    function stake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+        onlyNewCycle(tokenId)
+    {
+        _requireTokenOwner(tokenId);
+        if (vaults.length == 0) revert EmptyArray();
+        if (vaults.length != amounts.length) revert LengthMismatch();
+
+        uint256 total = 0;
+        for (uint256 i; i < vaults.length; ++i) {
+            if (amounts[i] == 0) revert ZeroAmount();
+            if (!_adminStorage().isVault[vaults[i]]) revert InvalidVault();
+            for (uint256 j; j < i; ++j) {
+                if (vaults[j] == vaults[i]) revert DuplicateVault();
+            }
+            total += amounts[i];
+        }
+
+        bool initialStake = _controllerStorage().intentVaultLists[tokenId].length == 0;
+        _setIntent(tokenId, vaults, amounts);
+        if (initialStake && _controllerStorage().balanceOf[tokenId] < total) revert InsufficientBalance();
+
+        _poke(tokenId);
+        emit Staked(tokenId, total);
+    }
+
+    /// @inheritdoc IStakingController
+    function poke(uint256 tokenId) external override nonReentrant returns (bool satisfied) {
+        satisfied = _poke(tokenId);
+        emit StakingPoked(tokenId, _controllerStorage().stakingCycleOf[tokenId], satisfied);
+    }
+
+    /// @inheritdoc IStakingController
+    function compound(uint256 tokenId, address[] calldata vaults)
+        external
+        override
+        nonReentrant
+        returns (uint256 amount)
+    {
+        _requireTokenOwner(tokenId);
+        if (vaults.length == 0) revert EmptyArray();
+        _validateRewardVaults(tokenId, vaults);
+
+        uint256 beforeBalance = address(this).balance;
+        uint256[] memory vaultRewards = new uint256[](vaults.length);
+        address agent = _controllerStorage().agentByToken[tokenId];
+        uint64[] memory agentValidators = new uint64[](vaults.length);
+        uint256[] memory agentRewardIndexes = new uint256[](vaults.length);
+        uint256 agentValidatorCount = 0;
+
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            StakingVault vaultContract = StakingVault(payable(vault));
+            uint64 validatorId = vaultContract.validatorId();
+            if (validatorId == 0) continue;
+
+            vaultRewards[i] = vaultContract.claimReward(tokenId, address(this));
+            if (agent != address(0) && StakingAgent(payable(agent)).usedValidator(validatorId)) {
+                agentValidators[agentValidatorCount] = validatorId;
+                agentRewardIndexes[agentValidatorCount] = i;
+                ++agentValidatorCount;
+            }
+        }
+
+        uint256[] memory agentRewards;
+        if (agentValidatorCount != 0) {
+            assembly ("memory-safe") {
+                mstore(agentValidators, agentValidatorCount)
+                mstore(agentRewardIndexes, agentValidatorCount)
+            }
+            agentRewards = StakingAgent(payable(agent)).claimRewards(agentValidators);
+            for (uint256 i; i < agentRewards.length; ++i) {
+                vaultRewards[agentRewardIndexes[i]] += agentRewards[i];
+            }
+        }
+
+        amount = address(this).balance - beforeBalance;
+        if (amount == 0) {
+            emit Compounded(tokenId, 0);
+            return 0;
+        }
+
+        // The harvested MON is now a token-specific liquid principal balance.
+        _controllerStorage().balanceOf[tokenId] += amount;
+        _increaseVeMONPrincipal(tokenId, amount);
+        for (uint256 i; i < vaults.length; ++i) {
+            uint256 reward = vaultRewards[i];
+            if (reward == 0) continue;
+            _recordCompoundedReward(tokenId, vaults[i], reward);
+        }
+        _poke(tokenId);
+
+        emit Compounded(tokenId, amount);
+    }
+
+    /// @inheritdoc IStakingController
+    function unstake(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts)
+        external
+        override
+        nonReentrant
+    {
+        uint64 currentCycle = ProtocolTimeLibrary.currentCycle();
+        if (
+            _controllerStorage().tokenVaultLists[tokenId].length() != 0
+                && currentCycle <= _controllerStorage().stakingCycleOf[tokenId]
+        ) {
+            revert StakingCycleNotAdvanced();
+        }
+
+        _requireTokenOwner(tokenId);
+        if (vaults.length == 0) revert EmptyArray();
+        if (vaults.length != amounts.length) revert LengthMismatch();
+
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            if (amounts[i] == 0) revert ZeroAmount();
+            if (!_adminStorage().isVault[vault]) revert InvalidVault();
+            if (_pendingOf(tokenId, vault) != 0) _withdraw(tokenId, vault);
+            tokenId.rememberVault(
+                vault, _controllerStorage().tokenVaultLists, _controllerStorage().tokenRewardVaultLists
+            );
+            _controllerStorage().balanceOf[tokenId] += _undelegate(tokenId, vault, amounts[i]);
+            tokenId.reduceIntent(vault, amounts[i], _controllerStorage().intentOf);
+            _syncStakeAllocation(tokenId, vault);
+        }
+        emit Unstaked(tokenId, _sum(amounts));
+    }
+
+    /// @inheritdoc IStakingController
+    function withdraw(uint256 tokenId) external override nonReentrant returns (uint256 amount) {
+        return _withdrawToken(tokenId);
+    }
+
+    /// @inheritdoc IStakingController
+    function claimRewards(uint256 tokenId, address[] calldata vaults) external override nonReentrant {
+        _claimTokenRewardsToOwner(tokenId, vaults);
+    }
+
+    // -------------------------------------------------------------------------
+    // External and public read API
+    // -------------------------------------------------------------------------
+
+    /// @inheritdoc IStakingController
+    function allocationOf(uint256 tokenId, address vault) external view override returns (uint256 allocation) {
+        allocation = _allocationOf(tokenId, vault);
+    }
+
+    /// @inheritdoc IStakingController
+    function isValidatorActive(address vault) external view override returns (bool) {
+        return _adminStorage().isVault[vault] && StakingVault(payable(vault)).validatorId() != 0;
+    }
+
+    /// @inheritdoc IStakingController
+    function pendingOf(uint256 tokenId, address vault) external view returns (uint256 pending) {
+        pending = _pendingOf(tokenId, vault);
+    }
+
+    /// @inheritdoc IStakingController
+    function isFullyUnstaked(uint256 tokenId) external view override returns (bool) {
+        return _isFullyUnstaked(tokenId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal state transitions
+    // -------------------------------------------------------------------------
+
+    function _isFullyUnstaked(uint256 tokenId) internal view returns (bool) {
+        address[] memory vaults = _controllerStorage().tokenVaultLists[tokenId].values();
+        address agent = _controllerStorage().agentByToken[tokenId];
+        for (uint256 i; i < vaults.length; ++i) {
+            Position memory position = _positionOf(tokenId, vaults[i], agent);
+            if (
+                position.vaultAllocation + position.agentAllocation != 0
+                    || position.vaultPending + position.agentPending != 0
+                    || _controllerStorage().intentOf[tokenId][vaults[i]] != 0
+            ) return false;
+        }
+        return true;
+    }
+
+    function _poke(uint256 tokenId) internal returns (bool satisfied) {
+        EnumerableSet.AddressSet storage vaults = _controllerStorage().tokenVaultLists[tokenId];
+        if (_controllerStorage().intentVaultLists[tokenId].length == 0 && vaults.length() == 0) return true;
+        address[] memory trackedVaults = vaults.values();
+        PokeBatch memory batch = PokeBatch({
+            agent: _controllerStorage().agentByToken[tokenId],
+            liquid: _controllerStorage().balanceOf[tokenId],
+            delegateCount: 0,
+            delegateValue: 0,
+            delegateValidators: new uint64[](vaults.length()),
+            delegateAmounts: new uint256[](vaults.length())
+        });
+        uint256 i = 0;
+        satisfied = true;
+
+        while (i < vaults.length()) {
+            address vault = vaults.at(i);
+            if (!_processPokeVault(tokenId, vault, batch)) satisfied = false;
+            if (vaults.contains(vault)) ++i;
+        }
+
+        _executeDelegateBatch(batch);
+
+        _controllerStorage().balanceOf[tokenId] = batch.liquid;
+        for (uint256 snapshotIndex; snapshotIndex < trackedVaults.length; ++snapshotIndex) {
+            _syncStakeAllocation(tokenId, trackedVaults[snapshotIndex]);
+        }
+    }
+
+    function _syncStakeAllocation(uint256 tokenId, address vault) internal {
+        if (validatorVe() == address(0)) return;
+        address voter = IVotingEscrow(validatorVe()).voter();
+        if (voter == address(0)) return;
+        IValidatorsVoter(voter).syncStakeAllocation(tokenId, vault, _allocationOf(tokenId, vault));
+    }
+
+    function _processPokeVault(uint256 tokenId, address vault, PokeBatch memory batch)
+        internal
+        returns (bool satisfied)
+    {
+        Position memory position = _positionOf(tokenId, vault, batch.agent);
+        if (position.vaultPending != 0 || position.agentPending != 0) {
+            uint256 reclaimed;
+            (reclaimed, satisfied) = _withdrawFromPosition(tokenId, vault, position);
+            batch.liquid += reclaimed;
+            if (!satisfied) return false;
+        }
+
+        uint256 current = position.vaultAllocation + position.agentAllocation;
+        uint256 target = _controllerStorage().intentOf[tokenId][vault];
+        if (current > target) {
+            // Registered validator withdrawals become liquid on a later poke.
+            if (position.validatorId == 0) {
+                position.validatorId = StakingVault(payable(position.vault)).validatorId();
+            }
+            (bool success, uint256 reclaimed) = _tryUndelegate(tokenId, position, current - target);
+            batch.liquid += reclaimed;
+            if (!success || _pendingOf(tokenId, vault) != 0) return false;
+
+            current = _allocationOf(tokenId, vault);
+            if (current > target) return false;
+        }
+
+        satisfied = true;
+        if (current < target) {
+            uint256 amount = target - current;
+            if (amount > batch.liquid) amount = batch.liquid;
+            if (amount != 0) {
+                batch.liquid -= amount;
+                uint64 validatorId;
+                uint256 remainder;
+                (batch.agent, validatorId, remainder) = _queueDelegate(tokenId, position, amount, batch.agent);
+                if (remainder != 0) {
+                    batch.delegateValidators[batch.delegateCount] = validatorId;
+                    batch.delegateAmounts[batch.delegateCount] = remainder;
+                    batch.delegateValue += remainder;
+                    ++batch.delegateCount;
+                }
+                current += amount;
+            }
+        }
+
+        if (current != target) satisfied = false;
+    }
+
+    function _executeDelegateBatch(PokeBatch memory batch) internal {
+        if (batch.delegateCount == 0) return;
+        if (batch.delegateCount == 1) {
+            StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(
+                batch.delegateValidators[0], batch.delegateAmounts[0]
+            );
+            _increaseValidatorBackingById(batch.delegateValidators[0], batch.delegateAmounts[0]);
+        } else {
+            uint64[] memory validators = batch.delegateValidators;
+            uint256[] memory amounts = batch.delegateAmounts;
+            uint256 count = batch.delegateCount;
+            assembly {
+                mstore(validators, count)
+                mstore(amounts, count)
+            }
+            StakingAgent(payable(batch.agent)).delegate{value: batch.delegateValue}(validators, amounts);
+            for (uint256 i; i < count; ++i) {
+                _increaseValidatorBackingById(validators[i], amounts[i]);
+            }
+        }
+    }
+
+    function _setIntent(uint256 tokenId, address[] calldata vaults, uint256[] calldata amounts) internal {
+        tokenId.setIntent(
+            vaults,
+            amounts,
+            _controllerStorage().intentVaultLists,
+            _controllerStorage().intentVaultIndex,
+            _controllerStorage().intentOf
+        );
+        for (uint256 i; i < vaults.length; ++i) {
+            tokenId.rememberVault(
+                vaults[i], _controllerStorage().tokenVaultLists, _controllerStorage().tokenRewardVaultLists
+            );
+        }
+        emit StakingIntentSet(tokenId, _controllerStorage().stakingCycleOf[tokenId]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal position movement and withdrawal settlement
+    // -------------------------------------------------------------------------
+
+    function _tryUndelegate(uint256 tokenId, Position memory position, uint256 amount)
+        internal
+        returns (bool success, uint256 reclaimed)
+    {
+        if (amount == 0) {
+            success = true;
+            return (success, reclaimed);
+        }
+
+        if (position.validatorId == 0) {
+            if (position.vaultAllocation < amount) return (success, reclaimed);
+            reclaimed = StakingVault(payable(position.vault)).withdraw(tokenId, amount);
+            success = reclaimed == amount;
+            return (success, reclaimed);
+        }
+
+        uint256 agentAmount = position.agent == address(0) ? 0 : position.agentAllocation;
+        uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
+
+        if (fromAgent != 0) {
+            try StakingAgent(payable(position.agent)).undelegate(position.validatorId, fromAgent) {}
+            catch {
+                return (success, reclaimed);
+            }
+            _decreaseValidatorBacking(position.vault, fromAgent);
+        }
+
+        uint256 fromVault = amount - fromAgent;
+        if (fromVault == 0) {
+            success = true;
+            return (success, reclaimed);
+        }
+        if (position.vaultAllocation < fromVault) return (success, reclaimed);
+        try StakingVault(payable(position.vault)).undelegate(tokenId, fromVault) {}
+        catch {
+            return (success, reclaimed);
+        }
+        _decreaseValidatorBacking(position.vault, fromVault);
+        success = true;
+        return (success, reclaimed);
+    }
+
+    /// @dev Routes a token's allocation through its validator vault first, then
+    ///      delegates any remainder through the token-bound agent.
+    ///      The caller must verify and deduct the token's available balance
+    ///      before calling this function.
+    function _queueDelegate(uint256 tokenId, Position memory position, uint256 amount, address agent)
+        internal
+        returns (address, uint64 validatorId, uint256 remainder)
+    {
+        uint256 deficit = StakingVault(payable(position.vault)).deficit();
+        uint256 toVault = amount < deficit ? amount : deficit;
+        validatorId = position.validatorId;
+        if (toVault != 0) {
+            uint64 previousValidatorId = StakingVault(payable(position.vault)).validatorId();
+            validatorId = StakingVault(payable(position.vault)).deposit{value: toVault}(tokenId);
+            if (previousValidatorId == 0 && validatorId != 0) {
+                _adminStorage().vaultByValidatorId[validatorId] = position.vault;
+                _setValidatorId(position.vault, validatorId);
+                _setValidatorBacking(position.vault, StakingVault(payable(position.vault)).totalBalance());
+            } else if (previousValidatorId != 0) {
+                uint256 validatorTokenId = _adminStorage().validatorTokenId[position.vault];
+                _setValidatorBacking(position.vault, _adminStorage().validatorBackingOf[validatorTokenId] + toVault);
+            }
+        }
+
+        remainder = amount - toVault;
+        if (validatorId == 0) validatorId = StakingVault(payable(position.vault)).validatorId();
+        if (remainder == 0) return (agent, 0, 0);
+
+        if (validatorId == 0) revert ValidatorNotActivated();
+
+        if (agent == address(0)) {
+            agent = address(new BeaconProxy{salt: bytes32(tokenId)}(agentBeacon(), bytes("")));
+            StakingAgent(payable(agent)).initialize(address(this), tokenId);
+            _controllerStorage().agentByToken[tokenId] = agent;
+            _adminStorage().isAgent[agent] = true;
+            emit AgentCreated(tokenId, agent);
+        }
+        return (agent, validatorId, remainder);
+    }
+
+    /// @dev Undelegates from the token-bound agent first, then from the
+    ///      validator vault. The caller must validate the amount, vault, and
+    ///      any existing pending withdrawal before calling this function.
+    function _undelegate(uint256 tokenId, address vault, uint256 amount) internal returns (uint256 reclaimed) {
+        uint64 validatorId = StakingVault(payable(vault)).validatorId();
+        address agent = _controllerStorage().agentByToken[tokenId];
+        if (validatorId == 0) {
+            if (StakingVault(payable(vault)).balanceOf(tokenId) < amount) revert InvalidUnstakeAmount();
+            return StakingVault(payable(vault)).withdraw(tokenId, amount);
+        }
+
+        uint256 agentAmount = agent == address(0) ? 0 : StakingAgent(payable(agent)).balanceOf(validatorId);
+        uint256 fromAgent = amount < agentAmount ? amount : agentAmount;
+        if (fromAgent != 0) {
+            StakingAgent(payable(agent)).undelegate(validatorId, fromAgent);
+            _decreaseValidatorBacking(vault, fromAgent);
+        }
+
+        uint256 fromVault = amount - fromAgent;
+        if (fromVault != 0) {
+            if (StakingVault(payable(vault)).balanceOf(tokenId) < fromVault) revert InvalidUnstakeAmount();
+            StakingVault(payable(vault)).undelegate(tokenId, fromVault);
+            _decreaseValidatorBacking(vault, fromVault);
+        }
+    }
+
+    function _increaseValidatorBackingById(uint64 validatorId, uint256 amount) internal {
+        address vault = _adminStorage().vaultByValidatorId[validatorId];
+        if (vault != address(0)) {
+            uint256 tokenId = _adminStorage().validatorTokenId[vault];
+            _setValidatorBacking(vault, _adminStorage().validatorBackingOf[tokenId] + amount);
+        }
+    }
+
+    /// @dev Withdraws matured validator proceeds and credits them to the token balance.
+    ///      The caller can later release that balance to the veNFT owner.
+    function _withdraw(uint256 tokenId, address vault) internal returns (uint256 reclaimed) {
+        Position memory position = _positionOf(tokenId, vault, _controllerStorage().agentByToken[tokenId]);
+        (reclaimed,) = _withdrawFromPosition(tokenId, vault, position);
+        _controllerStorage().balanceOf[tokenId] += reclaimed;
+    }
+
+    function _withdrawFromPosition(uint256 tokenId, address vault, Position memory position)
+        internal
+        returns (uint256 reclaimed, bool complete)
+    {
+        uint256 beforeBalance = address(this).balance;
+        complete = true;
+        if (position.vaultPending != 0) {
+            if (StakingVault(payable(position.vault)).withdraw(tokenId, position.vaultPending) == 0) complete = false;
+        }
+        if (position.agentPending != 0) {
+            try StakingAgent(payable(position.agent)).withdraw(position.validatorId) {}
+            catch {
+                complete = false;
+            }
+        }
+        reclaimed = address(this).balance - beforeBalance;
+        if ((position.vaultPending != 0 || position.agentPending != 0) && complete) {
+            if (
+                position.vaultAllocation == 0 && position.agentAllocation == 0
+                    && _controllerStorage().intentOf[tokenId][vault] == 0
+            ) {
+                tokenId.removeVault(vault, _controllerStorage().tokenVaultLists);
+            }
+        }
+    }
+
+    function _sum(uint256[] calldata values) private pure returns (uint256 total) {
+        for (uint256 i; i < values.length; ++i) {
+            total += values[i];
+        }
+    }
+
+    function _allocationOf(uint256 tokenId, address vault) internal view returns (uint256 allocation) {
+        Position memory position = _positionOf(tokenId, vault, _controllerStorage().agentByToken[tokenId]);
+        allocation = position.vaultAllocation + position.agentAllocation;
+    }
+
+    function _positionOf(uint256 tokenId, address vaultAddress, address agent)
+        internal
+        view
+        returns (Position memory position)
+    {
+        position.vault = vaultAddress;
+        if (vaultAddress == address(0) || !_adminStorage().isVault[vaultAddress]) return position;
+        StakingVault vault = StakingVault(payable(position.vault));
+        (position.vaultAllocation, position.vaultPending, position.validatorId) = vault.positionOf(tokenId);
+        position.agent = agent;
+        if (agent != address(0)) {
+            if (position.validatorId != 0) {
+                StakingAgent tokenAgent = StakingAgent(payable(agent));
+                (position.agentAllocation, position.agentPending) = tokenAgent.positionOf(position.validatorId);
+            }
+        }
+    }
+
+    function _pendingOf(uint256 tokenId, address vault) internal view returns (uint256 pending) {
+        Position memory position = _positionOf(tokenId, vault, _controllerStorage().agentByToken[tokenId]);
+        pending = position.vaultPending + position.agentPending;
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal reward and withdrawal settlement
+    // -------------------------------------------------------------------------
+
+    function _withdrawToken(uint256 tokenId) internal returns (uint256 amount) {
+        if (msg.sender != ve()) revert NotVe();
+        address tokenOwner = IVotingEscrow(ve()).ownerOf(tokenId);
+
+        uint256 i = 0;
+        EnumerableSet.AddressSet storage vaults = _controllerStorage().tokenVaultLists[tokenId];
+        while (i < vaults.length()) {
+            address vault = vaults.at(i);
+            if (!_adminStorage().isVault[vault]) revert InvalidVault();
+            _withdraw(tokenId, vault);
+            if (vaults.contains(vault)) ++i;
+        }
+
+        if (!_isFullyUnstaked(tokenId)) revert InvalidUnstakeAmount();
+        amount = _controllerStorage().balanceOf[tokenId];
+        if (amount == 0) revert InvalidUnstakeAmount();
+
+        amount += _claimTokenRewards(tokenId, _controllerStorage().tokenRewardVaultLists[tokenId].values());
+
+        // The escrow calls this only after its finite lock expires. Its voting
+        // power has already decayed to zero, and it burns the NFT immediately
+        // after this call, so do not call back into the escrow while its
+        // withdrawal reentrancy guard is held.
+        _adminStorage().veMONPrincipalOf[tokenId] = 0;
+        _controllerStorage().balanceOf[tokenId] = 0;
+        tokenId.clearVaultLists(_controllerStorage().tokenVaultLists);
+        tokenId.clearVaultLists(_controllerStorage().tokenRewardVaultLists);
+        (bool success,) = payable(tokenOwner).call{value: amount}("");
+        if (!success) revert TransferFailed();
+        emit Withdrawn(tokenId, amount);
+    }
+
+    /// @notice Claim only rewards earned by this token's own positions.
+    function _claimTokenRewardsToOwner(uint256 tokenId, address[] calldata vaults) internal {
+        address tokenOwner = IVotingEscrow(ve()).ownerOf(tokenId);
+        if (tokenOwner != msg.sender) revert NotTokenOwner();
+        _validateRewardVaults(tokenId, vaults);
+        uint256 beforeBalance = address(this).balance;
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            _claimVaultRewards(tokenId, vault);
+        }
+
+        uint256 amount = address(this).balance - beforeBalance;
+        if (amount != 0) {
+            (bool success,) = payable(tokenOwner).call{value: amount}("");
+            if (!success) revert TransferFailed();
+        }
+        _pruneTokenRewardVaultLists(tokenId, vaults);
+        emit RewardsClaimed(tokenId, amount);
+    }
+
+    function _validateRewardVaults(uint256 tokenId, address[] calldata vaults) internal view {
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            if (!_adminStorage().isVault[vault]) revert InvalidVault();
+            for (uint256 j; j < i; ++j) {
+                if (vaults[j] == vault) revert DuplicateVault();
+            }
+            if (!_controllerStorage().tokenRewardVaultLists[tokenId].contains(vault)) revert NotVaultParticipant();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal reward accounting
+    // -------------------------------------------------------------------------
+
+    function _claimTokenRewards(uint256 tokenId, address[] memory vaults) internal returns (uint256 amount) {
+        uint256 beforeBalance = address(this).balance;
+        uint256 length = vaults.length;
+        for (uint256 i; i < length; ++i) {
+            _claimVaultRewards(tokenId, vaults[i]);
+        }
+        amount = address(this).balance - beforeBalance;
+    }
+
+    function _claimVaultRewards(uint256 tokenId, address vaultAddress) internal {
+        if (!_adminStorage().isVault[vaultAddress]) revert InvalidVault();
+        StakingVault vault = StakingVault(payable(vaultAddress));
+        uint64 validatorId = vault.validatorId();
+        if (validatorId == 0) return;
+
+        // The vault transfers the reward to this controller; the return value is not needed here.
+        // forge-lint: disable-next-line(unused-return)
+        vault.claimReward(tokenId, address(this));
+        address agent = _controllerStorage().agentByToken[tokenId];
+        if (agent != address(0) && StakingAgent(payable(agent)).usedValidator(validatorId)) {
+            uint64[] memory validatorIds = new uint64[](1);
+            validatorIds[0] = validatorId;
+            // The agent transfers the claimed reward to this controller.
+            // forge-lint: disable-next-line(unused-return)
+            StakingAgent(payable(agent)).claimRewards(validatorIds);
+        }
+    }
+
+    function _pruneTokenRewardVaultLists(uint256 tokenId, address[] calldata vaults) internal {
+        for (uint256 i; i < vaults.length; ++i) {
+            address vault = vaults[i];
+            if (_allocationOf(tokenId, vault) == 0 && _pendingOf(tokenId, vault) == 0) {
+                if (!_adminStorage().isVault[vault] || StakingVault(payable(vault)).earned(tokenId) == 0) {
+                    tokenId.removeRewardVault(vault, _controllerStorage().tokenRewardVaultLists);
+                }
+            }
+        }
+    }
+
+    function _recordCompoundedReward(uint256 tokenId, address vault, uint256 amount) internal {
+        tokenId.recordReward(
+            vault,
+            amount,
+            _controllerStorage().tokenVaultLists,
+            _controllerStorage().tokenRewardVaultLists,
+            _controllerStorage().intentVaultLists,
+            _controllerStorage().intentVaultIndex,
+            _controllerStorage().intentOf
+        );
+    }
+
+    function _increaseVeMONPrincipal(uint256 tokenId, uint256 amount) internal {
+        uint256 oldAmount = _adminStorage().veMONPrincipalOf[tokenId];
+        uint256 newAmount = oldAmount + amount;
+        _adminStorage().veMONPrincipalOf[tokenId] = newAmount;
+        IVotingEscrow(ve()).syncAmountFromController(tokenId, oldAmount, newAmount);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    function _requireTokenOwner(uint256 tokenId) private view {
+        if (msg.sender != IVotingEscrow(ve()).ownerOf(tokenId)) {
+            revert NotTokenOwner();
+        }
+    }
+}

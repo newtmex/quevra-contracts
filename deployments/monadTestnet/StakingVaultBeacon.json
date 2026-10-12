@@ -1,0 +1,52 @@
+{
+  "address": "0x2E9eAa58834c39a8bDe92886Cbf8A18954bFF855",
+  "abi": [
+    "error BeaconInvalidImplementation(address implementation)",
+    "event Upgraded(address indexed implementation)",
+    "function implementation() view returns (address)",
+    "function upgradeTo(address newImplementation)",
+    "function owner() view returns (address)",
+    "function transferOwnership(address newOwner)",
+    "function renounceOwnership()"
+  ],
+  "numDeployments": 1,
+  "linkedData": {
+    "contractName": "UpgradeableBeacon",
+    "sourceName": "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol",
+    "deploymentName": "StakingVault",
+    "implementationContract": "StakingVault",
+    "proxyKind": "beacon",
+    "protocol": {
+      "network": "monadTestnet",
+      "chainId": 10143,
+      "timestamp": "2026-10-12T02:31:47.659Z",
+      "gitCommit": "39a0dcf210e94b070adbab39c97d3ba99f1eb04e",
+      "compiler": {
+        "solc": "0.8.28",
+        "evmVersion": "cancun",
+        "optimizerRuns": 200
+      },
+      "deployer": "0x6E1126EA838DA392A55D8DdeD9bADEccA5835114",
+      "owner": "0x6E1126EA838DA392A55D8DdeD9bADEccA5835114",
+      "config": {
+        "rewardToken": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+        "maxLockCycles": 4,
+        "initialCommission": 0,
+        "crossReferences": {
+          "controllerVe": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "controllerValidatorVe": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "voterVe": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "voterBoostableVe": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "gaugeBeacon": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+          "bribeBeacon": "0xe433b856a1c88ec70AAC8D98bcc2a5db8dFa340F"
+        }
+      },
+      "dynamicInstances": [],
+      "upgrades": [],
+      "verification": {}
+    },
+    "lastOperation": {
+      "action": "deployed"
+    }
+  }
+}
