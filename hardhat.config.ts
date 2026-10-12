@@ -56,9 +56,40 @@ export default defineConfig({
       accounts,
     },
   },
+  // Sourcify (MonadVision) is the default no-key path. Monadscan/Etherscan V2 is
+  // optional when MONAD_EXPLORER_API_KEY or ETHERSCAN_API_KEY is set.
+  // See https://docs.monad.xyz/guides/verify-smart-contract/hardhat and
+  // https://github.com/monad-developers/scaffold-monad-hardhat
   verify: {
-    etherscan: { apiKey: process.env.MONAD_EXPLORER_API_KEY ?? "" },
-    sourcify: { enabled: true },
+    etherscan: process.env.MONAD_EXPLORER_API_KEY || process.env.ETHERSCAN_API_KEY
+      ? { enabled: true, apiKey: process.env.MONAD_EXPLORER_API_KEY || process.env.ETHERSCAN_API_KEY || "" }
+      : { enabled: false },
+    sourcify: {
+      enabled: true,
+      apiUrl: "https://sourcify-api-monad.blockvision.org",
+    },
     blockscout: { enabled: false },
+  },
+  chainDescriptors: {
+    10143: {
+      name: "MonadTestnet",
+      blockExplorers: {
+        etherscan: {
+          name: "Monadscan",
+          url: "https://testnet.monadscan.com",
+          apiUrl: "https://api.etherscan.io/v2/api",
+        },
+      },
+    },
+    143: {
+      name: "MonadMainnet",
+      blockExplorers: {
+        etherscan: {
+          name: "Monadscan",
+          url: "https://monadscan.com",
+          apiUrl: "https://api.etherscan.io/v2/api",
+        },
+      },
+    },
   },
 });

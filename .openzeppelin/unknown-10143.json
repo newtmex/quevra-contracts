@@ -46,7 +46,7 @@
             "label": "bytes32",
             "numberOfBytes": "32"
           },
-          "t_contract(IVeValidator)7166": {
+          "t_contract(IVeValidator)7323": {
             "label": "contract IVeValidator",
             "numberOfBytes": "20"
           },
@@ -76,7 +76,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(Set)4358_storage": {
+          "t_struct(Set)4515_storage": {
             "label": "struct EnumerableSet.Set",
             "members": [
               {
@@ -94,7 +94,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(StakeControlledStorage)8823_storage": {
+          "t_struct(StakeControlledStorage)9038_storage": {
             "label": "struct StakeControlled.StakeControlledStorage",
             "members": [
               {
@@ -106,12 +106,12 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(StakingVaultStorage)9100_storage": {
+          "t_struct(StakingVaultStorage)9315_storage": {
             "label": "struct StakingVault.StakingVaultStorage",
             "members": [
               {
                 "label": "validatorVe",
-                "type": "t_contract(IVeValidator)7166",
+                "type": "t_contract(IVeValidator)7323",
                 "offset": 0,
                 "slot": "0"
               },
@@ -129,7 +129,7 @@
               },
               {
                 "label": "tokenIds",
-                "type": "t_struct(UintSet)4735_storage",
+                "type": "t_struct(UintSet)4892_storage",
                 "offset": 0,
                 "slot": "3"
               },
@@ -190,12 +190,12 @@
             ],
             "numberOfBytes": "416"
           },
-          "t_struct(UintSet)4735_storage": {
+          "t_struct(UintSet)4892_storage": {
             "label": "struct EnumerableSet.UintSet",
             "members": [
               {
                 "label": "_inner",
-                "type": "t_struct(Set)4358_storage",
+                "type": "t_struct(Set)4515_storage",
                 "offset": 0,
                 "slot": "0"
               }
@@ -216,7 +216,7 @@
             {
               "contract": "StakingVault",
               "label": "validatorVe",
-              "type": "t_contract(IVeValidator)7166",
+              "type": "t_contract(IVeValidator)7323",
               "src": "project/src/staking/controlled/StakingVault.sol:19",
               "offset": 0,
               "slot": "0"
@@ -240,7 +240,7 @@
             {
               "contract": "StakingVault",
               "label": "tokenIds",
-              "type": "t_struct(UintSet)4735_storage",
+              "type": "t_struct(UintSet)4892_storage",
               "src": "project/src/staking/controlled/StakingVault.sol:22",
               "offset": 0,
               "slot": "3"
@@ -347,7 +347,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0xb25912d67A8fb9C7Acb8b2eB4c1600aF7872D132",
+        "0xeB91BF4aB460071C9F2677cCD17572Ff50082bc1"
+      ]
     },
     "e50250015a2cc180b851ebbf2bd9b81ffaa1f1375f08e749910f991759b87ab0": {
       "address": "0xE53a0fE341Fa14061fFfd43C97e4c4D4cD054322",
@@ -390,7 +394,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(StakeControlledStorage)8823_storage": {
+          "t_struct(StakeControlledStorage)9038_storage": {
             "label": "struct StakeControlled.StakeControlledStorage",
             "members": [
               {
@@ -402,7 +406,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(StakingAgentStorage)8890_storage": {
+          "t_struct(StakingAgentStorage)9105_storage": {
             "label": "struct StakingAgent.StakingAgentStorage",
             "members": [
               {
@@ -505,7 +509,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0xE53a0fE341Fa14061fFfd43C97e4c4D4cD054322",
+        "0x87378C2720cd08cE209a3557bB1d19286fd98652"
+      ]
     },
     "1d3a29927fe5443e1b9ffd1489ff68f2a384a338bc4d144bf98b8477cf8385a6": {
       "address": "0x66F7FC55bbE07512dc522f80303862889D13FdA1",
@@ -530,7 +538,7 @@
             "label": "mapping(uint256 => uint256)",
             "numberOfBytes": "32"
           },
-          "t_struct(GaugeStorage)6081_storage": {
+          "t_struct(GaugeStorage)6238_storage": {
             "label": "struct Gauge.GaugeStorage",
             "members": [
               {
@@ -626,7 +634,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(NonStakingGaugeStorage)6248_storage": {
+          "t_struct(NonStakingGaugeStorage)6405_storage": {
             "label": "struct NonStakingGauge.NonStakingGaugeStorage",
             "members": [
               {
@@ -775,7 +783,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0x66F7FC55bbE07512dc522f80303862889D13FdA1",
+        "0x4D11e14fd1a803e1455703b28b425a547C156362"
+      ]
     },
     "605bce91ac57f09c2ea9f92a744db3371bc106292951958d26a422fd4f6ae034": {
       "address": "0xf22EaAecdA0E2144154a964C2294549a3Ba999C4",
@@ -804,15 +816,15 @@
             "label": "mapping(address => mapping(uint256 => uint256))",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))": {
+          "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)6701_storage))": {
             "label": "mapping(uint256 => mapping(uint256 => struct IReward.Checkpoint))",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(Checkpoint)4662_storage)": {
+          "t_mapping(t_uint256,t_struct(Checkpoint)6701_storage)": {
             "label": "mapping(uint256 => struct IReward.Checkpoint)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)": {
+          "t_mapping(t_uint256,t_struct(SupplyCheckpoint)6706_storage)": {
             "label": "mapping(uint256 => struct IReward.SupplyCheckpoint)",
             "numberOfBytes": "32"
           },
@@ -820,7 +832,7 @@
             "label": "mapping(uint256 => uint256)",
             "numberOfBytes": "32"
           },
-          "t_struct(Checkpoint)4662_storage": {
+          "t_struct(Checkpoint)6701_storage": {
             "label": "struct IReward.Checkpoint",
             "members": [
               {
@@ -838,7 +850,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(InitializableStorage)808_storage": {
+          "t_struct(InitializableStorage)883_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -856,7 +868,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(RewardStorage)5681_storage": {
+          "t_struct(RewardStorage)7979_storage": {
             "label": "struct Reward.RewardStorage",
             "members": [
               {
@@ -915,7 +927,7 @@
               },
               {
                 "label": "checkpoints",
-                "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))",
+                "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)6701_storage))",
                 "offset": 0,
                 "slot": "9"
               },
@@ -927,7 +939,7 @@
               },
               {
                 "label": "supplyCheckpoints",
-                "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)",
+                "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)6706_storage)",
                 "offset": 0,
                 "slot": "11"
               },
@@ -940,7 +952,7 @@
             ],
             "numberOfBytes": "416"
           },
-          "t_struct(SupplyCheckpoint)4667_storage": {
+          "t_struct(SupplyCheckpoint)6706_storage": {
             "label": "struct IReward.SupplyCheckpoint",
             "members": [
               {
@@ -1044,7 +1056,7 @@
             {
               "contract": "Reward",
               "label": "checkpoints",
-              "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)4662_storage))",
+              "type": "t_mapping(t_uint256,t_mapping(t_uint256,t_struct(Checkpoint)6701_storage))",
               "src": "project/src/rewards/Reward.sol:34",
               "offset": 0,
               "slot": "9"
@@ -1060,7 +1072,7 @@
             {
               "contract": "Reward",
               "label": "supplyCheckpoints",
-              "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)4667_storage)",
+              "type": "t_mapping(t_uint256,t_struct(SupplyCheckpoint)6706_storage)",
               "src": "project/src/rewards/Reward.sol:36",
               "offset": 0,
               "slot": "11"
@@ -1093,7 +1105,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0xf22EaAecdA0E2144154a964C2294549a3Ba999C4",
+        "0xE075a3e3538687Eb08b798e6D43591483Af03725"
+      ]
     },
     "0a6a969b3228543739220ae814fd2e6a9f880ad295c490b73a69539667e0d121": {
       "address": "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
@@ -1146,7 +1162,7 @@
             "label": "mapping(uint256 => mapping(address => uint256))",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)": {
+          "t_mapping(t_uint256,t_struct(AddressSet)4795_storage)": {
             "label": "mapping(uint256 => struct EnumerableSet.AddressSet)",
             "numberOfBytes": "32"
           },
@@ -1162,12 +1178,12 @@
             "label": "mapping(uint64 => address)",
             "numberOfBytes": "32"
           },
-          "t_struct(AddressSet)4638_storage": {
+          "t_struct(AddressSet)4795_storage": {
             "label": "struct EnumerableSet.AddressSet",
             "members": [
               {
                 "label": "_inner",
-                "type": "t_struct(Set)4358_storage",
+                "type": "t_struct(Set)4515_storage",
                 "offset": 0,
                 "slot": "0"
               }
@@ -1216,7 +1232,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(Set)4358_storage": {
+          "t_struct(Set)4515_storage": {
             "label": "struct EnumerableSet.Set",
             "members": [
               {
@@ -1234,7 +1250,7 @@
             ],
             "numberOfBytes": "64"
           },
-          "t_struct(StakingAdminStorage)8091_storage": {
+          "t_struct(StakingAdminStorage)8306_storage": {
             "label": "struct StakingAdmin.StakingAdminStorage",
             "members": [
               {
@@ -1318,7 +1334,7 @@
             ],
             "numberOfBytes": "416"
           },
-          "t_struct(StakingControllerStorage)8382_storage": {
+          "t_struct(StakingControllerStorage)8597_storage": {
             "label": "struct StakingController.StakingControllerStorage",
             "members": [
               {
@@ -1347,13 +1363,13 @@
               },
               {
                 "label": "tokenVaultLists",
-                "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+                "type": "t_mapping(t_uint256,t_struct(AddressSet)4795_storage)",
                 "offset": 0,
                 "slot": "4"
               },
               {
                 "label": "tokenRewardVaultLists",
-                "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+                "type": "t_mapping(t_uint256,t_struct(AddressSet)4795_storage)",
                 "offset": 0,
                 "slot": "5"
               },
@@ -1418,7 +1434,7 @@
             {
               "contract": "StakingController",
               "label": "tokenVaultLists",
-              "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+              "type": "t_mapping(t_uint256,t_struct(AddressSet)4795_storage)",
               "src": "project/src/staking/StakingController.sol:35",
               "offset": 0,
               "slot": "4"
@@ -1426,7 +1442,7 @@
             {
               "contract": "StakingController",
               "label": "tokenRewardVaultLists",
-              "type": "t_mapping(t_uint256,t_struct(AddressSet)4638_storage)",
+              "type": "t_mapping(t_uint256,t_struct(AddressSet)4795_storage)",
               "src": "project/src/staking/StakingController.sol:36",
               "offset": 0,
               "slot": "5"
@@ -1593,7 +1609,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
+        "0x52fCd2B289Bf6020814C01441cE17F193DCf4f68"
+      ]
     },
     "c011a1b8516ab7f65780e776c718d8daf02e84f0b20c655731e8b93d5b715d82": {
       "address": "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
@@ -1606,7 +1626,7 @@
             "label": "address",
             "numberOfBytes": "20"
           },
-          "t_array(t_struct(Point)4055_storage)dyn_storage": {
+          "t_array(t_struct(Point)5808_storage)dyn_storage": {
             "label": "struct VotingEscrow.Point[]",
             "numberOfBytes": "32"
           },
@@ -1634,15 +1654,15 @@
             "label": "mapping(uint256 => address)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)": {
+          "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.Point[])",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(LockData)4062_storage)": {
+          "t_mapping(t_uint256,t_struct(LockData)5815_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.LockData)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(Point)4055_storage)": {
+          "t_mapping(t_uint256,t_struct(Point)5808_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.Point)",
             "numberOfBytes": "32"
           },
@@ -1700,7 +1720,7 @@
             ],
             "numberOfBytes": "192"
           },
-          "t_struct(InitializableStorage)808_storage": {
+          "t_struct(InitializableStorage)883_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -1718,7 +1738,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(LockData)4062_storage": {
+          "t_struct(LockData)5815_storage": {
             "label": "struct VotingEscrow.LockData",
             "members": [
               {
@@ -1766,7 +1786,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(Point)4055_storage": {
+          "t_struct(Point)5808_storage": {
             "label": "struct VotingEscrow.Point",
             "members": [
               {
@@ -1796,7 +1816,7 @@
             ],
             "numberOfBytes": "96"
           },
-          "t_struct(VotingEscrowStorage)4102_storage": {
+          "t_struct(VotingEscrowStorage)5855_storage": {
             "label": "struct VotingEscrow.VotingEscrowStorage",
             "members": [
               {
@@ -1831,7 +1851,7 @@
               },
               {
                 "label": "lockData",
-                "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+                "type": "t_mapping(t_uint256,t_struct(LockData)5815_storage)",
                 "offset": 0,
                 "slot": "4"
               },
@@ -1843,13 +1863,13 @@
               },
               {
                 "label": "pointHistory",
-                "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+                "type": "t_mapping(t_uint256,t_struct(Point)5808_storage)",
                 "offset": 0,
                 "slot": "6"
               },
               {
                 "label": "userPointHistory",
-                "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+                "type": "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)",
                 "offset": 0,
                 "slot": "7"
               },
@@ -1928,7 +1948,7 @@
             {
               "contract": "VotingEscrow",
               "label": "lockData",
-              "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+              "type": "t_mapping(t_uint256,t_struct(LockData)5815_storage)",
               "src": "project/src/VotingEscrow.sol:55",
               "offset": 0,
               "slot": "4"
@@ -1944,7 +1964,7 @@
             {
               "contract": "VotingEscrow",
               "label": "pointHistory",
-              "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+              "type": "t_mapping(t_uint256,t_struct(Point)5808_storage)",
               "src": "project/src/VotingEscrow.sol:57",
               "offset": 0,
               "slot": "6"
@@ -1952,7 +1972,7 @@
             {
               "contract": "VotingEscrow",
               "label": "userPointHistory",
-              "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+              "type": "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)",
               "src": "project/src/VotingEscrow.sol:58",
               "offset": 0,
               "slot": "7"
@@ -2071,7 +2091,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
+        "0x6AfACEd35fe320c8073eedf29ec45578e48f03F4"
+      ]
     },
     "ab6b6abcd65d0f967e000e65c4d5c6643a1e87ee754375f28fff54b682501777": {
       "address": "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
@@ -2120,7 +2144,7 @@
             "label": "mapping(uint256 => uint256)",
             "numberOfBytes": "32"
           },
-          "t_struct(InitializableStorage)808_storage": {
+          "t_struct(InitializableStorage)883_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -2138,7 +2162,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(NonStakingVoterStorage)6001_storage": {
+          "t_struct(NonStakingVoterStorage)9570_storage": {
             "label": "struct NonStakingVoter.NonStakingVoterStorage",
             "members": [
               {
@@ -2216,7 +2240,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(ValidatorsVoterStorage)6198_storage": {
+          "t_struct(ValidatorsVoterStorage)9767_storage": {
             "label": "struct ValidatorsVoter.ValidatorsVoterStorage",
             "members": [
               {
@@ -2437,7 +2461,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
+        "0x771E9F62cCb57e0e5a1ab5AFCcf72096A61A1c65"
+      ]
     },
     "1768714ab0a1761e45a8ad167ccdfa8d0f91e9ccba8c1bd401a371583bac512d": {
       "address": "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
@@ -2450,7 +2478,7 @@
             "label": "address",
             "numberOfBytes": "20"
           },
-          "t_array(t_struct(Point)4055_storage)dyn_storage": {
+          "t_array(t_struct(Point)5808_storage)dyn_storage": {
             "label": "struct VotingEscrow.Point[]",
             "numberOfBytes": "32"
           },
@@ -2482,23 +2510,23 @@
             "label": "mapping(uint256 => address)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)": {
+          "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.Point[])",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(LockData)4062_storage)": {
+          "t_mapping(t_uint256,t_struct(LockData)5815_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.LockData)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(Point)4055_storage)": {
+          "t_mapping(t_uint256,t_struct(Point)5808_storage)": {
             "label": "mapping(uint256 => struct VotingEscrow.Point)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)": {
+          "t_mapping(t_uint256,t_struct(ValidatorPosition)5579_storage)": {
             "label": "mapping(uint256 => struct VeValidator.ValidatorPosition)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)": {
+          "t_mapping(t_uint256,t_struct(ValidatorSubmission)7292_storage)": {
             "label": "mapping(uint256 => struct IVeValidator.ValidatorSubmission)",
             "numberOfBytes": "32"
           },
@@ -2556,7 +2584,7 @@
             ],
             "numberOfBytes": "192"
           },
-          "t_struct(InitializableStorage)808_storage": {
+          "t_struct(InitializableStorage)883_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -2574,7 +2602,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(LockData)4062_storage": {
+          "t_struct(LockData)5815_storage": {
             "label": "struct VotingEscrow.LockData",
             "members": [
               {
@@ -2622,7 +2650,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(Point)4055_storage": {
+          "t_struct(Point)5808_storage": {
             "label": "struct VotingEscrow.Point",
             "members": [
               {
@@ -2652,7 +2680,7 @@
             ],
             "numberOfBytes": "96"
           },
-          "t_struct(ValidatorPosition)3826_storage": {
+          "t_struct(ValidatorPosition)5579_storage": {
             "label": "struct VeValidator.ValidatorPosition",
             "members": [
               {
@@ -2688,7 +2716,7 @@
             ],
             "numberOfBytes": "128"
           },
-          "t_struct(ValidatorSubmission)5253_storage": {
+          "t_struct(ValidatorSubmission)7292_storage": {
             "label": "struct IVeValidator.ValidatorSubmission",
             "members": [
               {
@@ -2730,7 +2758,7 @@
             ],
             "numberOfBytes": "128"
           },
-          "t_struct(VeValidatorStorage)3844_storage": {
+          "t_struct(VeValidatorStorage)5597_storage": {
             "label": "struct VeValidator.VeValidatorStorage",
             "members": [
               {
@@ -2741,7 +2769,7 @@
               },
               {
                 "label": "validatorPosition",
-                "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)",
+                "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)5579_storage)",
                 "offset": 0,
                 "slot": "1"
               },
@@ -2753,14 +2781,14 @@
               },
               {
                 "label": "validatorSubmissions",
-                "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)",
+                "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)7292_storage)",
                 "offset": 0,
                 "slot": "3"
               }
             ],
             "numberOfBytes": "128"
           },
-          "t_struct(VotingEscrowStorage)4102_storage": {
+          "t_struct(VotingEscrowStorage)5855_storage": {
             "label": "struct VotingEscrow.VotingEscrowStorage",
             "members": [
               {
@@ -2795,7 +2823,7 @@
               },
               {
                 "label": "lockData",
-                "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+                "type": "t_mapping(t_uint256,t_struct(LockData)5815_storage)",
                 "offset": 0,
                 "slot": "4"
               },
@@ -2807,13 +2835,13 @@
               },
               {
                 "label": "pointHistory",
-                "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+                "type": "t_mapping(t_uint256,t_struct(Point)5808_storage)",
                 "offset": 0,
                 "slot": "6"
               },
               {
                 "label": "userPointHistory",
-                "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+                "type": "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)",
                 "offset": 0,
                 "slot": "7"
               },
@@ -2860,7 +2888,7 @@
             {
               "contract": "VeValidator",
               "label": "validatorPosition",
-              "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)3826_storage)",
+              "type": "t_mapping(t_uint256,t_struct(ValidatorPosition)5579_storage)",
               "src": "project/src/VeValidator.sol:32",
               "offset": 0,
               "slot": "1"
@@ -2876,7 +2904,7 @@
             {
               "contract": "VeValidator",
               "label": "validatorSubmissions",
-              "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)5253_storage)",
+              "type": "t_mapping(t_uint256,t_struct(ValidatorSubmission)7292_storage)",
               "src": "project/src/VeValidator.sol:34",
               "offset": 0,
               "slot": "3"
@@ -2926,7 +2954,7 @@
             {
               "contract": "VotingEscrow",
               "label": "lockData",
-              "type": "t_mapping(t_uint256,t_struct(LockData)4062_storage)",
+              "type": "t_mapping(t_uint256,t_struct(LockData)5815_storage)",
               "src": "project/src/VotingEscrow.sol:55",
               "offset": 0,
               "slot": "4"
@@ -2942,7 +2970,7 @@
             {
               "contract": "VotingEscrow",
               "label": "pointHistory",
-              "type": "t_mapping(t_uint256,t_struct(Point)4055_storage)",
+              "type": "t_mapping(t_uint256,t_struct(Point)5808_storage)",
               "src": "project/src/VotingEscrow.sol:57",
               "offset": 0,
               "slot": "6"
@@ -2950,7 +2978,7 @@
             {
               "contract": "VotingEscrow",
               "label": "userPointHistory",
-              "type": "t_mapping(t_uint256,t_array(t_struct(Point)4055_storage)dyn_storage)",
+              "type": "t_mapping(t_uint256,t_array(t_struct(Point)5808_storage)dyn_storage)",
               "src": "project/src/VotingEscrow.sol:58",
               "offset": 0,
               "slot": "7"
@@ -3069,7 +3097,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
+        "0xbA22f457DE1D85D02a2e350E18EFD9eBA52e4Ef8"
+      ]
     }
   }
 }

@@ -1345,8 +1345,8 @@
     "protocol": {
       "network": "monadTestnet",
       "chainId": 10143,
-      "timestamp": "2026-10-12T02:31:47.659Z",
-      "gitCommit": "39a0dcf210e94b070adbab39c97d3ba99f1eb04e",
+      "timestamp": "2026-10-12T11:22:05.705Z",
+      "gitCommit": "dd2ecb2f4fb537e6b4e723675921a3909b17ab65",
       "compiler": {
         "solc": "0.8.28",
         "evmVersion": "cancun",
@@ -1368,12 +1368,193 @@
         }
       },
       "dynamicInstances": [],
-      "upgrades": [],
-      "verification": {}
+      "upgrades": [
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0x8e119Bfe93dB45Cb456B3ACE1a3935958E8dC04f",
+          "contract": "StakingController",
+          "previousImplementation": "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
+          "implementation": "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
+          "previousCodeHash": "0x4a47059aaa78704c3aebe1eae7a3db10a9c4d2fcc2a015e8c54c2fc165b74769",
+          "newCodeHash": "0x4a47059aaa78704c3aebe1eae7a3db10a9c4d2fcc2a015e8c54c2fc165b74769",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:10:00.024Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "contract": "VeMON",
+          "previousImplementation": "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
+          "implementation": "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
+          "previousCodeHash": "0x23cf7768b7c779d5494b65cea0203acebfedceed64ea58f2d9368c8b7ab351c9",
+          "newCodeHash": "0x23cf7768b7c779d5494b65cea0203acebfedceed64ea58f2d9368c8b7ab351c9",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:10:06.842Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0x46Eb9dfa056A40C3AC2C65914aA792790227A3aF",
+          "contract": "ValidatorsVoter",
+          "previousImplementation": "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
+          "implementation": "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
+          "previousCodeHash": "0x2ed0f0da2ed71f5a22e073a81b3c222a1d2acb99bd8a5eaf87e456ba6232be8a",
+          "newCodeHash": "0x2ed0f0da2ed71f5a22e073a81b3c222a1d2acb99bd8a5eaf87e456ba6232be8a",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:10:13.531Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "contract": "VeValidator",
+          "previousImplementation": "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
+          "implementation": "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
+          "previousCodeHash": "0x3fe5668d7047f55864ff9777ea5f0a2f135d11d1de82483bc61685b24f331f5d",
+          "newCodeHash": "0x3fe5668d7047f55864ff9777ea5f0a2f135d11d1de82483bc61685b24f331f5d",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:10:20.437Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0x8e119Bfe93dB45Cb456B3ACE1a3935958E8dC04f",
+          "contract": "StakingController",
+          "previousImplementation": "0xe3fACBA42DB40af10Fd67bf19AC4F4B13fAb16B2",
+          "implementation": "0x52fCd2B289Bf6020814C01441cE17F193DCf4f68",
+          "previousCodeHash": "0x4a47059aaa78704c3aebe1eae7a3db10a9c4d2fcc2a015e8c54c2fc165b74769",
+          "newCodeHash": "0xdc1b2477f5bc3d9104d553139a5d274891c12098d35a5c41fc03b194954165ec",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:02.630Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0xd699f3CF29614Cb9f44ab3e43e32cC271635D838",
+          "contract": "VeMON",
+          "previousImplementation": "0x62e047d767b623aA62c9885161E9C71e44BcC8cC",
+          "implementation": "0x6AfACEd35fe320c8073eedf29ec45578e48f03F4",
+          "previousCodeHash": "0x23cf7768b7c779d5494b65cea0203acebfedceed64ea58f2d9368c8b7ab351c9",
+          "newCodeHash": "0x16e6fff8bbc2e09b25a7a7671db4c4650ca063af8bb4f10e2d1f0667bb2af6df",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:12.705Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0x46Eb9dfa056A40C3AC2C65914aA792790227A3aF",
+          "contract": "ValidatorsVoter",
+          "previousImplementation": "0xf54684cc7B04A595456f220197d71A3f0Fb7e7F3",
+          "implementation": "0x771E9F62cCb57e0e5a1ab5AFCcf72096A61A1c65",
+          "previousCodeHash": "0x2ed0f0da2ed71f5a22e073a81b3c222a1d2acb99bd8a5eaf87e456ba6232be8a",
+          "newCodeHash": "0x34f890ef9c53fe1eec4dc3065e52795160b3dc0b5139f52fd17f5ce2728884e8",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:23.274Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "uups",
+          "target": "0xbD243E21D28050F805Af0052a6E512C001152C5B",
+          "contract": "VeValidator",
+          "previousImplementation": "0x1B8F218E6DaAFc79c537400c1266136EeC604DC9",
+          "implementation": "0xbA22f457DE1D85D02a2e350E18EFD9eBA52e4Ef8",
+          "previousCodeHash": "0x3fe5668d7047f55864ff9777ea5f0a2f135d11d1de82483bc61685b24f331f5d",
+          "newCodeHash": "0x215dda0317da19b6bc701280b40f785a4dbe9adcb27166b6fb1a6f99612df01a",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:33.366Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "beacon",
+          "target": "0x2E9eAa58834c39a8bDe92886Cbf8A18954bFF855",
+          "contract": "StakingVault",
+          "previousImplementation": "0xb25912d67A8fb9C7Acb8b2eB4c1600aF7872D132",
+          "implementation": "0xeB91BF4aB460071C9F2677cCD17572Ff50082bc1",
+          "previousCodeHash": "0x0df81676e1f28fba03530b80c04c8927914d05124e11b8c707be5f65d7fbd667",
+          "newCodeHash": "0x0df81676e1f28fba03530b80c04c8927914d05124e11b8c707be5f65d7fbd667",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:43.173Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "beacon",
+          "target": "0x862f45A57f83393AC5a01c5860DF2A5e051501C4",
+          "contract": "StakingAgent",
+          "previousImplementation": "0xE53a0fE341Fa14061fFfd43C97e4c4D4cD054322",
+          "implementation": "0x87378C2720cd08cE209a3557bB1d19286fd98652",
+          "previousCodeHash": "0x5b4ea9bbe9d0efc900d5a08d510b640037060b90f38a5ec0cd2c2793a24ffcd7",
+          "newCodeHash": "0x5b4ea9bbe9d0efc900d5a08d510b640037060b90f38a5ec0cd2c2793a24ffcd7",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:13:52.676Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "beacon",
+          "target": "0x42A667DA858117d3ac3109046f2A8aC00876e62F",
+          "contract": "NonStakingGauge",
+          "previousImplementation": "0x66F7FC55bbE07512dc522f80303862889D13FdA1",
+          "implementation": "0x4D11e14fd1a803e1455703b28b425a547C156362",
+          "previousCodeHash": "0xef97aedc7260bcb9f9f696160de17949bbf0ee5d4e1eed690aa4523a65cff026",
+          "newCodeHash": "0xef97aedc7260bcb9f9f696160de17949bbf0ee5d4e1eed690aa4523a65cff026",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:14:02.336Z"
+        },
+        {
+          "network": "monadTestnet",
+          "chainId": 10143,
+          "kind": "beacon",
+          "target": "0xe433b856a1c88ec70AAC8D98bcc2a5db8dFa340F",
+          "contract": "BribeVotingRewards",
+          "previousImplementation": "0xf22EaAecdA0E2144154a964C2294549a3Ba999C4",
+          "implementation": "0xE075a3e3538687Eb08b798e6D43591483Af03725",
+          "previousCodeHash": "0xfac8075b576b539d81a54ab0680e4304665f7662d9f8fffc8bf315aeabdd3b3a",
+          "newCodeHash": "0xfac8075b576b539d81a54ab0680e4304665f7662d9f8fffc8bf315aeabdd3b3a",
+          "migrationCalldata": "0x",
+          "validated": true,
+          "preparedAt": "2026-10-12T11:14:11.712Z"
+        }
+      ],
+      "verification": {
+        "verifiedAt": "2026-10-12T11:22:05.704Z",
+        "providers": "sourcify",
+        "sourcify:0xeB91BF4aB460071C9F2677cCD17572Ff50082bc1": "verified",
+        "sourcify:0x87378C2720cd08cE209a3557bB1d19286fd98652": "verified",
+        "sourcify:0x4D11e14fd1a803e1455703b28b425a547C156362": "verified",
+        "sourcify:0xE075a3e3538687Eb08b798e6D43591483Af03725": "verified",
+        "sourcify:0x52fCd2B289Bf6020814C01441cE17F193DCf4f68": "verified",
+        "sourcify:0x6AfACEd35fe320c8073eedf29ec45578e48f03F4": "verified",
+        "sourcify:0x771E9F62cCb57e0e5a1ab5AFCcf72096A61A1c65": "verified",
+        "sourcify:0xbA22f457DE1D85D02a2e350E18EFD9eBA52e4Ef8": "verified",
+        "gitCommit": "dd2ecb2f4fb537e6b4e723675921a3909b17ab65"
+      }
     },
     "lastOperation": {
-      "action": "deployed",
-      "transactionHash": "0x3d64e7c386da589975e129948d713c4114114308a6ec4ffdd725153e5bfc02f2"
+      "action": "upgraded",
+      "transactionHash": "0x86ad3b003714eb2fdbf8beb4092a11d0122a99857b3db93fddc7b75c8fc755b1"
     }
   }
 }

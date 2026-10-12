@@ -134,7 +134,7 @@ Quevra is not merely a token-weighted poll. Its vaults and agents make native st
 
 ### Monad testnet deployment
 
-The judging requirements call for a working Monad deployment and contract addresses. The current deployment artifacts record this Quevra deployment on **Monad testnet (chain ID `10143`)**, created on **October 12, 2026 UTC**. The core modules are UUPS proxies; vaults, agents, gauges, and bribe rewards are created through shared beacons.
+The judging requirements call for a working Monad deployment and contract addresses. The current deployment artifacts record this Quevra deployment on **Monad testnet (chain ID `10143`)**, created on **October 12, 2026 UTC**, with implementations upgraded and Sourcify-verified the same day against commit `dd2ecb2`. The core modules are UUPS proxies; vaults, agents, gauges, and bribe rewards are created through shared beacons.
 
 | Contract | Deployment address | Type |
 | --- | --- | --- |
@@ -147,7 +147,20 @@ The judging requirements call for a working Monad deployment and contract addres
 | `NonStakingGauge` beacon | `0x42A667DA858117d3ac3109046f2A8aC00876e62F` ([artifact](./deployments/monadTestnet/NonStakingGaugeBeacon.json)) | Shared beacon |
 | `BribeVotingRewards` beacon | `0xe433b856a1c88ec70AAC8D98bcc2a5db8dFa340F` ([artifact](./deployments/monadTestnet/BribeVotingRewardsBeacon.json)) | Shared beacon |
 
-The configured ERC-20 incentive reward token is `0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541`; it is recorded as deployment configuration, not as a Quevra-deployed contract. Individual validator vaults, staking agents, gauges, and bribe-reward instances are created through their beacons, so their addresses depend on validator onboarding and gauge creation. The artifacts above are the repository's deployment record; use the deployment verification commands below to check the current on-chain state.
+Live implementations behind those proxies/beacons are verified on Monad BlockVision Sourcify:
+
+| Implementation | Address | Sourcify |
+| --- | --- | --- |
+| `StakingController` | `0x52fCd2B289Bf6020814C01441cE17F193DCf4f68` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0x52fCd2B289Bf6020814C01441cE17F193DCf4f68) |
+| `VeMON` | `0x6AfACEd35fe320c8073eedf29ec45578e48f03F4` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0x6AfACEd35fe320c8073eedf29ec45578e48f03F4) |
+| `ValidatorsVoter` | `0x771E9F62cCb57e0e5a1ab5AFCcf72096A61A1c65` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0x771E9F62cCb57e0e5a1ab5AFCcf72096A61A1c65) |
+| `VeValidator` | `0xbA22f457DE1D85D02a2e350E18EFD9eBA52e4Ef8` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0xbA22f457DE1D85D02a2e350E18EFD9eBA52e4Ef8) |
+| `StakingVault` | `0xeB91BF4aB460071C9F2677cCD17572Ff50082bc1` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0xeB91BF4aB460071C9F2677cCD17572Ff50082bc1) |
+| `StakingAgent` | `0x87378C2720cd08cE209a3557bB1d19286fd98652` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0x87378C2720cd08cE209a3557bB1d19286fd98652) |
+| `NonStakingGauge` | `0x4D11e14fd1a803e1455703b28b425a547C156362` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0x4D11e14fd1a803e1455703b28b425a547C156362) |
+| `BribeVotingRewards` | `0xE075a3e3538687Eb08b798e6D43591483Af03725` | [verified](https://sourcify-api-monad.blockvision.org/repo-ui/10143/0xE075a3e3538687Eb08b798e6D43591483Af03725) |
+
+Proxy and beacon addresses are also browsable on [MonadVision testnet](https://testnet.monadvision.com) and [Monadscan testnet](https://testnet.monadscan.com). The configured ERC-20 incentive reward token is `0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541`; it is recorded as deployment configuration, not as a Quevra-deployed contract. Individual validator vaults, staking agents, gauges, and bribe-reward instances are created through their beacons, so their addresses depend on validator onboarding and gauge creation. Re-check live state with `pnpm --filter @quevra/contracts deploy:status --network monadTestnet` and re-submit sources with `pnpm --filter @quevra/contracts deploy:verify --network monadTestnet` after any upgrade.
 
 ## Run it yourself
 
@@ -191,10 +204,10 @@ These paths are **source-level evidence**, not a claim that every test has passe
 
 **Still needed before a production or public hackathon deployment:**
 
-- A complete deployment script, verified network addresses and repeatable demo transactions.
+- Repeatable public demo transactions on the verified testnet deployment.
 - Repair and rerun the Solonet E2E runner against the *current* controller/validator identity flow.
 - Security review of validator authorization, reward accounting, lock exits, keeper transitions and operational permissions.
-- User-facing tooling, deployment instructions and an operator onboarding guide.
+- Broader user-facing tooling and an operator onboarding guide beyond the deployment/upgrade docs.
 
 **Not claimed here:** a transferable liquid-staking token, a live DeFi integration, `QUE`/`veQUE` governance, validator active-set admission guarantees, a promised staking APR, or an audited/mainnet-ready release. The veMON NFT represents a **locked** position; its underlying MON is not instantly redeemable.
 
@@ -215,8 +228,9 @@ The contracts package includes a Hardhat 3 + TypeScript deployment and upgrade w
 After configuring `.env` with an RPC, deployer key, multisig, delay, and reward token:
 
 ```bash
-pnpm --filter @quevra/contracts deploy:all -- --network monadTestnet
-pnpm --filter @quevra/contracts deploy:status -- --network monadTestnet
+pnpm --filter @quevra/contracts deploy:all --network monadTestnet
+pnpm --filter @quevra/contracts deploy:status --network monadTestnet
+pnpm --filter @quevra/contracts deploy:verify --network monadTestnet
 ```
 
 This repository change does not upgrade earlier non-proxy deployments. Protocol-owned state now uses ERC-7201 namespaces; this layout does not automatically migrate sequential-storage state from an already deployed implementation. Foundry fork/Solonet tests remain the source of evidence for Monad's native staking precompile; Hardhat local tests cover proxy, initializer, and upgrade mechanics.

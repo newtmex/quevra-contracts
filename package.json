@@ -21,6 +21,7 @@
     "deploy:verify": "hardhat run deploy/scripts/verify.ts",
     "upgrade:validate": "hardhat run deploy/scripts/upgrade-validate.ts",
     "upgrade:prepare": "hardhat run deploy/scripts/upgrade-prepare.ts",
+    "upgrade:apply": "hardhat run deploy/scripts/upgrade-apply.ts",
     "upgrade:execute:local": "hardhat run deploy/scripts/upgrade-execute-local.ts",
     "typecheck": "tsc --noEmit && forge build",
     "check": "forge fmt --check && forge build --sizes && forge test -vvv && hardhat compile && tsc --noEmit && hardhat test"

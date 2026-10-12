@@ -23,6 +23,12 @@ type PreparedUpgrade = {
   validated: true;
 };
 
+const upgradeableBeaconAbi = [
+  "function implementation() view returns (address)",
+  "function upgradeTo(address newImplementation)",
+  "function owner() view returns (address)",
+];
+
 function kindFromEnv(): UpgradeKind {
   const kind = process.env.UPGRADE_KIND;
   if (kind !== "uups" && kind !== "beacon") throw new Error("UPGRADE_KIND must be uups or beacon");
@@ -37,6 +43,12 @@ async function savePrepared(prepared: PreparedUpgrade) {
   const file = preparedPath(prepared.network, prepared.chainId, prepared.target);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(prepared, null, 2)}\n`, { mode: 0o600 });
+}
+
+function redeployImplementation(): "always" | "onchange" | "never" {
+  const value = (process.env.UPGRADE_REDEPLOY_IMPLEMENTATION ?? "always").toLowerCase();
+  if (value === "always" || value === "onchange" || value === "never") return value;
+  throw new Error("UPGRADE_REDEPLOY_IMPLEMENTATION must be always, onchange, or never");
 }
 
 export async function validateUpgrade() {
@@ -55,11 +67,12 @@ export async function prepareUpgrade() {
   const target = requireEnv("UPGRADE_TARGET");
   const contractName = requireEnv("UPGRADE_CONTRACT");
   const Factory = await ctx.ethers.getContractFactory(contractName);
-  const implementation = await ctx.upgrades.prepareUpgrade(target, Factory, { kind });
+  const opts = { kind, redeployImplementation: redeployImplementation() } as const;
+  const implementation = await ctx.upgrades.prepareUpgrade(target, Factory, opts);
   if (typeof implementation !== "string") throw new Error("Expected prepareUpgrade to return an implementation address");
   const previousImplementation = kind === "uups"
     ? await ctx.upgrades.erc1967.getImplementationAddress(target)
-    : await (await ctx.ethers.getContractAt("UpgradeableBeacon", target)).implementation();
+    : await (await ctx.ethers.getContractAt(upgradeableBeaconAbi, target)).implementation();
   const migrationCalldata = process.env.UPGRADE_MIGRATION_CALLDATA ?? "0x";
   const record: PreparedUpgrade = {
     network: ctx.networkName,
@@ -88,11 +101,15 @@ export async function executeUpgradeLocally() {
   const target = requireEnv("UPGRADE_TARGET");
   const contractName = requireEnv("UPGRADE_CONTRACT");
   const Factory = await ctx.ethers.getContractFactory(contractName);
+  const opts = { kind, redeployImplementation: redeployImplementation(), call: migrationCall() } as const;
   const instance = kind === "uups"
-    ? await ctx.upgrades.upgradeProxy(target, Factory, { kind, call: migrationCall() })
-    : await ctx.upgrades.upgradeBeacon(target, Factory);
+    ? await ctx.upgrades.upgradeProxy(target, Factory, opts)
+    : await ctx.upgrades.upgradeBeacon(target, Factory, { kind, redeployImplementation: redeployImplementation() });
   await instance.waitForDeployment();
-  console.log(JSON.stringify({ target, implementation: await ctx.upgrades.erc1967.getImplementationAddress(target), kind }, null, 2));
+  const implementation = kind === "uups"
+    ? await ctx.upgrades.erc1967.getImplementationAddress(target)
+    : await (await ctx.ethers.getContractAt(upgradeableBeaconAbi, target)).implementation();
+  console.log(JSON.stringify({ target, implementation, kind }, null, 2));
 }
 
 function migrationCall(): { fn: string; args?: unknown[] } | undefined {

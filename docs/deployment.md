@@ -49,7 +49,9 @@ pnpm --filter @quevra/contracts deploy:status --network monadTestnet
 pnpm --filter @quevra/contracts deploy:verify --network monadTestnet
 ```
 
-Status reads proxy/beacon implementation addresses from chain and compares them with the manifest. Verification submits supported implementation, proxy, and beacon sources to the configured Hardhat verification providers. If an explorer does not support a proxy form, inspect the command's manual-verification result and submit the reported address and constructor/initializer data through that explorer's supported workflow. Never treat an unsupported submission as verified.
+Status reads live proxy/beacon implementation addresses from chain and compares them with the manifest. Verification resolves those same live implementation addresses, submits their sources to Sourcify on Monad BlockVision by default (`https://sourcify-api-monad.blockvision.org`), and writes the per-address result into `deployments/<chainId>.json`. Shared `UpgradeableBeacon` contracts are stock OpenZeppelin bytecode; the script verifies the Quevra implementation each beacon points at.
+
+Optional Monadscan / Etherscan V2 verification is available when `MONAD_EXPLORER_API_KEY` or `ETHERSCAN_API_KEY` is set and `VERIFY_PROVIDERS=sourcify,etherscan` is passed. Never treat an unsupported or failed submission as verified. After an upgrade, run `deploy:verify` again so explorer evidence matches the implementations currently behind the proxies and beacons.
 
 ## Validator vault flow
 
@@ -64,6 +66,9 @@ pnpm --filter @quevra/contracts check
 pnpm --filter @quevra/contracts deploy:all --network monadTestnet
 pnpm --filter @quevra/contracts deploy:status --network monadTestnet
 pnpm --filter @quevra/contracts deploy:verify --network monadTestnet
+pnpm --filter @quevra/contracts upgrade:validate --network monadTestnet
+pnpm --filter @quevra/contracts upgrade:prepare --network monadTestnet
+UPGRADE_ALLOW_REMOTE=1 pnpm --filter @quevra/contracts upgrade:apply --network monadTestnet
 ```
 
 Use `monadMainnet` only after reviewing the config, direct owner address, RPC chain ID, and funded deployer. There is no committed production key or hardcoded owner address.

@@ -35,7 +35,7 @@ The protocol-owned state uses dedicated ERC-7201 namespaces so new protocol fiel
 
 This is a fresh namespaced layout. It does not automatically migrate state from an already deployed implementation that kept these fields in sequential storage. Such a deployment requires an explicit, audited migration before replacing its implementation.
 
-Before a production upgrade, run `upgrade:validate` and `upgrade:prepare` against the exact deployed implementation. Keep append-only storage changes and add an explicit versioned reinitializer for any required migration. Do not use validation bypasses. The checked-in Hardhat upgrade tests cover representative UUPS and Beacon state preservation, but do not yet establish a complete V1-to-V2 economic-state audit for every module.
+Before a production upgrade, run `upgrade:validate` and `upgrade:prepare` against the exact deployed implementation, apply the owner upgrade, then run `deploy:status` and `deploy:verify` so Sourcify evidence matches the live implementations. Keep append-only storage changes and add an explicit versioned reinitializer for any required migration. Do not use validation bypasses. The checked-in Hardhat upgrade tests cover representative UUPS and Beacon state preservation, but do not yet establish a complete V1-to-V2 economic-state audit for every module.
 
 No same-address migration from previously deployed non-proxy contracts or EIP-1167 clones is performed. Existing deployments require a separately designed migration and asset-transfer procedure. Repository-local broadcast artifacts currently do not constitute evidence of a deployed Quevra protocol.
 
