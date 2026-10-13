@@ -8,7 +8,7 @@
 
 Quevra lets MON holders pool the capital needed to support validators, decide where their stake goes, earn staking rewards and additional incentives, and move that support as their preferences change — **without starting over with a new lock**.
 
-[Explore the contracts](./src) · [How it works](#how-it-works) · [Run the tests](#run-it-yourself) · [What's implemented](#what-is-built-today)
+[Explore the contracts](./src) · [How it works](#how-it-works) · [Hackathon submission](#metropolis-hackathon-submission) · [Run the tests](#run-it-yourself) · [What's implemented](#what-is-built-today)
 
 </div>
 
@@ -198,14 +198,49 @@ forge test --network monad --match-contract BribeIncentiveFlowIntegrationTest -v
 
 These paths are **source-level evidence**, not a claim that every test has passed in your environment. Fork-dependent cases need the configured network's staking state. The bribe integration suite covers stake-linked gauge weight, real ERC-20 funding in cycle `c`, and claimable payouts beginning in cycle `c+1`.
 
+## Metropolis hackathon submission
+
+**Event:** [Monad Metropolis](https://monad.xyz/) hackathon  
+**Selected track (one only):** **Track 01 — Onchain Finance & Trading**  
+**Track fit:** Quevra is a capital-and-incentive market for Monad validator support. Primary users are MON holders, validators, and incentive sponsors allocating stake and competing for delegated capital—not a consumer payments app or a general identity/AI infrastructure layer.
+
+### What was built for this hackathon (Quevra-authored)
+
+These modules and deliverables are the Metropolis build: Monad-native staking coordination that did not exist as a Quevra product before this work.
+
+| Area | What landed |
+| --- | --- |
+| Native stake routing | `StakingController`, `StakingVault`, `StakingAgent`, and related libraries calling Monad's `0x1000` precompile (`addValidator` / `delegate` / `undelegate` / `withdraw` / rewards) |
+| Locked MON positions | `VeMON` concrete escrow over a Monad epoch/cycle clock (`ProtocolTimeLibrary`, currently five epochs per cycle) |
+| Validator identities | `VeValidator` for new signed registration payloads and existing validator IDs, with linked vault/gauge/bribe instances |
+| Stake-linked voting | Controller-driven synchronization so physical MON allocation updates validator-gauge weight (no separate free-floating vote step) |
+| Cycle bribes | Whitelisted ERC-20 funding in cycle `c` with claims from `c+1`, plus integration coverage in `test/integration/BribeIncentiveFlow.t.sol` |
+| Upgradeable deploy | UUPS proxies + family beacons, Hardhat deploy/upgrade/verify tooling, and a Sourcify-verified Monad testnet (10143) deployment |
+
+### What was not invented in this window
+
+| Material | Role |
+| --- | --- |
+| [Mezo Earn / Tigris](https://github.com/mezo-org/tigris) vote-escrow, voter, gauge, and reward sources | Design reference and, where marked in SPDX/`docs/provenance.md`, adapted implementation (BUSL-1.1 or MIT). Quevra did **not** relicense BUSL files as MIT. |
+| Solidly / Curve / Velodrome lineage named in file notices | Historical veNFT / gauge patterns retained in attribution comments |
+| OpenZeppelin Contracts 5.7, forge-std, monad-std | Dependencies for upgradeability, tests, and Monad staking interfaces |
+| Earlier `ValidatorRegistry`-style experiments in this repo's history | Superseded by the controller/vault/agent stack; not the submitted runtime surface |
+
+Upstream adaptations were **translated** onto Monad epochs, native MON custody, and stake-as-vote economics. The submitted originality claim is that integration—not the invention of vote-escrow or bribe contracts from scratch.
+
+### Demo surface for judges
+
+- **Contracts + tests:** this repository (`forge test --network monad`, including bribe and rebalance integration paths above).
+- **Live deployment:** Monad testnet addresses and Sourcify links in [Monad testnet deployment](#monad-testnet-deployment).
+- **Docs:** architecture, deployment, upgrades, and provenance under [`docs/`](./docs).
+
 ## Honest project status
 
-**Implemented in the branch:** native MON lock positions; new/existing validator identity creation; vault/agent staking routes; stake-linked validator voting; native rewards claim/compound paths; cycle-based bribe contracts with integration coverage for fund → `c+1` claim, later vote changes, authorization, and claim-before-exit; and unit/integration test scenarios.
+**Implemented in the branch:** native MON lock positions; new/existing validator identity creation; vault/agent staking routes; stake-linked validator voting; native rewards claim/compound paths; cycle-based bribe contracts with integration coverage for fund → `c+1` claim, later vote changes, authorization, and claim-before-exit; upgradeable testnet deployment with verified implementations; and unit/integration test scenarios.
 
-**Still needed before a production or public hackathon deployment:**
+**Still needed before a production deployment:**
 
 - Repeatable public demo transactions on the verified testnet deployment.
-- Repair and rerun the Solonet E2E runner against the *current* controller/validator identity flow.
 - Security review of validator authorization, reward accounting, lock exits, keeper transitions and operational permissions.
 - Broader user-facing tooling and an operator onboarding guide beyond the deployment/upgrade docs.
 
@@ -213,7 +248,7 @@ These paths are **source-level evidence**, not a claim that every test has passe
 
 ## Built for Monad, informed by vote-escrow protocols
 
-Quevra uses Monad's native staking mechanics for the *capital* leg and adapts vote-escrow/gauge ideas for the *coordination* leg. The voting and rewards architecture draws from [Mezo Earn / Tigris](https://github.com/mezo-org/tigris), with roots in the wider Solidly/Velodrome/Curve design family. The original idea is the integration of actual MON staking allocations, validator onboarding, position accounting and validator-specific incentive markets into one flow.
+Quevra uses Monad's native staking mechanics for the *capital* leg and adapts vote-escrow/gauge ideas for the *coordination* leg. The voting and rewards architecture draws from [Mezo Earn / Tigris](https://github.com/mezo-org/tigris), with roots in the wider Solidly/Velodrome/Curve design family. The Metropolis contribution is wiring those coordination patterns to **actual MON staking allocations**, validator onboarding, position accounting, and validator-specific incentive markets in one flow—see [Metropolis hackathon submission](#metropolis-hackathon-submission).
 
 ### Licensing and attribution
 
@@ -244,7 +279,7 @@ pnpm --filter @quevra/contracts deploy:status --network monadTestnet
 pnpm --filter @quevra/contracts deploy:verify --network monadTestnet
 ```
 
-This repository change does not upgrade earlier non-proxy deployments. Protocol-owned state now uses ERC-7201 namespaces; this layout does not automatically migrate sequential-storage state from an already deployed implementation. Foundry fork/Solonet tests remain the source of evidence for Monad's native staking precompile; Hardhat local tests cover proxy, initializer, and upgrade mechanics.
+This repository change does not upgrade earlier non-proxy deployments. Protocol-owned state now uses ERC-7201 namespaces; this layout does not automatically migrate sequential-storage state from an already deployed implementation. Foundry Monad-fork tests are the source of evidence for the native staking precompile; Hardhat local tests cover proxy, initializer, and upgrade mechanics.
 
 ---
 
@@ -256,6 +291,6 @@ This repository change does not upgrade earlier non-proxy deployments. Protocol-
 
 Quevra is building that path on Monad.
 
-*Built for the Monad Metropolis hackathon. Contributions, review and critical feedback are welcome.*
+*Built for the Monad Metropolis hackathon — Track 01 (Onchain Finance & Trading). Contributions, review and critical feedback are welcome.*
 
 </div>
