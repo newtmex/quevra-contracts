@@ -1,5 +1,5 @@
 {
-  "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+  "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
   "abi": [
     "error BeaconInvalidImplementation(address implementation)",
     "event Upgraded(address indexed implementation)",
@@ -9,24 +9,24 @@
     "function transferOwnership(address newOwner)",
     "function renounceOwnership()"
   ],
-  "transactionHash": "0xaa074213053425ac78f472f237b111579c02eb95c45ccd9994f91a05bc459e65",
+  "transactionHash": "0xe52d827855ff22044aa7a68fb440bdef7fdd4dbef71dce75056759c597eafbf5",
   "receipt": {
     "from": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-    "transactionHash": "0xaa074213053425ac78f472f237b111579c02eb95c45ccd9994f91a05bc459e65",
-    "blockHash": "0x20617a34b656641d286bce9342c190d377ea61aaae60d3fbfba6a881bad505a9",
-    "blockNumber": 558,
+    "transactionHash": "0xe52d827855ff22044aa7a68fb440bdef7fdd4dbef71dce75056759c597eafbf5",
+    "blockHash": "0x129cd7b1304f6a827d41fd2ce7a54b6aa9a61a43346e0d0a7aff42078d2ece29",
+    "blockNumber": 389,
     "transactionIndex": 0,
-    "cumulativeGasUsed": "263721",
-    "gasUsed": "263721",
-    "contractAddress": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "cumulativeGasUsed": "263709",
+    "gasUsed": "263709",
+    "contractAddress": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
     "logs": [
       {
-        "transactionHash": "0xaa074213053425ac78f472f237b111579c02eb95c45ccd9994f91a05bc459e65",
+        "transactionHash": "0xe52d827855ff22044aa7a68fb440bdef7fdd4dbef71dce75056759c597eafbf5",
         "transactionIndex": 0,
-        "blockHash": "0x20617a34b656641d286bce9342c190d377ea61aaae60d3fbfba6a881bad505a9",
-        "blockNumber": 558,
+        "blockHash": "0x129cd7b1304f6a827d41fd2ce7a54b6aa9a61a43346e0d0a7aff42078d2ece29",
+        "blockNumber": 389,
         "logIndex": 0,
-        "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+        "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
         "topics": [
           "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
           "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -35,20 +35,20 @@
         "data": "0x"
       },
       {
-        "transactionHash": "0xaa074213053425ac78f472f237b111579c02eb95c45ccd9994f91a05bc459e65",
+        "transactionHash": "0xe52d827855ff22044aa7a68fb440bdef7fdd4dbef71dce75056759c597eafbf5",
         "transactionIndex": 0,
-        "blockHash": "0x20617a34b656641d286bce9342c190d377ea61aaae60d3fbfba6a881bad505a9",
-        "blockNumber": 558,
+        "blockHash": "0x129cd7b1304f6a827d41fd2ce7a54b6aa9a61a43346e0d0a7aff42078d2ece29",
+        "blockNumber": 389,
         "logIndex": 1,
-        "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+        "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
         "topics": [
           "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
-          "0x000000000000000000000000cf7ed3acca5a467e9e704c703e8d87f634fb0fc9"
+          "0x000000000000000000000000dc64a140aa3e981100a9beca4e685f962f0cf6c9"
         ],
         "data": "0x"
       }
     ],
-    "logsBloom": "0x00000000000000000000000000000000400000000000000000800000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000002000001000000000000000000000000000000000000020000000000000100000800000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000020000000200000000000000000000000002020000000000000000020000000000000000000008000000000000000000001000000000100000000000000",
+    "logsBloom": "0x00000000000000000000000000000000400000000000000000800000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000002000001000240000001000000000000000000000000020000000000000100000800000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000020000000200000000000000000000000002000000000000001000020000000000000000000000000000000000000000000000000000000000000000000",
     "status": 1
   },
   "numDeployments": 1,
@@ -61,8 +61,8 @@
     "protocol": {
       "network": "solonet",
       "chainId": 20143,
-      "timestamp": "2026-10-13T11:49:01.661Z",
-      "gitCommit": "c7ddeb3f204b62860636fa89b6fd175ad48301f3",
+      "timestamp": "2026-10-14T02:49:12.263Z",
+      "gitCommit": "f0f5ff0b095507bfee417a3f9ba22bea4da1f3d2",
       "compiler": {
         "solc": "0.8.28",
         "evmVersion": "cancun",
@@ -71,19 +71,19 @@
       "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       "config": {
-        "solonetRewardToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-        "solonetRewardTokenTransactionHash": "0xadbc0a01fbb045ec7546ad567c08646a6cf79cfdfba7e0c6d8b81e7febfb2011",
+        "solonetRewardToken": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        "solonetRewardTokenTransactionHash": "0xefa358483c67b670c443a2cd748e699571bb4f41587b160155e2bc5a873114b5",
         "solonetRewardTokenCodeHash": "0x5ae3365f5996e7bc6234d158a87cb835b9847df55f4e0ba62e46cc66e9c1f619",
-        "rewardToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "rewardToken": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
         "maxLockCycles": 4,
         "initialCommission": 0,
         "crossReferences": {
-          "controllerVe": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
-          "controllerValidatorVe": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
-          "voterVe": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
-          "voterBoostableVe": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
-          "gaugeBeacon": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
-          "bribeBeacon": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
+          "controllerVe": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+          "controllerValidatorVe": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
+          "voterVe": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+          "voterBoostableVe": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
+          "gaugeBeacon": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+          "bribeBeacon": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
         },
         "ownershipHandoffPending": []
       },
@@ -93,7 +93,7 @@
     },
     "lastOperation": {
       "action": "deployed",
-      "transactionHash": "0xaa074213053425ac78f472f237b111579c02eb95c45ccd9994f91a05bc459e65"
+      "transactionHash": "0xe52d827855ff22044aa7a68fb440bdef7fdd4dbef71dce75056759c597eafbf5"
     }
   }
 }
