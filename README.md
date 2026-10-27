@@ -8,7 +8,7 @@
 
 Quevra lets MON holders pool the capital needed to support validators, decide where their stake goes, earn staking rewards and additional incentives, and move that support as their preferences change — **without starting over with a new lock**.
 
-[Try the testnet dapp](https://quevra-pearl.vercel.app) · [Explore the contracts](./src) · [How it works](#how-it-works) · [Hackathon submission](#metropolis-hackathon-submission) · [Run the tests](#run-it-yourself) · [What's implemented](#what-is-built-today)
+[Try the testnet dapp](https://quevra.xyz) · [Explore the contracts](./src) · [How it works](#how-it-works) · [Hackathon submission](#metropolis-hackathon-submission) · [Run the tests](#run-it-yourself) · [What's implemented](#what-is-built-today)
 
 </div>
 
@@ -136,7 +136,7 @@ Quevra is not merely a token-weighted poll. Its vaults and agents make native st
 
 The judging requirements call for a working Monad deployment and contract addresses. The current deployment artifacts record this Quevra deployment on **Monad testnet (chain ID `10143`)**, created on **October 12, 2026 UTC**, with implementations upgraded and Sourcify-verified the same day against commit `dd2ecb2`. The core modules are UUPS proxies; vaults, agents, gauges, and bribe rewards are created through shared beacons.
 
-Interact with the live testnet deployment through the dapp at [https://quevra-pearl.vercel.app](https://quevra-pearl.vercel.app).
+Interact with the live testnet deployment through the dapp at [https://quevra.xyz](https://quevra.xyz).
 
 | Contract | Deployment address | Type |
 | --- | --- | --- |
@@ -234,7 +234,7 @@ Upstream adaptations were **translated** onto Monad epochs, native MON custody, 
 
 - **Contracts + tests:** this repository (`forge test --network monad`, including bribe and rebalance integration paths above).
 - **Live deployment:** Monad testnet addresses and Sourcify links in [Monad testnet deployment](#monad-testnet-deployment).
-- **Live dapp:** [https://quevra-pearl.vercel.app](https://quevra-pearl.vercel.app) against the Monad testnet deployment.
+- **Live dapp:** [https://quevra.xyz](https://quevra.xyz) against the Monad testnet deployment.
 - **Docs:** architecture, deployment, upgrades, and provenance under [`docs/`](./docs).
 
 ## Honest project status
